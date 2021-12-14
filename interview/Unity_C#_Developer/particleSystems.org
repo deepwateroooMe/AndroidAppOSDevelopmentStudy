@@ -1,0 +1,13 @@
+#+latex_class: cn-article
+#+title: Unity Shuriken Particle Systems
+#+author: deepwaterooo
+ 
+* Unity Shuriken Particle Systems
+** unity3D游戏开发十之粒子系统
+- https://blog.csdn.net/kuloveyouwei/article/details/23293271
+- Initial Module初始化模块，粒子系统初始化模块，此模块为固有模块，无法将其删除或禁用，该模块定义了粒子初始化时的持续时间、循环方式、发射速度、大小等一系列基本参数，如下图：
+
+  [[./pic/particle.jpeg]]
+
+  [[./pic/particle2.jpeg]]
+

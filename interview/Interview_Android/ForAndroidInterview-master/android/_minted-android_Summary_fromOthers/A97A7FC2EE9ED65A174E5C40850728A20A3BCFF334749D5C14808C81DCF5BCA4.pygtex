@@ -1,0 +1,8 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{\PYGZlt{}service}
+    \PYG{n+na}{android:name=}\PYG{l+s}{\PYGZdq{}com.example.service.AIDLService\PYGZdq{}} \PYG{n+nt}{\PYGZgt{}}
+  \PYG{n+nt}{\PYGZlt{}intent\PYGZhy{}filter\PYGZgt{}}
+    \PYG{n+nt}{\PYGZlt{}action} \PYG{n+na}{android:name=}\PYG{l+s}{\PYGZdq{}android.intent.action.AIDLService\PYGZdq{}} \PYG{n+nt}{/\PYGZgt{}}
+  \PYG{n+nt}{\PYGZlt{}/intent\PYGZhy{}filter\PYGZgt{}}
+\PYG{n+nt}{\PYGZlt{}/service\PYGZgt{}}
+\end{Verbatim}

@@ -1,0 +1,480 @@
+#+latex_class: cn-article
+#+title: Unity Game Developer Postion Interview -- Part 2
+#+author: deepwaterooo
+
+* 第一部分
+- http://blog.csdn.net/qq_26270779/article/details/53609069
+- 以下哪一个选项不属于Unity引擎所支持的视频格式文件（D）
+  - A.后缀为mov的文件
+  - B.后缀为mpg的文件
+  - C.后缀为avi的文件
+  - D.后缀为swf的文件
+- Unity引擎使用的是左手坐标系还是右手坐标系（A）
+  - A.左手坐标系
+  - B.右手坐标系
+  - C.可以通过ProjectSetting切换右手坐标系
+  - D.可以通过Reference切换左手坐标系
+- 什么是导航网格（NavMesh）（B）
+  - A.一种用于描述相机轨迹的网格
+  - B.一种用于实现自动寻址的网格
+  - C.一种被优化过的物体网格
+  - D.一种用于物理碰撞的网格
+- 下列选项中有关Animator的说法错误的是？（D）
+  - A.Animator是Unity引擎中内置的组件
+  - B.任何一个具有动画状态机功能的GameObject都需要一个Anim组件
+  - C.它主要用于角色行为的设置，包括StateMachine、混合树BlendTrees以及同通过脚本控制的事件
+  - D.Animator同Animation组件的用法是相同的
+- Application.loadLevel命令为（A）
+  - A.加载关卡
+  - B.异步加载关卡
+  - C.加载动作
+  - D.加载动画
+- 下列选项中，关于Transform组件的Scale参数描述正确的是（A）
+  - A.Transform组件的Scale参数不会影响ParticleSystem产生粒子的大小
+  - B.Transform组件的Scale参数不会影响GUITexture的大小
+  - C.添加Collider组件后的GameoObject，其 Collider 组件的尺寸不受Transform组件的Scale参数影响
+  - D.添加Rigidbody组件后的物体，大小将不再受Transform组件中 Scale 参数的影响
+- 在 Unity 中的场景中创建 Camera 时，默认情况下除了带有Transform、Camera、GUILayer、Flare Layer 组件之外，还带有以下哪种组件（C）
+  - A.Mouse Look
+  - B.FPS Input Controller
+  - C.Audio Listener
+  - D.Character Motor
+- 如果将一个声音剪辑文件从Project 视图拖动到 Inspector 视图或者 Scene 视图中的游戏对象上，该游戏对象会自动添加以下哪种组件（C）
+  - A.Audio Listener
+  - B.Audio Clip
+  - C.Audio Source
+  - D.Audio Reverb Zone
+- 下列叙述中有关 Prefab 说法错误的是哪一项（B）
+  - A.Prefab 是一种资源类型
+  - B.Prefab 是一种可以反复使用的游戏对象
+  - C.Prefab 可以多次在场景进行实例
+  - D.当一个 Prefab 添加到场景中时，也就是创建了它的一个实例
+- 关于 MonoBehaviour.LateUpdate 函数描述错误的是：（B）
+  - A.当 MonoBehaviour 类被启用后，每帧调用一次
+  - B.常被用于处理 Rigidbody 的更新
+  - C.在所有 Update 函数执行后才能被调用
+  - D.常被用于实现跟随相机效果，且目标物体的位置已经在 Update 函数中被更新
+- 下列哪个函数不属于碰撞事件（C）
+  - A.OnCollisionEnter
+  - B.OnCollisionExit
+  - C.OnCollisionUpdate
+  - D.OnCollisionStay
+- 以下关于 MonoBehaviour.OnGUI()的描述错误的是（D）
+  - A.如果 MonoBehaviour 没有被启用，则OnGUI函数不会被调用
+  - B.用于绘制和处理 GUI events
+  - C.每帧可能会被绘制多次，每次对应于一个 GUI event
+  - D.每帧被调用一次
+- 以下哪组摄像机中 Normalized View Port Rect 的数值设置可以使摄像机显示的画面位于1280*720分辨率的屏幕画面右上角（D）
+  - A.X=640,Y=360,W=640,H=360
+  - B.X=640,Y=0,W=640,H=360
+  - C.X=0,Y=0,W=0.5,H=0.5
+  - D.X=0.5,Y=0.5,W=0.5,H=0.5
+- 在Unity引擎中，Collider所指的是什么（D）
+  - A.collider 是Unity引擎中所支持的一种资源，可用作存储网格信息
+  - B.Collider 是Unity引擎中内置的一种组件，可用对网格进行渲染
+  - C.Collider 是Unity引擎中所支持的一种资源，可用作游戏对象的坐标转换
+  - D.Collider 是Unity引擎中内置的一种组件，可用作游戏对象之间的碰撞检测
+- 以下关于WWW.LoadFromCacheOrDownload描述正确的是（C）
+  - A.可被用于将 Text Assets 自动缓存到本地磁盘
+  - B.可被用于将 Resource 自动缓存到本地磁盘
+  - C.可被用于将 Asset Bundles 自动缓存到本地磁盘
+  - D.可被用于将任意格式的Unity资源文件自动缓存到本地磁盘
+- 如何实现加载外部视频并播放？
+  - 外部视频文件：目前测试仅支持ogg格式（设置网络获取视频时，必须将MIME设置.ogg为application/octet-stream）
+  - 场景设置：MainCamera上添加AudioSource脚本；播放物体上（如Plane）添加MovieTest脚本
+  - MovieTest脚本：
+#+BEGIN_SRC java
+using UnityEngine;  
+using System.Collections;  
+
+public class MovieTest : MonoBehaviour   {  
+    //视频纹理   
+    protected MovieTexture movTexture;
+    AudioClip audio;
+    AudioSource AudioSource1;
+    void Start()   {  
+        StartCoroutine(DownLoadMovie());   
+    }  
+    void OnGUI()   {  
+        if (GUILayout.Button("播放/继续"))   {  
+            //播放/继续播放视频   
+            if (!movTexture.isPlaying)   {  
+                movTexture.Play();  
+                AudioSource1.Play();
+            }  
+        }  
+        if (GUILayout.Button("暂停播放"))   {  
+            //暂停播放   
+            movTexture.Pause();  
+            AudioSource1.Pause(); 
+        }  
+        if (GUILayout.Button("停止播放"))   {  
+            //停止播放   
+            movTexture.Stop();  
+            AudioSource1.Stop();
+        }  
+    }  
+    IEnumerator DownLoadMovie()   {  
+        WWW www = new WWW ("http://127.0.0.1/Wildlife.ogg");//"file://" + Application.dataPath + "/Resources/Wildlife.ogg");  
+        yield return www;   
+        movTexture = www.movie; 
+        //获取主相机的声源
+        AudioSource1 = Camera.main.GetComponent(typeof(AudioSource)) as AudioSource;
+        //获取视频的声音设置到声源上
+        AudioSource1.clip = movTexture.audioClip;
+        audio = AudioSource1.clip;
+        //设置当前对象的主纹理为电影纹理   
+        renderer.material.mainTexture = movTexture;  
+        //设置电影纹理播放模式为循环 
+        movTexture.loop = true;
+    }  
+} 
+#+END_SRC
+- 游戏对象B是游戏对象A的子物体，游戏对象A经过了旋转，请写出游戏B围绕自身的Y轴进行旋转的脚本语句，以及游戏对象B围绕世界坐标的Y轴旋转的脚本语句。
+  - 绕世界坐标旋转：transform.Rotate (transform.up*speed*Time.deltatime);
+  - 绕自身Y轴旋转：transform.Rotate (Vector.up*speed*Time.deltatime);
+- Unity中用过哪些插件？具体功能
+  - FXMaker，制作粒子特效；NGUI，制作2D界面；EasyTouch，摇杆；shaderForge，制作shader；Itween，制作动画；
+- 当删除Unity工程Assets目录下地meta文件时会导致什么？为什么？
+  - 会导致在场景中游戏对象看不到，或者报错，材质找不到资源。多人协作的时候会导致资源的重复产生。因为每个资源文件都对应一个.meta文件，这个.meta文件中的guid就是唯一标识这个资源的。材质就是通过这个guid来记录自己使用了那些资源，而且同一个资源的guid会因为不同的电脑而不同，所以当你上传了丢失了.meta文件的资源的时候，到了别人的机器上就会重新产生guid，那个这个资源就相当于垃圾了。
+- 频繁创建GameObject会降低程序性能为什么？怎么解决？
+  - 频繁创建游戏对象，会增加游戏的Drawcall数，降低帧率，GPU会一直在渲染绘制。可以通过对象池来管理对象：当需要创建一个游戏对象时，先去对象池中查找一下对象池中是否存在没有被正在使用的对象，如果有的话直接使用这个对象，并把它标记为正在使用，没有话就创建一个，并把它添加到池中，然后标记为使用中。一个游戏对象使用完毕的时候，不要销毁掉，把它放在池中，标记为未使用。
+- 关于Vector3 的API，以下说法正确的是（BC）
+  - A.Vector3.normalize 可以获取一个三维向量的法线向量
+  - B.Vector3.magnitude 可以获取一个三维向量的长度
+  - C.Vector3.forward 与 Vector3(0,0,1)是一样的意思
+  - D.Vector3.Dot(向量A,向量B)是用来计算向量A与向量B的叉乘
+- 以下哪个函数在游戏进入新场景后会被马上调用（B）
+  - A.MonoBehaviour.OnSceneWastLoaded()
+  - B.MonoBehaviour.OnSceneEnter()
+  - C.MonoBehaviour.OnLevelEnter()
+  - D.MonoBehaviour.OnLevelWastLoaded()
+- 采用Input.mousePosition 来获取鼠标在屏幕上的位置，以下表达正确的是（C）
+  - A.左上角为原点（0，0），右下角为（Screen.Width, Screen.Height）
+  - B.左下角为原点（0，0），右下角为（Screen.Height, Screen.Width）
+  - C.左下角为原点（0，0），右上角为（Screen.Width, Screen.Height）
+  - D.左上角为原点（0，0），右下角为（Screen.Height, Screen.Width）
+- 如何通过脚本来删除其自身对应的Gameobject（A）
+  - A.Destroy(gameObject)
+  - B.this.Destroy()
+  - C.Destroy(this)
+  - D.其他三项都可以
+- 某个GameObject有一个名为MyScript的脚本，该脚本中有一个名为DoSomething 的函数，则如何在该Gameobject的另外一个脚本中调用该函数？（A）
+  - A.GetComponent().DoSomething()
+  - B.GetComponent
+  - C.GetComponent().Call(“DoSomething”)
+  - D.GetComponent
+- Animator.CrossFade 命令作用是：（B）
+  - A.动画放大
+  - B.动画转换
+  - C.Update()
+  - D.OnMouseButton()
+- OnEnable,Awake,Start 运行时的发生顺序？（A）
+  - A.Awake->OnEnable->Start
+  - B.Awake->Start->OnEable
+  - C.OnEnable-Awake->Start
+  - D.Start->OnEnable->Awake
+- 以下选项中，正确的是（D）
+  - A.Mathf.Round方法作用是限制
+  - B.Mathf.Clamp方法作用是插值
+  - C.Mathf.Lerp方法作用是四舍五入
+  - D.Mathf.Abs方法作用是取得绝对值
+- 以下选项中，将游戏对象绕Z轴逆时针旋转90度（C）
+  - A.transform.rotation = Quaternion.Euler(0,0,90)
+  - B.transform.rotation = Quaternion.Angle(0,0,90)
+  - C.transform.Rotate(new Vector3(0,0,90))
+  - D.transform.Rotate(new Vector3(90,0,0))
+- public static function InitializeServer(connections:int,listenPort:int,useNat:bool):NetworkConnectionError;解释一下函数，参数以及返回值的意思。
+  - 初始化服务器。connections是允许的入站连接或玩家的数量，listenPort是要监听的端口，useNat设置NAT穿透功能。如果你想要这个服务器能够接受连接使用NAT穿透，使用facilitator，设置这个为true。如果有错误会有返回错误。
+- 请写出以下函数的含义和运算结果
+  #+BEGIN_SRC java
+delegate b Func<a, b>(a a1);
+static void Main(string[] args) {
+    Func<int, bool> mFunc = x => x == 5;
+    Console.WriteLine(mFunc(6));
+}
+  #+END_SRC
+ - false，就是定义一个delegate，返回值类型为 b，有一个参数，类型为a。
+- 编写一个函数，输入一个32位整数，计算这个整数有多少个bit为1.
+  #+BEGIN_SRC java
+uint BitCount (uint n) {
+    uint c = 0; // 计数器
+    while (n > 0) {
+        if ((n & 1) == 1) // 当前位是1
+            ++c; // 计数器加1
+        n >>= 1; // 移位
+    }
+    return c;
+}
+  #+END_SRC
+- 某游戏中的装备系统有16种附加属性，每种附加属性使用一个32位的ID表示(比如10001表示加人物hp的附加属性，10002表示加人物mp的附加属性），一件装备做多有4个附加属性，请写一个程序输出所有附加属性的组合。
+- 请实现如下函数，在Unity中有一副骨骼树，请使用递归方式与非递归方式实现先序遍历，在Unity的Console输出所有骨骼名。
+  - 可能用到的函数
+  #+BEGIN_SRC java
+public Transform GetChild（int index）;
+public int Transform.childCount
+public void OutputTree(Transform root) {}
+  #+END_SRC
+- 简要解释下数据库中ACID的含义。
+  - ACID是指在可靠数据库管理系统（DBMS）中，事务所具有的四个特性：原子性（Atomicity）、一致性（Consistency）、隔离性（Isolation）、持久性（Durability）。
+  - 原子性是指事务是一个不可分割的工作单位，事务中的操作要么都发生，要么都不发生。
+  - 一致性是指在事务开始之前和事务结束以后，数据库的完整性约束没有被破坏。这是说数据库事务不能破坏关系数据的完整性以及业务逻辑上的一致性。例如：对银行转帐事务，不管事务成功还是失败，应该保证事务结束后ACCOUNT表中aaa和bbb的存款总额为2000元。
+  - 隔离性多个事务并发访问时，事务之间是隔离的，一个事务不应该影响其它事务运行效果。这指的是在并发环境中，当不同的事务同时操纵相同的数据时，每个事务都有各自的完整数据空间。由并发事务所做的修改必须与任何其他并发事务所做的修改隔离。事务查看数据更新时，数据所处的状态要么是另一事务修改它之前的状态，要么是另一事务修改它之后的状态，事务不会查看到中间状态的数据。
+  - 持久性，意味着在事务完成以后，该事务所对数据库所作的更改便持久的保存在数据库之中，并不会被回滚。即使出现了任何事故比如断电等，事务一旦提交，则持久化保存在数据库中。
+- 32位整数256和255按位异或后的结果是（511）
+- unix/linux 系统将所有的I/O设备模型化为文件,c语言中的（stdin）,(stdout)和(stderr)分别表示标准输入，标准输出，标准错误。
+- k层二叉树最多有 2^k - 1 个结点。
+- 中缀算式(8 + x*y)-2x/3的后缀算式是_。
+- 对以下二叉树进行前序遍历的结果是（ABDGCEHF）
+
+  [[./pic/tree.png]]  
+- 写出一个C类ip地址（192.168.1.105）,该ip地址一个合法的网格掩码是（255.255.255.224）.
+- c/c++程序运行时有堆内存与栈内存之分，请写一个语句在堆中分配一个整数：(int a = new int(4)),在栈内存中分配一个整数：（int a = 5）。
+- 简述从C/C++源代码生成可执行文件所经历的几个过程和每个过程中所做的事情。
+预编译-》编译-》链接-》执行
+- 简述TCP建立连接的过程，最好能画出时序图。
+  - 三次握手；
+- 有一个c语言函数
+  #+BEGIN_SRC java
+unsigned int getN(unsigned int v){
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
+}
+  #+END_SRC
+
+请问这个函数的功能是什么？
+  - 返回的结果是v 或者 2 ^ 跟下v次方 + 1（比如125返回128，128返回的就是128）
+- 列出c语言中static关键字的用法。
+  - static 关键字至少有下列几个作用：
+    - （1）函数体内static 变量的作用范围为该函数体，不同于auto 变量，该变量的内存只被分配一次，因此其值在下次调用时仍维持上次的值；
+    - （2）在模块内的static 全局变量可以被模块内所用函数访问，但不能被模块外其它函数访问；
+    - （3）在模块内的static 函数只可被这一模块内的其它函数调用，这个函数的使用范围被限制在声明它的模块内；
+    - （4）在类中的static 成员变量属于整个类所拥有，对类的所有对象只有一份拷贝；
+    - （5）在类中的static 成员函数属于整个类所拥有，这个函数不接收this 指针，因而只能访问类的static 成员变量。
+- 解释一下Unity3D中的协程（coroutine）是什么？并举例说明
+  - 在主线程运行的同时开启另一段逻辑处理，来协助当前程序的执行，协程很像多线程，但是不是多线程，Unity的协程实在每帧结束之后去检测yield的条件是否满足。
+- 物体自旋转使用的函数叫什么？物体绕某点旋转使用函数叫什么？
+  - 物体自旋转函数transform.Rotate，物体绕某点旋转函数：transform.RotateAround
+- 使用prefab预制物体有什么好处？
+  - 1.Prefab一个重要的优势就是编辑prefab资源后，场景中所有使用Prefab克隆的游戏对象将全部使用新编辑的资源，无需一个一个的给场景中的对象赋值。
+  - 2.当游戏中需要频繁创建一个物体时，使用Prefab能够节省内存。
+  - 3.当你在一个场景中增加一个Prefabs，你就实例化了一个Prefabs。
+- 设有如下关系表R1和R2
+  - R1(NO, NAME, SEX, AGE, CLASS)
+  - R2(NO, SUBJECT, SCORE)
+  - 主关键字是NO,其中NO为学号，NAME为姓名，SEX为性别，AGE为年龄，CLASS为班号，SUBJECT为科目，SCORE为成绩。写出实现下列功能的SQL语句。查找学号为20的学生的姓名，科目，成绩。
+  - SELECT NAME,SUBJECT,SCORE FORM R1 INNER JOIN R2 ON R1.NO=R2.NO WHERE R1.NO = 20
+- 描述多人联网中位置的同步和聊天通讯的实现方法，并编程写出如何实现多人协同中交互操作。（交互操作例如，血值为100的两个角色人物可以相互射击双方，射击一次减去血值10，当血值为0的时候证明已经死亡）
+- 当实例化一个prefab对象，prefab对象上面挂载了一个继承MonoBehaviour的脚本
+  - 1.请问这个脚本分别会按顺序调用哪些函数，并列出哪些函数是反复进去的
+  - 2.请问当这个实例化对象先调用了SetActive(false)，然后又调用了SetActive(true),那么这个脚本依次会调用哪些函数方法？
+  - 3.如果在脚本的Awake（）函数中，调用了this.gameObject.AddComponent()(PS:GameController为另一个继承Mono的脚本类)，请问此时脚本函数的调用顺序是否发生变化？
+- if(go.CompareTag(“Enemy”))和if（go.tag == “Enemy”）两种判断方法哪种是合适的，为什么？
+  - 第一种合适，因为第二种会占用更多内存。
+- DestroyImmediate和Destroy的区别是？
+  - DestroyImmeditate 销毁对象的时候，会立即释放资源。Destroy只是从该场景销毁，但是还在内存当中。
+- 详细说明Unity中资源加载的方法，以及他们的区别？
+  - 1.通过Resources模块，调用它的load函数：可以直接load并返回某个类型的Object，前提是要把这个资源放在Resource命名的文件夹下，Unity不关有没有场景引用，都会将其全部打入到安装包中。
+  - 2.通过bundle的形式：即将资源打成 asset bundle 放在服务器或本地磁盘，然后使用WWW模块get 下来，然后从这个bundle中load某个object。
+- 从代码角度上如何进行内存优化？
+- 分别写出Invoke和协程的几种用法？
+- 以下函数的功能是计算斐波那契数列的第n项，请填空
+  #+BEGIN_SRC java
+int func(int n) {
+    if(n<=2） return 1;
+    return n + func(n-1);
+}
+  #+END_SRC
+- C语言中宏定义中若有多行，可以使用字符（\）.
+- C语言中32位整数能表达的最小的数是-2^31~2^31-1.
+- 使用（点乘）向量运算可以很方便地计算出三维空间中两个单位向量之间夹角的cos值。
+- 类unix系统中某文件的权限为：drw-r–r–，用八进制数值形式表示该权限为(411),首位d代表目录（文件夹）
+- 若有如下程序段，其中s，a，b，c均已定义为整型变量，且a，c均已赋值（c大于0）
+  #+BEGIN_SRC java
+s = a;
+for(b = 1; b <= c; b++)
+    s = s + 1;
+  #+END_SRC
+
+则与上述程序段功能等价的赋值语句是（B）
+  - A.s = a + b
+  - B.s = a + c
+  - C.s = s + c
+  - D.s = b + c
+- 简述static和const关键字的作用
+  - static 关键字至少有下列几个作用：
+    - （1）函数体内static 变量的作用范围为该函数体，不同于auto 变量，该变量的内存只被分配一次，因此其值在下次调用时仍维持上次的值；
+    - （2）在模块内的static 全局变量可以被模块内所用函数访问，但不能被模块外其它函数访问；
+    - （3）在模块内的static 函数只可被这一模块内的其它函数调用，这个函数的使用范围被限制在声明它的模块内；
+    - （4）在类中的static 成员变量属于整个类所拥有，对类的所有对象只有一份拷贝；
+    - （5）在类中的static 成员函数属于整个类所拥有，这个函数不接收this 指针，因而只能访问类的static 成员变量。
+  - const 关键字至少有下列几个作用：
+    - （1）欲阻止一个变量被改变，可以使用const 关键字。在定义该const 变量时，通常需要对它进行初始化，因为以后就没有机会再去改变它了；
+    - （2）对指针来说，可以指定指针本身为const，也可以指定指针所指的数据为const，或二者同时指定为const；
+    - （3）在一个函数声明中，const 可以修饰形参，表明它是一个输入参数，在函数内部不能改变其值；
+    - （4）对于类的成员函数，若指定其为const 类型，则表明其是一个常函数，不能修改类的成员变量；
+    - （5）对于类的成员函数，有时候必须指定其返回值为const 类型，以使得其返回值不为“左值”。
+- 用你熟悉的语言及你认为最简洁的方法书写计算 s = 1!+2!+3!+…+num!的代码。num为输入，s为输出。（！代表阶乘 3！= 1 * 2 * 3
+  #+BEGIN_SRC java
+Console.ReadLine(num)
+int s = 0;
+for(int i = 1; i <= num; i++) {
+    s += JieCheng(num);
+}
+public int JieCheng(int num) {
+    if(num < 0) {
+        Console.WriteLine("error");
+        return;
+    }
+    if(num <=1) {
+        return 1;
+    } else {
+        return num * JieCheng(num - 1)
+            }
+}
+  #+END_SRC
+- 用你熟悉的语言从一个字符串中去掉相连的重复字符，例如原字符串“adffjkljaalkjhl”变为“adfjkljalkjhl”
+  #+BEGIN_SRC java
+int GetResult(char[] input, char[] output)   {  
+    int i, j, k = 0;  
+    int flag;  
+    int length;  
+    if(input == NULL || output == NULL)   {  
+        return -1;  
+    }  
+    length=strlen(input);//求数组的长度  
+    for(i = 0; i<length; i++)   {  
+        flag = 1;  
+        for(j = 0; j < i; j++)   {  
+            if(output[j] == input [i])  
+                flag = 0;  
+        }  
+        if(flag)  
+            output[k++] = input[i];  
+    }  
+    printf("最终的字符串为：");  
+    output[k] = '\0';  
+    for(int m = 0; m < output.Length; m++) {
+        print (output [m]);
+    } 
+    return 0;  
+}  
+  #+END_SRC
+
+* 第二部分
+- 哪种实时光源是Unity中没有的？（D）
+  - A.点光源
+  - B.方向光
+  - C.聚光灯
+  - D.日光灯
+- 如何在Unity中创建地形系统？(D)
+  - A.Terrain->Create Terrain
+  - B.Component->Create Terrain
+  - C.Asset->Create Terrain
+  - D.Windows->Create Terrain
+- 以下哪种操作步骤可以在场景中添加“Wind Zone”?(B)
+  - A.Terrain->Wind Zone
+  - B.GameObject->Create other->Wind Zone
+  - C.Component->Physics->Wind Zone
+  - D.Assets->Create->Wind Zone
+- 在Unity编辑器中创建一个Directional Light，以下步骤正确的是？(B)
+  - A.Edit->Rendering Setting->Directional Light
+  - B.GameObject->Create Other->Directional Light
+  - C.Component->Rendering->Directional Light
+  - D.Assets->Directional Light
+- 下列哪一项不属于Camera中的“Clear Flags”？（D）
+  - A.Skybox
+  - B.Solid Color
+  - C.Depth Only
+  - D.Background
+- 以下哪种脚本语言是Unity编辑器所不支持的？（D）
+  - A.Javascript
+  - B.C#
+  - C.Boo
+  - D.Perl
+- 对于Prefab，以下说法错误的是？（D）
+  - A.Prefab资源可以在项目中多次重复使用
+  - B.由Prefab实例出的GameObject，其在Hierarchy试图中表现为蓝色
+  - C.Prefab上的组件信息一经改变，其实例出的GameObject也会自动改变
+  - D.实例出的GameObject上的组件信息一经改变，其对应出的Prefab也会自动改变
+- 下面哪种做法可以打开Unity的Asset Store？（A）
+  - A.Windows->Asset Store
+  - B.Edit->Asset Store
+  - C.File->Asset Store
+  - D.Assets->Asset Store
+- 在哪个面板中可以修改物体的空间属性，如位置，朝向，大小等（B）
+  - A.Project
+  - B.Inspector
+  - C.Hierarchy
+  - D.Toolbar
+- 如何为一个Asset 资源设定一个Label，从而能够方便准确的搜索到？（D）
+  - A.在Project窗口中选中一个Asset，右键->Create->Label
+  - B.在Project窗口中选中一个Asset，右键->Add Label
+  - C.在Project窗口中选中一个Asset，在Inspector窗口中点击添加Label的图标
+  - D.在Project窗口中选中一个Asset，在Inspector窗口中点击按钮“Add Label”
+- Mecanim系统中，Body Mask的作用是？（D）
+  - A.指定身体的某一部分是否参与骨骼动画
+  - B.指定身体的某一部分是否参与物理模拟
+  - C.指定身体的某一部分是否可以输出骨骼信息
+  - D.指定身体的某一部分是否参与渲染
+- 以下哪种操作步骤可以打开Unity编辑器的Lightmapping视图？（C）
+  - A.File->Lightmapping
+  - B.Assets->Lightmapping
+  - C.Windows->Lightmapping
+  - D.Component->Lightmapping
+- 下列关于光照贴图，说法错误的是？（C）
+  - A.使用光照贴图比使用实时光源渲染要快
+  - B.可以降低游戏内存消耗
+  - C.可以增加场景真实感
+  - D.多个物体可以使用同一张光照贴图
+- 如何为物体添加光照贴图所使用的UV?(B)
+  - A.不用添加，任何时候都会自动生成
+  - B.更改物体导入设置，勾选“Generate Lighting UVs”
+  - C.更改物体导入设置，勾选“Swap UVs”
+  - D.更改物体导入设置，在UVs选项中选择“Use Lightmaps”
+- 在哪个模块下可以修改Render Path？（A）
+  - A.Camera
+  - B.Light
+  - C.Render Settings
+  - D.Project Setting->Quality
+- 以下哪项技术下不是目前Unity所支持的Occlusion Culling技术？（D）
+  - A.PVS only
+  - B.PVS and dynamic objets
+  - C.Automatic Portal Generation
+  - D.Dynamic Only
+- 关于Vector3的API，以下说法正确的是？（C）
+  - A.Vector3.normalize可以获取一个三维向量的法线向量
+  - B.Vector3.magnitude可以获取一个三维向量的长度
+  - C.Vector3.forward与Vector3（0，0，1）是一样的
+  - D.Vector3.Dot(向量A，向量B)是用来计算向量A与向量B的叉乘
+- 下列那些选项不是网格层属性的固有选项？（B）
+  - A.Default
+  - B.Walkable
+  - C.Not Walkable
+  - D.Jump
+- 写出你对游戏的理解及游戏在生活中的作用，对Unity3D软件理解最深入的地方。
+
+* C++
+- 请写代码打印100之内的素数，讲求效率（请做你的解法的效率分析）
+- 求m,n的最大公约数
+- 输入10个字符串，打印出其中重复的字符串以及重复的次数
+- 请画图例（UML最好），给出windows下的文件目录的设计模式
+- 用OO表示狼吃羊羊吃草
+- 什么是subversion?它与vss,cvs的区别在哪?或者有什么优势?
+- 什么是wiki，关于程序项目的wiki你使用过哪些?wiki对你有什么帮助吗?wiki与程序文挡的差别在哪?
+- 什么是tdd?你使用过吗?tdd的关键在哪?跟传统的单元测试相比，有什么优越性?
+- 什么是单元测试?你用过哪些单元测试工具?他们的区别和好处各有哪些?你主要倾向于哪一种?
+- 什么是编程规范?你倾向于什么样的规范?他的好处在哪?
+- 什么是mfc?你经常使用那些mfc类?那么为什么很多人不主张使用mfc?
+- 什么是头文件依赖?你注意过这些问题吗?你注意过编译的时间吗?你怎么改进编译时间?
+- 什么是面向对象?你在哪些方面用过面向对象?带来了什么好处?又有什么弊端?
+- 什么是接口编程.com，他带来了什么好处?适用于什么地方?
+- 什么是设计模式?使用设计模式有什么好处?列举你使用过的设计模式知识：
+- 一寸山河一寸血，___________。是_____说的。
+- 抗战历时____年，最多百分之____的土地沦陷，军民伤亡____。

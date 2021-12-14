@@ -1,0 +1,4 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n+nt}{\PYGZlt{}activity}
+\PYG{n+na}{android:exported=}\PYG{l+s}{\PYGZdq{}false\PYGZdq{}} \PYG{n+nt}{/\PYGZgt{}}
+\end{Verbatim}

@@ -1,0 +1,109 @@
+#+latex_class: cn-article
+#+title: Android Coding Interview -- Andorid
+#+author: deepwaterooo
+
+* android 中有四大组件
+- Activity 活动
+- Service 服务
+- Content Provider 内容提供者
+- BroadcastReceiver 广播接收器
+
+* Activity相关
+** Android中onSaveInstanceState和onRestoreInstanceState详解
+- https://blog.csdn.net/android_cmos/article/details/52080421
+** Android开发之InstanceState详解
+- https://www.cnblogs.com/hanyonglu/archive/2012/03/28/2420515.html
+** Android中Activity四种启动模式和taskAffinity属性详解
+- https://blog.csdn.net/zhangjg_blog/article/details/10923643
+** Android Activity的生命周期和启动模式详解
+- https://www.ktanx.com/blog/p/4665
+** Intent的显示、隐示示例
+- 显式Intent示例：
+  #+BEGIN_SRC java
+Intent intent = new Intent(this, Example.class);
+intent.setData(Uri.parse(uri));      //uri为一个stringURI
+startService(intent);
+  #+END_SRC
+- 隐式Intent示例：
+  - 需要注意，用户可能没有任何应用处理发送到startActivity()的隐式Intent，若出现这种情况，则调用将会失败，且程序会崩溃，所以，使用隐式Intent一定要注意验证Activity是否会接收到Intent，对Intent对象调用resolveActivity()方法，若结果非空，则至少有一个应用能处理该Intent，且可以安全调用startActivity()，若结果为空，则不应使用这个Intent，此时若可能，应停用发出该Intent的功能。
+  #+BEGIN_SRC java
+Intent intent = new Intent();
+intent.setAction(Intent.ACTION_SEND);
+intent.putExtra(Intent.EXTRA_TEXT, textMessage);
+intent.setType("text/plain");
+if(intent.resolveActivity(getPackageManager()!=null){
+    startActivity(intent);
+}
+  #+END_SRC
+** Android中Intent和Intent过滤器详解
+- https://blog.csdn.net/Davidddl/article/details/60960298
+** android intentFilter 详解
+- https://blog.csdn.net/cquwentao/article/details/51555359
+** Android DEPPLINK、APPLink原理简析
+- https://www.jianshu.com/p/eb20492acf25
+** Activity的启动和通信原理
+- https://www.kancloud.cn/alex_wsc/android_plugin/481151
+** Activity启动模式与任务栈(Task)全面深入记录（下）
+- 当TaskAffinity和allowTaskReparenting结合使用
+- https://blog.csdn.net/javazejian/article/details/52072131
+** Android task和back stack详解二：管理任务
+- https://blog.csdn.net/niu_gao/article/details/7288218
+** 
+- 
+** 
+- 
+
+* Fragment
+** Android Fragment使用(一) 基础篇 温故知新
+- https://www.cnblogs.com/mengdd/p/5548359.html
+** Android Do not keep activities选项分析
+- https://www.cnblogs.com/mengdd/p/4528417.html
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+** 
+- 
+

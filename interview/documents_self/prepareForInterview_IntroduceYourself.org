@@ -1,0 +1,8 @@
+#+latex_class: cn-article
+#+title: Prepare for Interview -- Introduce Yourself
+#+author: deepwaterooo
+#+options: ^:nil
+
+* Introduce Yourself
+I am a software developer with strong mobile app development background and a master's degree majored in Computer Science. 
+08/2014 -- about FIVE 5 years software development/android app development experience

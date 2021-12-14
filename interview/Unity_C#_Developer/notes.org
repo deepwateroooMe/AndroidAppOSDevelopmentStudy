@@ -1,0 +1,687 @@
+#+latex_class: cn-article
+#+title: Unity Study Notes
+#+author: deepwaterooo
+
+* Unity Study Notes
+** 3D基础知识
+*** 点乘与叉乘
+**** 点乘
+- S = U 点乘 V = U的模 乘以 V的模 再乘以 COS（UV之间的角度）( a dot b = |a||b|cost(theta) )
+- 这样得出来的是一个标量S，是没有方向的值。但是根据这个值与0的比较，我们可以获得U，V两标量之间的关系。
+  -  如果 = 0，那么向量 u . v 相等。
+  -  如果 > 0，那么向量 u 、v 之间的夹角小于90度。
+  -  如果 < 0，那么向量 u 、v 之间的夹角大于90度。
+
+**** 叉乘 
+- 叉积（英语：Cross product）是一种在向量空间中向量的二元运算。与点积不同，它的运算结果是一个向量而不是一个标量。两个向量的叉积写作 a * b，也称作外积（英语：Outer product）或向量积（英语：Vector product）。叉积与原来的两个向量都垂直。
+
+[[./doc/crossproduct.png]]
+
+#+BEGIN_SRC java
+S = U 叉乘 V 
+  = [( UyVz - UzVy ),
+     ( UzVx - UxVy ),
+     ( UxVy - UyVx)];
+#+END_SRC
+- 我们从中可以看出，我们叉乘得到的不再是一个无方向标量值。而是一个向量。那么这个向量是什么样的向量呢。
+- 我们应该去记住，两个向量叉乘得到的是一个同时垂直于这两个向量的一个新向量。
+
+*** Quaternion
+- 我们用四元组来表示旋转，一个四元组包含四个分量x, y, z, w。假设一个旋转的旋转轴是axis，旋转角度是theta。那么对应的四元组q如下。
+  #+BEGIN_SRC java
+q.x = sin(theta / 2) * axis.x;
+q.y = sin(theta / 2) * axis.y;
+q.z = sin(theta / 2) * axis.z;
+q.w = cos(theta / 2);
+  #+END_SRC
+
+** map贴图
+*** normalmap
+*** Bump Map 凹凸贴图 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+** NavMesh 
+- http://liweizhaolili.blog.163.com/blog/static/16230744201271225812998/
+- 
+- 
+** 粒子系统
+- 
+
+** references
+- 入门 1-5 http://www.cnblogs.com/neverdie/p/How_To_Learn_Unity3D.html
+- Unity Manual http://docs.unity3d.com/Manual/index.html
+- https://unity3d.com/cn/learn
+- http://www.cnblogs.com/neverdie/
+- http://subject.manew.com/learn/index.html
+- 摄像机 raycast 拉近与拉远 momo http://www.xuanyusong.com/archives/1991
+- 
+- 
+** comments
+** 【Unity3D基础教程】给初学者看的Unity教程（一）
+*** Unity 3d (just so that don't occupy a chapter)
+- 熟练者，关注Unity圣典和Unity User Manual,在这一阶段，要把在第一阶段所忽略的内容进行选择性的补充学习。
+- 进阶者，关注Unity社区，Unity Answers，Unity Wiki和知乎的Unity板块，在这一阶段，要对Unity的各种细节问题，优化，底层原理和新的技术方案都要进行思考和学习。在以上几个模块中，知乎的Unity板块尤其值得关注，干货满满而且都是中文，建议通读。看书。对知识点进行查漏补缺，我个人用的是《unity 5.x 从入门到精通》。
+- 在进阶者这一阶段，你才可以对一些中间件进行学习，具体学习什么样的Asset，还要由你的项目需求决定，不过无论如何还是推荐学习这几个Asset：Behavior Designer（AI）, DoTween（Tween动画）, PlayMaker（可视化编程），Shader Forge（可视化的Shader编写）和Elementals（粒子特效）。
+- 如果你还觉得不过瘾的话，就可以尝试反编译一些市面上流行的Unity3D游戏来获取代码，毕竟真实生产环境中的代码才是最值得深入研究的，在这部分我还是要推荐啪啪三国的代码，相当整洁。
+- 个人觉得就Unity学习，掌握几个很重要的点，
+  1. 基本编程语言功底，C#、js、数据结构、算法
+  2. Unity资源流原理（Unity如何处理资源关系的，mate、 library、prefab之间的关系 dll如何被引用等等），基于这些关系去构建自己的资源管理结构。
+  3. 做好对象生命周期管理（利于管理内存、利于更加灵活结构化）
+  4. 善用unity文档和answer
+  5. 我是很不赞同去看网络上的demo来学习Unity的，Untiy的思想是可以用任意脚本对象去构建一个项目，这是非常方便非常灵活的，这是个很大的优点，然而这对于新手来说是很可怕的缺点，就像往一个容器里放入很多散落的个体，然而在项目这些个体又是项目有引用关系的，那么个体之间的偶合关系处理的不好那这就会成一个项目很大的问题。然而目前网络上的demo，大部分都是不够结构化不够框架化的初级demo。于初学者很悲催的一点是，如果一开始你从这些demo上去理解Unity，你就会进入完全基于实现的误区。很多问题都靠挂载脚本来解决，于产品级项目这样的思想是很可怕的，会严重影响产品迭代速度、管理成本以及时间成本。甚至很多教学视频往往也是把新手引入了这个误区。
+- Model-View-Controller（MVC）是一种组合设计模式，它体现了一种关注点分离（Separation of concerns,SoC）的思想。MVC主要把逻辑层和表现层进行了解耦，将一个问题划分成了不同的关注点。增强了应用的稳定性，易修改性和易复用性。
+*** 重要类及其关系
+[[./doc/设计类图.png]]
+
+[[./doc/component.png]]
+
+*** Input输入
+- Unity支持，键盘，操纵杆和游戏手柄输入。
+- 当创建时，每个项目都具有下面的默认输入轴：
+  - Horizontal and Vertical are mapped to w, a, s, d and the arrow keys. 
+  - 水平和垂直被映射到w, a, s, d键和方向键
+  - Fire1, Fire2, Fire3 are mapped to Control, Option (Alt), and Command, respectively. 
+  - Fire1, Fire2, Fire3被分别映射到Ctrl，Option（Alt）和Command键
+  - Mouse X and Mouse Y are mapped to the delta of mouse movement. 
+  - Mouse X 和 Mouse Y被映射到鼠标移动增量
+  - Window Shake X and Window Shake Y is mapped to the movement of the window. 
+  - Window Shake X 和 Window Shake Y 被映射到窗口的移动
+*** Time
+- Time类是Unity中的一个全局变量，它记载了和游戏相关的时间，帧数等数据。
+- Time 类包含一个非常重要的变量叫deltaTime.这个变量包含从上次调用Update 或FixedUpdate到现在的时间(根据你是放在Update函数还是FixedUpdate函数中).(另注: Update每帧调用一次)
+- 依照上面的例子，使得物体在一个匀速的速度下旋转，不依赖帧的速率，如下：
+  #+BEGIN_SRC java
+using UnityEngine;
+using System.Collections;
+
+public class example : MonoBehaviour {
+    void Update() {
+        transform.Rotate(0, 5 * Time.deltaTime, 0);
+    }
+}
+  #+END_SRC
+- 当然了，在使用Time这个类的时候，我们也要记住使用各种各样的Lerp (线性插值) 函数来减少自己的工作量，在Unity3D中，Vector3，Vector2，Color等类都提供了相应的Lerp函数给我们调用。
+
+*** Physics和Transform
+- Physics类是Unity重的一个工具函数类，它主要提供了Linecast和Raycast两种射线投射方式。
+  - 其中Linecast是以投射的起始位置和终止位置为参数，来判断这个投射有没有和某个Collider发生了碰撞。
+  - 而Raycast则是以投射的起始位置和投射方向为参数，来判断这个投射有没有和某个Collider发生了碰撞。
+- 相应的实例可以看下面的这一段程序：
+  #+BEGIN_SRC java
+using UnityEngine;
+using System.Collections;
+
+public class Example : MonoBehaviour {
+    void Update() {
+        // 使用Raycast
+        Vector3 fwd = transform.TransformDirection(Vector3.forward);
+        if (Physics.Raycast(transform.position, fwd, 10))
+            print("There is something in front of the object!");
+    // 使用Linecast
+    Transform target;
+    if (!Physics.Linecast(transform.position, target.position))
+        ProcessData.AndDoSomeCalculations();
+    }
+}
+#+END_SRC
+- 在Physics这个模块中，有三个Component是至关重要的，分别是RigidBody，Collision，Joint。在新的版本中，又引入了RigidBody2D，Collision2D，Joint2D这些Component来处理2D中的Physics事件。
+- 这三个类都是处理物理相关的事件的，那么它们有什么区别呢？
+  - RgidBody是作为一个受力物体而存在的，所以可以向一个RigidBody施加Force（力），Drag（阻力）。同时RigidBody还有 velocity （速度），mass（质量），position（位置），旋转（rotation）等等。
+  - Collider是为了处理物理中的碰撞事件而出现的类，就像上面表格中所说的，如果没有Collider，两个RigidBody之间是无法发生碰撞的。对同一个GameObject可以绑定多个Collider构建更加复杂的碰撞体结构。
+    - Collider另外一个很值得注意的就是我们可以为Collider设置material，即Collider的物理材质。 物理材质用于调整摩擦力和碰撞单位之间的反弹效果。
+    - 当发生碰撞时，会触发毁掉函数OnCollisionEnter，OnCollisionStay，OnCollisionExit等等。这几个函数与OnTriggerXXX的区别会在接下来的博客中提到。
+  - Joint用于连接两个RigidBody，当Joint断掉的时候会触发OnJointBreak的回调函数。
+
+** 【Unity3D基础教程】给初学者看的Unity教程（二）：所有脚本组件的基类 -- MonoBehaviour的前世今生
+*** 引子
+- 上一次我们讲了GameObject，Compoent，Time，Input，Physics，其中Time，Input，Physics都是Unity中的全局变量。GameObject是游戏中的基本物件。GameObject是由Component组合而成的，GameObject本身必须有Transform的Component，这也加深了我们对GameObject的理解，即GameObject是游戏场景中真实存在，而且有位置的一个物件。
+- 但是我们怎么操纵这个GameObject呢？这就需要引入脚本组件了，也就是今天讲的MonoBehaviour
+*** MonoBehaviour的生命周期
+- MonoBehaviour是Unity中所有脚本的基类，如果你使用JS的话，脚本会自动继承MonoBehaviour。如果使用C#的话，你需要显式继承MonoBehaviour。
+- 在我们使用MonoBehaviour的时候，尤其需要注意的是它有哪些可重写函数，这些可重写函数会在游戏中发生某些事件的时候被调用。我们在Unity中最常用到的几个可重写函数是这几个：
+  - Awake：当一个脚本实例被载入时Awake被调用。我们大多在这个类中完成成员变量的初始化
+  - Start：仅在Update函数第一次被调用前调用。因为它是在Awake之后被调用的，我们可以把一些需要依赖Awake的变量放在Start里面初始化。 同时我们还大多在这个类中执行StartCoroutine进行一些协程的触发。要注意在用C#写脚本时，必须使用StartCoroutine开始一个协程，但是如果使用的是JavaScript，则不需要这么做。
+  - Update：当MonoBehaviour启用时，其Update在每一帧被调用。
+  - FixedUpdate：当MonoBehaviour启用时，其 FixedUpdate 在每一固定帧被调用。
+  - OnEnable：当对象变为可用或激活状态时此函数被调用。
+  - OnDisable：当对象变为不可用或非激活状态时此函数被调用。
+  - OnDestroy：当MonoBehaviour将被销毁时，这个函数被调用。
+- 下面用一张图来更形象地说明一下这几个类的在MonoBehaviour的生命周期中是如何被调用的：
+[[./doc/monobehaviour.png]]
+*** MonoBehaviour的那些坑
+- 私有（private）和保护（protected）变量只能在专家模式中显示.属性不被序列化或显示在检视面板.
+- 不要使用命名空间（namespace）
+- 记得使用 缓存组件查找， 即在MonoBehaviour的长远方法中经常被访问的组件最好在把它当作一个私有成员变量存储起来。
+- 在游戏里经常出现需要检测敌人和我方距离的问题，这时如果要寻找所有的敌人，显然要消耗的运算量太大了，所以最好的办法是将攻击范围使用Collider表示，然后将Collider的isTrigger设置为True。最后使用OnTriggerEnter来做攻击范围内的距离检测，这样会极大提升程序性能。
+
+** 【Unity3D基础教程】给初学者看的Unity教程（三）：通过制作Flappy Bird了解Native 2D中的Sprite, Animation
+** 【Unity3D基础教程】给初学者看的Unity教程（四）：通过制作Flappy Bird了解Native 2D中的Sprite, Animation
+
+** 【Unity3D基础教程】给初学者看的Unity教程（五）：详解Unity3d中的协程(Coroutine)
+*** 为什么需要协程
+- 在游戏中有许多过程（Process）需要花费多个逻辑帧去计算。
+  - 你会遇到“密集”的流程，比如说寻路，寻路计算量非常大，所以我们通常会把它分割到不同的逻辑帧去进行计算，以免影响游戏的帧率。
+  - 你会遇到“稀疏”的流程，比如说游戏中的触发器，这种触发器大多数时候什么也不做，但是一旦被调用会做非常重要的事情（比图说游戏中自动开启的门就是在门前放了一个Empty Object作为trigger，人到门前就会触发事件）。
+- 不管什么时候，如果你想创建一个能够历经多个逻辑帧的流程，但是却不使用多线程，那你就需要把一个任务来分割成多个任务，然后在下一帧继续执行这个任务。
+- 比如，A*算法是一个拥有主循环的算法，它拥有一个open list来记录它没有处理到的节点，那么我们为了不影响帧率，可以让A*算法在每个逻辑帧中只处理open list中一部分节点，来保证帧率不被影响（这种做法叫做time slicing）。
+- 再比如，我们在处理网络传输问题时，经常需要处理异步传输，需要等文件下载完毕之后再执行其他任务，一般我们使用回调来解决这个问题，但是Unity使用协程可以更加自然的解决这个问题，如下边的程序：
+  #+BEGIN_SRC java
+private IEnumerator Test() {  
+    WWW www = new WWW(ASSEST_URL);  
+    yield return www;  
+    AssetBundle bundle = www.assetBundle;
+}
+#+END_SRC
+
+*** 协程是什么
+- 从程序结构的角度来讲，协程是一个有限状态机，这样说可能并不是很明白，说到协程（Coroutine），我们还要提到另一样东西，那就是子例程（Subroutine），子例程一般可以指函数，函数是没有状态的，等到它return之后，它的所有局部变量就消失了，但是在协程中我们可以在一个函数里多次返回，局部变量被当作状态保存在协程函数中，直到最后一次return，协程的状态才别清除。
+- 简单来说，协程就是：你可以写一段顺序的代码，然后标明哪里需要暂停，然后在下一帧或者一段时间后，系统会继续执行这段代码。
+
+*** 协程怎么用？
+- 一个简单的C#代码，如下：
+  #+BEGIN_SRC java
+IEnumerator LongComputation() {
+    while(someCondition) {
+        /* 做一系列的工作 */
+        // 在这里暂停然后在下一帧继续执行
+        yield return null;
+    }
+}
+#+END_SRC
+
+*** 协程是怎么工作的
+- 注意上边的代码示例，你会发现一个协程函数的返回值是IEnumerator，它是一个迭代器，你可以把它当成指向一个序列的某个节点的指针，它提供了两个重要的接口，分别是Current（返回当前指向的元素）和MoveNext()（将指针向前移动一个单位，如果移动成功，则返回true）。IEnumerator是一个interface，所以你不用担心的具体实现。
+- 通常，如果你想实现一个接口，你可以写一个类，实现成员，等等。迭代器块（iterator block）是一个方便的方式实现IEnumerator没有任何麻烦-你只是遵循一些规则，并实现IEnumerator由编译器自动生成。
+- 一个迭代器块具备如下特征：
+  - 返回IEnumerator
+  - 使用yield关键字
+- 所以yield关键词是干啥的？它声明序列中的下一个值或者是一个无意义的值。如果使用yield x（x是指一个具体的对象或数值）的话，那么movenext返回为true并且current被赋值为x，如果使用yield break使得movenext()返回false。
+- 那么我举例如下，这是一个迭代器块：
+  #+BEGIN_SRC java
+public void Consumer() {
+    foreach(int i in Integers()) {    
+        Console.WriteLine(i.ToString());
+    }
+}
+public IEnumerable<int> Integers() {
+    yield return 1;
+    yield return 2;
+    yield return 4;
+    yield return 8;
+    yield return 16;
+    yield return 16777216;
+}
+#+END_SRC
+- 注意上文在迭代的过程中，你会发现，在两个yield之间的代码只有执行完毕之后，才会执行下一个yield，在Unity中，我们正是利用了这一点，我们可以写出下面这样的代码作为一个迭代器块：
+  #+BEGIN_SRC java
+IEnumerator TellMeASecret() {
+  PlayAnimation("LeanInConspiratorially");
+  while(playingAnimation)
+    yield return null;
+ 
+  Say("I stole the cookie from the cookie jar!");
+  while(speaking)
+    yield return null;
+ 
+  PlayAnimation("LeanOutRelieved");
+  while(playingAnimation)
+    yield return null;
+}
+#+END_SRC
+- 然后我们可以使用下文这样的客户代码，来调用上文的程序，就可以实现延时的效果。
+  #+BEGIN_SRC java
+IEnumerator e = TellMeASecret();
+while(e.MoveNext()) { 
+    // do whatever you like
+}
+#+END_SRC
+
+*** 协程是如何实现延时的？
+- 如你所见，yield return返回的值并不一定是有意义的，如null，但是我们更感兴趣的是，如何使用这个yield return的返回值来实现一些有趣的效果。
+- Unity声明了YieldInstruction来作为所有返回值的基类，并且提供了几种常用的继承类，如WaitForSeconds（暂停一段时间继续执行），WaitForEndOfFrame（暂停到下一帧继续执行）等等。更巧妙的是yield 也可以返回一个Coroutine真身，Coroutine A返回一个Coroutine B本身的时候，即等到B做完了再执行A。下面有详细说明：
+- Normal coroutine updates are run after the Update function returns. A coroutine is a function that can suspend its execution (yield) until the given YieldInstruction finishes. Different uses of Coroutines:
+  - yield; The coroutine will continue after all Update functions have been called on the next frame.
+  - yield WaitForSeconds(2); Continue after a specified time delay, after all Update functions have been called for the frame
+  - yield WaitForFixedUpdate(); Continue after all FixedUpdate has been called on all scripts
+  - yield WWW Continue after a WWW download has completed.
+  - yield StartCoroutine(MyFunc); Chains the coroutine, and will wait for the MyFunc coroutine to complete first.
+- 实现延时的关键代码是在StartCoroutine里面，以为笔者也没有见过Unity的源码，那么我只能猜想StartCoroutine这个函数的内部构造应该是这样的：
+  #+BEGIN_SRC java
+List<IEnumerator> unblockedCoroutines;
+List<IEnumerator> shouldRunNextFrame;
+List<IEnumerator> shouldRunAtEndOfFrame;
+SortedList<float, IEnumerator> shouldRunAfterTimes;
+
+foreach(IEnumerator coroutine in unblockedCoroutines) {
+    if(!coroutine.MoveNext())
+        // This coroutine has finished
+        continue;
+ 
+    if(!coroutine.Current is YieldInstruction) {    
+        // This coroutine yielded null, or some other value we don't understand; run it next frame.
+        shouldRunNextFrame.Add(coroutine);
+        continue;
+    }
+ 
+    if(coroutine.Current is WaitForSeconds) {    
+        WaitForSeconds wait = (WaitForSeconds)coroutine.Current;
+        shouldRunAfterTimes.Add(Time.time + wait.duration, coroutine);
+    } else if(coroutine.Current is WaitForEndOfFrame) {    
+        shouldRunAtEndOfFrame.Add(coroutine);
+    } else /* similar stuff for other YieldInstruction subtypes */
+}
+unblockedCoroutines = shouldRunNextFrame;
+#+END_SRC
+- 当然了，我们还可以为YieldInstruction添加各种的子类，比如一个很容易想到的就是yield return new WaitForNotification(“GameOver”)来等待某个消息的触发，关于Unity的消息机制可以参考这篇文章：【Unity3D技巧】在Unity中使用事件/委托机制（event/delegate）进行GameObject之间的通信 (二) : 引入中间层NotificationCenter。
+
+*** 还有些更好玩的？
+- 第一个有趣的地方是，yield return可以返回任意YieldInstruction，所以我们可以在这里加上一些条件判断：
+  #+BEGIN_SRC java
+YieldInstruction y;
+
+if (something)
+    y = null;
+else if (somethingElse)
+    y = new WaitForEndOfFrame();
+else
+    y = new WaitForSeconds(1.0f);
+
+yield return y;
+#+END_SRC
+- 第二个，由于一个协程只是一个迭代器块而已，所以你也可以自己遍历它，这在一些场景下很有用，例如在对协程是否执行加上条件判断的时候：
+  #+BEGIN_SRC java
+IEnumerator DoSomething() {
+  /* ... */
+}
+ 
+IEnumerator DoSomethingUnlessInterrupted(){
+    IEnumerator e = DoSomething();
+    bool interrupted = false;
+    while(!interrupted) {  
+        e.MoveNext();
+        yield return e.Current;
+        interrupted = HasBeenInterrupted();
+    }
+}
+#+END_SRC
+- 第三个，由于协程可以yield协程，所以我们可以自己创建一个协程函数，如下：
+  #+BEGIN_SRC java
+IEnumerator UntilTrueCoroutine(Func fn) {
+    while (!fn()) 
+        yield return null;
+}
+ 
+Coroutine UntilTrue(Func fn) {
+    return StartCoroutine(UntilTrueCoroutine(fn));
+}
+ 
+IEnumerator SomeTask() {
+    /* ... */
+    yield return UntilTrue(() => _lives < 3);
+    /* ... */
+}
+#+END_SRC
+
+** 【Unity3D基础教程】给初学者看的Unity教程（六）：理解unity的新GUI系统(UGUI)
+- UGUI是Unity在4.6中引入的新的GUI系统，与传统的中间件NGUI相比，这套新GUI系统有几个核心亮点：
+  - 放弃了Atlas的概念，使用Packing Tag的方式来进行图集的规划
+  - 放弃了depth来确定UI显示层级的概念，使用Hierarchy的SiblingIndex来确定先是层级
+  - 使用RectTransform来代替以前NGUI中的UIAnchor，分辨率适配更加简单
+  - 使用LayoutGroup代替以前的NGUI中的Grid，实现了更灵活的布局
+- UGUI的类继承结构还是挺复杂的，如果你想对此有了解的话，可以参考我的两个类图：
+  - Unity GUI 链接：UnityEngine.UI系统基础类架构图 https://www.processon.com/view/link/55421d91e4b01376faa9d6fb
+  - Unity Event System 链接：UnityEngine Event & EventSystem系统架构图 https://www.processon.com/view/55421efce4b01376faa9dbfe
+
+** 【Unity3D基础教程】给初学者看的Unity教程（七）：在unity中构建健壮的单例模式(Singleton)
+*** 为什么需要单例模式
+- 游戏中需要单例有以下几个原因：
+  - 我们需要在游戏开始前和结束前做一些操作，比如网络的链接和断开，资源的加载和卸载，我们一般会把这部分逻辑放在单例里。
+  - 单例可以控制初始化和销毁顺序，而静态变量和场景中的GameObject都无法控制自己的创建和销毁顺序，这样就会造成很多潜在的问题。
+  - Unity3D的GameObject需要动态创建。而不是固定在场景里，我们需要使用单例来创建GameObject。
+  - Unity3D的场景中的各个GameObject需要从单例中存取数据。
+*** 单例的设计原则
+- 在设计单例的时候，我并不建议采取延迟初始化的方案，正如云风所说： *对于单件的处理，采用静态对象和惰性初始化的方案，简直就是 C++ 程序员的陋习。Double Checked Locking is broken，相信很多人都读过了。过于依赖语法糖，通常就会造成这种结果。其实让程序有明显的初始化和退出阶段，是很容易被规划出来的。把单件(singleton) 的处理放在正确的时机，以正确的次序来处理并非难事。*
+- 我们应该在程序某处明确定义单例是否被初始化，在初始化执行完毕后再执行正常的游戏逻辑
+  - 尽量避免多线程创建单例带来的复杂性
+  - 在某处定义了一定的初始化顺序后，可以在游戏结束的时候按照相反的顺序销毁这些单例
+*** 设计单例的基类
+- 在Unity中，我们需要一个基类来为所有单例的操作提供统一的接口，同时，我们还要让所有单例继承MonoBehaviour，只有这样才能让单例自由使用协程这一特性。
+- 基类设计如下，
+  #+BEGIN_SRC java
+using System;
+using UnityEngine;
+
+namespace MiniWeChat {
+    [RequireComponent(typeof(GameRoot))]
+
+    public class Singleton<T> : MonoBehaviour where T : Singleton<T> {    
+        private static T _instance;
+
+        public static T GetInstance() {        
+            return _instance;
+        }
+
+        public void SetInstance(T t) {        
+            if (_instance == null) {            
+                _instance = t;
+            }
+        }
+
+        public virtual void Init() {        
+            return;
+        }
+
+        public virtual void Release() {        
+            return;
+        }
+    }
+}
+  #+END_SRC
+*** 设计单例的管理类
+- 除了设计基类之外， 还需要设计一个让所有基类初始化和销毁的类，我们把这个类叫做GameRoot，并且把它绑定在一个名为GameRoot的GameObject上，并且把这个GameObject放在游戏进入的Main场景中。
+- GameRoot类设计如下，
+  #+BEGIN_SRC java
+namespace MiniWeChat {
+    public class GameRoot : MonoBehaviour {
+        private static GameObject _rootObj;
+        private static List<Action> _singletonReleaseList = new List<Action>();
+
+        public void Awake() {        
+            _rootObj = gameObject;
+            GameObject.DontDestroyOnLoad(_rootObj);
+            StartCoroutine(InitSingletons());
+        }
+
+        /// <summary>
+        /// 在这里进行所有单例的销毁
+        /// </summary>
+        public void OnApplicationQuit() {        
+            for (int i = _singletonReleaseList.Count - 1; i >= 0; i--) {            
+                _singletonReleaseList[i]();
+            }
+        }
+
+        /// <summary>
+        /// 在这里进行所有单例的初始化
+        /// </summary>
+        /// <returns></returns>
+        private IEnumerator InitSingletons() {        
+            yield return null;
+            // Init Singletons
+        }
+
+        private static void AddSingleton<T>() where T : Singleton<T> {        
+            if (_rootObj.GetComponent<T>() == null) {            
+                T t = _rootObj.AddComponent<T>();
+                t.SetInstance(t);
+                t.Init();
+                singletonReleaseList.Add(delegate() {                
+                        t.Release();
+                    });
+            }
+        }
+
+        public static T GetSingleton<T>() where T : Singleton<T> {        
+            T t = _rootObj.GetComponent<T>();
+            if (t == null) {            
+                AddSingleton<T>();
+            }
+            return t;
+        }
+    }
+}
+  #+END_SRC
+*** 如何拓展新的单例
+- 有了以上两个类之后，当我们需要新创建一个类的时候，就可以继承Singleton<T>来创建新的单例，重写Init和Release方法，同时在GameRoot的InitSingleton方法的适当顺序执行AddSingleton<T>方法即可。
+
+
+** 场景视图(Scene View)导航
+场景视图 (Scene View) 是你的交互式沙箱。你可以使用场景视图 (Scene View) 选择和放置环境、玩家、相机、敌人和所有其他游戏对象 (GameObjects)。
+
+在场景视图 (Scene View) 中调动和操纵对象是 Unity 最重要的一些功能，因此，能够迅速使用它们至关重要。
+
+场景视图 (Scene View) 有一个导航控件集，可帮助你快速高效地四处移动。
+
+*** 上下左右箭头键
+
+您可以使用箭头键 (Arrow Keys) 在场景中四处移动，就像“走路”穿过一样。向上和向下箭头在相机面向的方向向前或向后移动相机。
+
+左右箭头横向平移视图。按住 Shift 键和一个箭头键，可更快地移动。
+
+*** 使用手形工具
+
+你还可以发现手形工具 (Hand Tool)（快捷键：Q）的功用，特别是使用单键鼠标时。选择手形工具 (Hand tool) 后：
+
+[[./pic/1.png]]
+
+场景视图 (Scene View) 的右上角是场景小图示 (Scene Gizmo)，显示场景相机 (Scene Camera) 的当前定位，让你快速改变视角。
+
+按住 Shift 键可提高移动和缩放的速率。
+
+*** 漫游模式
+
+漫游模式可让您像许多第一人称视角游戏一样来浏览场景视图 (Scene View)。
+
+单击并按住鼠标右键进入漫游模式。
+
+现在您可以使用鼠标将视图四处移动，使用 WASD 键向前后左右移动，使用 Q 和 E 键向上或向下移动。
+
+按住 Shift 键可移动得更快。
+
+漫游模式专为透视图模式而设计。在等距模式中，按住鼠标右键并移动鼠标，则会旋转相机。
+
+*** 场景小图示(Scene Gizmo)
+
+场景视图 (Scene View) 右上角是场景小图示 (Scene Gizmo)，它显示了场景视图相机 (Scene View Camera) 当前视角方向，可让你快速修改视角。
+
+[[./pic/2.png]]
+小图示（Gizmo）的每个彩色“支脚”代表一根几何轴。
+
+你可以点击任何方向杆，将场景视图相机 (Scene View Camera) 更改为该方向。点击场景小图示(Scene Gizmo)的中央或其下方的文本，可在等距模式和透视图模式之间切换。
+
+你也可以常常按下 Shift 键并点击场景小图示 (Scene Gizmo) 的中央，以获得“好”的透视图，其查看场景的视角位于侧面略上方。
+
+** 定位游戏对象(GameObjects)
+构建游戏时，会在游戏世界中放置许多不同的对象。此时，使用工具栏 (Toolbar) 中的转换工具 (Transform Tools)，可转换、旋转及缩放单个游戏对象。
+
+每个游戏对象的周围都有相应的小图示(Gizmo)。可使用鼠标操作任何(Gizmo)轴来修改游戏对象 (GameObjects) 的转换组件 (Transform Component)，也可以在检视器 (Inspector) 中转换组件 (Transform Component) 的数字字段中直接输入值。
+
+[[./pic/3.png]]
+
+*** 聚焦游戏对象
+
+先将场景视图的相机 (Scene View Camera) 焦距一个对象，或者在层级视图中选择一个游戏对象 (GameObject)，然后再将鼠移到场景视图上操纵该对象，此时视图将以对象为中心移动，这点非常有用。
+
+选择任何游戏对象 (GameObject) 并按 F 键，这样场景视图 (Scene View) 和枢轴点会以所选对象为中心，该操作称为“框选 (Frame Selection)”。
+
+*** 移动、旋转和缩放
+
+移动、旋转和缩放是场景视图 (Scene View) 导航中的关键操作，因此，Unity 提供了几个备选方法，以在执行时提供最大方便。
+
+以下是对一些要点的概述：
+
+按住鼠标右键进入漫游 (Flythrough) 模式。
+
+用鼠标和方向键（向上和向下要加上 Q 和 E 键）进入第一视角视图导航。
+
+选择任何游戏对象 (GameObject) 并按 F 键。这将确定所选对象在场景视图的中心位置及轴点。
+
+使用箭头键在 X/Z 平面上移动。
+
+按住 Alt 键和鼠标左键拖动，使相机围绕当前轴点旋转。
+
+按住 Alt 键和鼠标滚轮拖动，拖动场景视图 (Scene View) 相机。
+
+按住 Alt 键和鼠标右键拖动，缩放场景视图 (Scene View)。此效果与滚动鼠标滚轮的效果相同。
+
+点击并拖动小图示 (Gizmo) 中心，以同时在所有轴上操纵对象。
+
+在转换 (Translate) 小图示的中心有三个小正方形，可用来在相同平面（即可同时移动两个轴，第三个轴保持不动）拖动对象。
+
+如果你有一个三键鼠标，则可以点击鼠标中键来调整最后调整的轴（该轴变成黄色），而无需直接点击该轴。
+
+使用缩放工具时要小心，因为非统一缩放，可能会导致子对象的缩放比例失衡。
+
+*** 小图示显示切换器 (Gizmo Display Toggles)
+
+小图示显示切换器 (Gizmo Display Toggles) 用来定义任何变换小图示 (Transform Gizmo) 的位置。
+
+[[./pic/4.png]]
+可使用它在不同视图模式中查看场景：纹理、线框、RGB、夸张等等。还可以看（听）场景视图 (Scene View) 中的游戏照明、游戏元素及声音。
+
+定位时，居中 (Center) 将小图示 (Gizmo) 定位在对象范围的中心。枢轴 (Pivot) 将小图示 (Gizmo) 定位在网格 (Mesh) 的实际枢轴点。
+
+旋转时，局部 (Local) 将相对于对象的旋转保持小图示 (Gizmo) 的旋转。全局 (Global) 强制小图示 (Gizmo) 为世界空间的方向。
+
+*** 单位对齐
+
+使用转换工具 (Translate Too) 拖动任何小工具轴 (Gizmo Axis) 时，你可以按住控制键，以对齐设置 (Snap Settings) 中定义的增量。
+
+你可以使用菜单编辑->对齐设置...更改单位对齐所用的单位距离：
+
+[[./pic/5.png]]
+
+*** 表面对齐
+
+使用转换工具 (Translate Too) 在中心拖动时，可以按住 Shift 键，这可将对象与任何碰撞体 (Collider) 的交叉点对齐。使对象精确定位变得更迅速。
+
+*** 查看旋转
+
+使用旋转工具 (Rotate Tool) 时，可以按住 Shift 将对象朝向任何碰撞体 (Collider) 表面上的一点旋转。这可使对象相对于另一个对象的定向变得简单。
+
+*** 顶点对齐
+
+你可以使用一个称为顶点对齐 (Vertex Snapping) 的功能来轻松组装你的游戏世界。该功能可以让你取给定网格的任何顶点，然后用鼠标将该顶点放到你所选的任何其他网格的任何顶点上。使用该功能可以快速地组装你的游戏世界。例如，你可以在高精度竞速游戏中放置赛道，在网格的顶点添加动力道具。
+
+[[./pic/6.png]]
+使用顶点对齐 (Vertex Snapping) 组装赛道。
+
+在 Unity 中使用顶点对齐非常简单，只需按照以下步骤操作：
+
+1. 选择您要操纵的网格，确保变换工具 (Transform Tool) 处于活动状态。
+
+2. 长 按 V 键以激活顶点对齐模式。
+
+3. 将光标移到您想用作枢轴点的网格的顶点上。
+
+4. 光标在想要的顶点上时按住鼠标左键，然后将网格拖到另一个网格的任何其他顶点旁边。
+
+5. 对结果满意时，松开鼠标按键和 V 键。
+
+6. Shift-V 用来切换该功能。
+
+您可以将顶点与顶点对齐、顶点与表面对齐、枢轴与顶点对齐。
+
+** 视图模式
+场景视图 (Scene View) 控制条可让您选择查看场景的各种选项及控制是否启用灯光和音频。这些控制只影响开发过程中的场景视图，对构建的游戏无影响。
+
+[[./pic/7.png]]
+*** 绘图模式 (Draw Mode)
+
+第一个下拉菜单选择哪种绘图模式 (Draw Mode) 将用来描绘场景。
+
+[[./pic/8.png]]
+纹理：显示表面及其可见纹理。
+
+线框：用线框绘制网格。
+
+纹理-线框：显示带纹理且有线框覆盖的网格。
+
+渲染路径：使用颜色代码显示每个对象的渲染路径：绿色表示延时光照、黄色表示正向渲染，红色表示顶点光明。
+
+光照贴图分辨率：在场景上覆盖棋盘格以显示光照贴图的分辨率。
+
+*** 渲染模式 (Render Mode)
+
+下一个下拉菜单选择四种渲染模式 (Render Modes) 的哪种模式用于渲染场景。
+
+[[./pic/9.png]]
+
+RGB：渲染具有正常颜色的对象的场景。
+
+Alpha：用 alpha 渲染颜色。
+
+过度绘制（Overdraw）：将对象作为透明的“剪影”渲染。透明颜色累加，这样很容易就可以找出一个对象绘制在另一个对象上的位置。
+
+Mipmap：使用颜色代码显示理想的纹理尺寸：红色表示纹理大于所需尺寸（在当前距离和分辨率下）；蓝色表示纹理可以更大。当然，理想的纹理尺寸取决于游戏运行时的分辨率及相机可以离特定表面多近。
+
+*** 场景照明、游戏覆盖和试听模式
+
+下拉菜单的右侧有三个按钮，可控制场景表示的其他方面。
+
+[[./pic/10.png]]
+第一个按钮确定是否使用默认光照方案或实际添加到场景中的灯光来照亮视图。默认灯光方案初始时使用，但当添加第一个灯光时会自动更改。第二个按钮控制是否在场景视图中渲染天空盒和 GUI 元素，也显示和隐藏布局网格。第三个按钮开启/关闭场景中的音频源。
+
+** 小图示和图标显示控制
+小图示和图标有几个显示选项，可以用来在开发过程中减少混乱和改善场景的视觉清晰度。
+
+*** 图标选择器 (Icon Selector)
+
+使用图标选择器 (Icon Selector)，可以轻松为游戏对象 (GameObjects) 和脚本设置自定义图标，这些图标将在场景视图 (Scene View) 和检视器 (Inspector) 中使用。要更改一个游戏对象 (GameObject) 的图标，只需在检视器 (Inspector) 中点击其图标。可用类似方法更改脚本资源的图标。在图标选择器 (Icon Selector) 中，标签图标 (Label Icon) 是一种特殊的图标。这类图标将在场景视图 (Scene View) 中作为文本标签显示，使用游戏对象 (GameObject) 的名称。内置组件 (Components) 的图标不能更改。
+
+注意：一个资源的图标更改后，该资源将标记为“已修改”，因此由版本控制系统 (Revision Control Systems) 取回。
+
+下面的图演示如何为游戏对象 (GameObject) 选择一个图标：
+
+[[./pic/11.png]]
+
+下面的图演示如何为脚本选择一个图标：
+
+[[./pic/12.png]]
+*** 显示和隐藏图标与小图示
+
+单独组件的小图示的可见性取决于组件在检视器中是否被展开或折叠（即折叠的组件不可见）。然而，您可以使用小图示 (Gizmos) 下拉菜单同时展开或折叠给定类型的每个组件。当场景中有大量小图示和图标时，这是减少视觉混乱的有效方法。
+
+要显示当前小图示和图标的状态，单击场景 (Scene) 或游戏视图 (Game View) 控制条中的小图示 (Gizmos)。这里的切换用来设置哪种图标和小图示可见。
+
+注意，脚本 (Scripts) 部分显示的脚本为拥有自定义图标或让 OnDrawGizmos () 或 OnDrawGizmosSelected () 函数执行的脚本。
+
+[[./pic/13.png]]
+
+小图示 (Gizmos) 下拉菜单，显示图标和小图示的可见状态
+
+图标缩放 (Icon Scaling) 滑动条可以用来调节图标在场景中显示的大小。滑动条在最右端时，图标常常按实际尺寸画出。否则，图标将会根据其距场景视图相机的距离来缩放（尽管显示尺寸设有上限，以避免屏幕混乱）。
+
+** iOS 
+- http://www.jianshu.com/p/8472ba0f2bb6
+- https://github.com/qinjx/30min_guides/blob/master/ios.md iOS开发60分钟入门
+- http://blog.startry.com/2015/07/24/iOS_EnvWithXcconfig/ iOS开发必备 - 环境变量配置(Debug & Release)
+- https://www.zhihu.com/question/22000647 零基础如何学习 iOS 开发？
+- https://github.com/Aufree/trip-to-iOS iOS 学习资料整理
+- 
+- 
+- 
+- 
+- 
+- 
+** Unity动画
+*** shader
+- http://www.jianshu.com/p/7b9498e58659 Unity ShaderLab学习总结
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- http://www.360doc.com/content/13/0225/17/10941785_267831975.shtml
+- 用好Lua+Unity，让性能飞起来—LuaJIT性能坑详解 https://zhuanlan.zhihu.com/p/26528101
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 

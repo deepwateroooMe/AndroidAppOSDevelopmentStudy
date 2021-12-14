@@ -1,0 +1,5 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{ExampleFragment} \PYG{n}{fragment} \PYG{o}{=} \PYG{k}{new} \PYG{n}{ExampleFragment}\PYG{o}{();}
+\PYG{n}{fragmentTransaction}\PYG{o}{.}\PYG{n+na}{add}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{id}\PYG{o}{.}\PYG{n+na}{fragment\PYGZus{}container}\PYG{o}{,} \PYG{n}{fragment}\PYG{o}{);}
+\PYG{n}{fragmentTransaction}\PYG{o}{.}\PYG{n+na}{commit}\PYG{o}{();}
+\end{Verbatim}

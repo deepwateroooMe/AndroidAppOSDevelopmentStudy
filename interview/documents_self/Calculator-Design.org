@@ -1,0 +1,327 @@
+#+latex_class: cn-article
+#+title: Calculator Android NDK SDK Design
+#+author: deepwaterooo
+#+options: ^:nil
+
+* Kotlin在Android端的基本用法详解
+- https://blog.csdn.net/jay100500/article/details/79090636
+- 项目源码： https://github.com/jaychou2012/KotlinDemo
+
+* 理解AOP
+- http://www.cnblogs.com/yanbincn/archive/2012/06/01/2530377.html
+- 有上例子没有运行通
+
+* Java注解（Annotation）原理详解
+- https://blog.csdn.net/lylwo317/article/details/52163304
+- HelloAnnotation注解（接口）是一个继承了Annotation接口的特殊接口，而我们通过反射获取注解时，返回的是Java运行时生成的动态代理对象$Proxy1，该类就是HelloAnnotation注解（接口）的具体实现类。
+- 注解本质是一个继承了Annotation的特殊接口，其具体实现类是Java运行时生成的动态代理类。通过代理对象调用自定义注解（接口）的方法，会最终调用AnnotationInvocationHandler的invoke方法。该方法会从memberValues这个Map中索引出对应的值。而memberValues的来源是Java常量池。
+
+* android 小白不敢触及 NDK? 潇涧
+- https://www.zhihu.com/question/40899975
+- 可能没有接触过NDK的Android开发者多少都会有点这个疑惑吧，至少我曾经也有过，真的很佩服有些人能精通那么多方面的知识，可以构建出一些很牛逼很“高大上”的应用。
+- 我觉得，要想消除心中的疑惑，最简单的方法就是去尝试它！设想你面前有扇门，你看着这扇门很高很笨重，感觉不容易推开，但是没准这些都只是表象，我们不去尝试的话怎么知道呢？
+- 说下我的经历，我刚读研那会在三星中国研究院实习过一段日子，当时就是从零开始自己摸索NDK，功夫不负有心，可算是和师兄一起做出了一个能够追踪人眼球在手机屏幕上的聚焦点的应用。其中，native层的算法是师兄利用之前做好的PC端的算法移植出来的，而我的工作只是简单的jni调用而已，但是那次实习让我感觉NDK挺有意思的。再后来，学校某实验室有个老师需要做一个Android端的人脸识别应用，我在朋友的推荐下开始了自己的第二次NDK开发经历，花了一周时间写了一个demo，老师很高兴，所以后来一直支持我继续做。但是，继续做下去就会发现很多知识上的不足，一方面C++功底不够，另一方面Android功底也不深，所以基本上就是一路踩坑的过程。参加工作后，在Flyme系统组的时候发现之前折腾的这些NDK对于我理解Android系统的构建、Android的核心模块原理都有不少帮助呢。
+- 总而言之，我觉得你需要消除这方面的疑惑，而消除疑惑最简单的办法就是去尝试下，首先你可以看下其他几位高分答题者推荐的资源，确定下你是否感兴趣，是否有时间和精力，如果已经具备了一定的基础之后，不防看些优秀的项目，下面推荐两个：
+  - 1.renard314/textfairy
+    - https://github.com/renard314/textfairy
+    - 这是一个Android端的OCR应用，完成度相当高，而且比较复杂，希望你能成功编过它
+  - 2.MasteringOpenCV/code
+    - https://github.com/MasteringOpenCV/code
+    - 原书的第一个项目是和NDK有关的：Cartoonifier and Skin Changer for Android，将摄像头捕捉的画面动漫化。
+    - 看完这个可以接着看后面的第8个项目：Face Recognition using Eigenfaces or Fisherfaces，使用经典的Eigenfaces和Fisherfaces来做人脸识别，这章其实不是一个Android应用，但是，你可以将其移植到Android端，加油吧！
+- 我自己以前折腾的时候写过一些总结，但是年代可能有点久远，参考意义不大了，如有需要请移步阅读 Android · Hujiawei Bujidao 
+
+* AndroidStudio使用OpenCV的三种方式
+- https://dongxiawu.github.io/2017/12/14/AndroidStudio%E4%BD%BF%E7%94%A8OpenCV%E7%9A%84%E4%B8%89%E7%A7%8D%E6%96%B9%E5%BC%8F/
+- 项目源码： https://github.com/dongxiawu/OpencvDemo
+
+* Dagger2原理解析、理解
+- 详解 Dagger2 系列，原来 Dagger2 如此简单
+  - https://juejin.im/entry/578cf2612e958a00543c45a4
+- 详解Dagger2系列之撸码篇：横看成岭侧成峰
+  - https://dreamerhome.github.io/2016/07/11/dagger%20for%20code/
+- 依赖注入神器：Dagger2详解系列
+  - https://dreamerhome.github.io/2016/07/07/dagger/
+- 可运行的github项目( *这个项目可运行* )，根据自己的参数改编 *dagger2Demo*
+  - https://github.com/luxiaoming/dagger2Demo
+- Android 神兵利器Dagger2使用详解（一）基础使用 *Sample_dagger2*
+  - https://blog.csdn.net/mq2553299/article/details/73065745
+  - github项目源码( *这个项目可运行* )：sample_dagger2 https://github.com/qingmei2/Sample_dagger2
+- Android 神兵利器Dagger2使用详解（二）Module&Component源码分析
+  - https://blog.csdn.net/mq2553299/article/details/73136396
+- Android 神兵利器Dagger2使用详解（三）MVP架构下的使用
+  - https://blog.csdn.net/mq2553299/article/details/73251405
+- Android 神兵利器Dagger2使用详解（四）Scope注解的使用及源码分析
+  - https://blog.csdn.net/mq2553299/article/details/73414710
+
+- *这个项目可运行* Sample2Demo-master 
+- 告别Dagger2模板代码：Dagger Android使用详解
+  - https://blog.csdn.net/mq2553299/article/details/77485800
+- 告别Dagger2模板代码：DaggerAndroid原理解析
+  - https://blog.csdn.net/mq2553299/article/details/77725912
+- MVVMArms系列 - 最新的 Dagger2.11(Dagger.Android) 多 Module 实战详解 *这个项目可运行* DaggerAndroid
+  - https://xiaobailong24.me/2017/09/17/Android-MVVMArms-Dagger.Android/
+- Dagger 源码解析 深入理解dagger内部原理及结构
+  - https://a.codekk.com/detail/Android/%E6%89%94%E7%89%A9%E7%BA%BF/Dagger%20%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90
+
+
+* 关于抓取天气以及代码实现的可能性
+- OkHttp3-Android网络请求框架常用用法介绍与实例（mob请求天气预报） 自己正在尝试使用体会的
+  - https://blog.csdn.net/donkor_/article/details/53589316
+- 简诗
+  - https://www.jianshu.com/p/39dce598faf1
+- android开发练习三-Retrofit 一个失败的例子，还没有弄好
+  - https://blog.csdn.net/fnz1111/article/details/50752562
+- ACCU天气、Okhttp、Retrofit、RxJava的综合使用
+  - https://www.jianshu.com/p/3f0f850057eb
+- android基于MVP,RxJava2,Retrofit2的天气app
+  - https://www.jianshu.com/p/aff298f92b76
+- 真实案例出发，再谈 retrofit 封装 ANT
+  - https://juejin.im/entry/57ff5c6d816dfa0056e04621
+- 
+  - 
+- 
+  - 
+
+
+* Dagger2+Retrofit+RxJava练习 请求天气的小应用
+- https://www.jianshu.com/p/fac63cd4ff01
+- 请求天气的小应用，练习如何使用Dagger2+Retrofit+RxJava
+
+ [[./pic/weather.png]]
+** gradle配置
+- project/build.gradle
+  #+BEGIN_SRC xml
+dependencies {    
+        classpath 'com.android.tools.build:gradle:2.0.0'    
+        classpath 'me.tatarka:gradle-retrolambda:3.2.4'    
+        classpath 'com.neenbedankt.gradle.plugins:android-apt:1.8'
+}
+  #+END_SRC
+- project/app/build.gradle
+  #+BEGIN_SRC xml
+apply plugin: 'com.android.application'
+apply plugin: 'me.tatarka.retrolambda'
+apply plugin: 'com.neenbedankt.android-apt'
+android {    
+              ......
+        compileOptions {       
+                 sourceCompatibility JavaVersion.VERSION_1_8      
+                 targetCompatibility JavaVersion.VERSION_1_8    
+        }
+              ......    
+}
+dependencies {    
+        ......
+        compile 'com.jakewharton:butterknife:7.0.1'    
+
+        compile 'com.squareup.retrofit2:retrofit:2.0.1'    
+        compile 'com.squareup.retrofit2:converter-gson:2.0.2'    
+        compile 'com.squareup.retrofit2:adapter-rxjava:2.0.0'    
+
+        compile 'io.reactivex:rxandroid:1.1.0'    
+        compile 'io.reactivex:rxjava:1.1.0'    
+
+        compile 'com.google.dagger:dagger:2.1'    
+        apt 'com.google.dagger:dagger-compiler:2.1'    
+        provided 'org.glassfish:javax.annotation:10.0-b28'
+}
+  #+END_SRC
+** 项目结构
+
+[[./pic/Paste_Image.png]]
+- mvp流程
+
+  [[./pic/mvp.png]]
+- MainPresenter作为MainActivity和MainModel之间的桥梁，当MainActivity需要请求数据时，通知MainPresenter；MainPresenter通知MainModel需要数据，MainModel通过Retrofit从网络中获取数据，若是请求成功，则把数据传给MainPresenter,若是请求失败，则把失败信息传给MainPresenter。
+- MainPresenter从MainModel中获取数据信息后通知MainActivity更新数据。
+- MainActivity中的MainPresenter实例是由Dagger2注入的单例。
+  #+BEGIN_SRC java
+public class MainActivity extends AppCompatActivity implements MainView {    
+    @Bind(R.id.tv_displayWeather) TextView tv;
+    @Bind(R.id.progressBar) ProgressBar progressBar;    
+
+    @Inject @Singleton
+    public MainPresenter myPresenter; //Dagger不能注入私有变量  
+
+    @Override    
+    protected void onCreate(Bundle savedInstanceState) {        
+        super.onCreate(savedInstanceState);
+        supportRequestWindowFeature(Window.FEATURE_NO_TITLE);//去掉标题栏
+        setContentView(R.layout.activity_main); 
+        ButterKnife.bind(this);//ButterKnife注入
+        initView();
+    }   
+    public void displayWeather(View view) {
+        myPresenter.getData();    
+    }        
+    @Override    
+    public void initView() { 
+        MainComponent component = DaggerMainComponent.builder().
+            mainPresenterModule(new MainPresenterModule(this)).build();   
+        component.inject(this);  
+    }   
+    @Override    
+    public void showData(MainModelBean mybean) {        
+        if(mybean =  = null){      
+            tv.setText("请求失败");     
+        } else{          
+            MainModelBean.WeatherinfoEntity bean  =  mybean.getWeatherinfo();  
+            String city = bean.getCity();     
+            String wd = bean.getWD();  
+            String ws = bean.getWS(); 
+            String time = bean.getTime();      
+            String data = "城市:"+city+"\n风向:"+wd+"\n风级:"+ws+"\n发布时间:"+time;   
+            tv.setText(data);   
+        }      
+        hideProgressBar();   
+    }   
+    public void showProgressBar(){  
+        progressBar.setVisibility(View.VISIBLE);  
+    }  
+    public void hideProgressBar(){ 
+        progressBar.setVisibility(View.GONE);   
+    }
+}
+  #+END_SRC
+- MainModel的代码如下：
+  #+BEGIN_SRC java
+public class MainModel {   
+
+    String baseUrl="http://www.weather.com.cn/adat/sk/";
+    private List<MainModelBean> list = new ArrayList<>();
+    private MainPresenter mainPresenter;  
+
+    public MainModel(MainPresenter mainPresenter){ 
+        this.mainPresenter=mainPresenter;    
+    }   
+    public void getData(){ 
+        Retrofit retrofit=new Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .addConverterFactory(GsonConverterFactory.create())
+            .addCallAdapterFactory(RxJavaCallAdapterFactory.create())
+            .build();      
+        WeatherService service=retrofit.create(WeatherService.class);    
+        service.getModelBean("101010100")
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe(new MySubscriber());   
+    }   
+
+    interface WeatherService{      
+        @GET("{cityId}"+".html")        
+        Observable<MainModelBean> getModelBean(@Path("cityId") String cityId);   
+    }   
+    class MySubscriber extends Subscriber<MainModelBean>{        
+        @Override       
+        public void onCompleted() {     
+            mainPresenter.loadDataSuccess(list);   
+        }        
+        @Override    
+        public void onError(Throwable e) {  
+            mainPresenter.loadDataFailure();      
+        }       
+        @Override      
+        public void onNext(MainModelBean mainModelBean) {    
+            list.add(mainModelBean);        
+        }   
+    }
+}
+  #+END_SRC
+- MainPresenter源码如下：
+  #+BEGIN_SRC java
+public class MainPresenter {   
+    private MainView mainView;
+    public MainModel mainModel = new MainModel(this);
+
+    @Inject @Singleton
+    public MainPresenter(MainView mainView) {
+        this.mainView = mainView;
+    }
+    public void getData(){
+        mainView.showProgressBar();
+        mainModel.getData();
+    }
+    public void loadDataSuccess(List<MainModelBean> list) {
+        mainView.showData(list.get(0));
+    }
+    public void loadDataFailure(){
+        mainView.showData(null);
+    }
+}
+  #+END_SRC
+- 源码地址：
+  - https://github.com/changeyb/SimpleMVPDemo
+
+* Dagger2 
+- 项目级别build.gradle
+  #+BEGIN_SRC groovy
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    repositories {
+        google()
+        jcenter()
+        
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:3.3.2' // 3.3.2
+        classpath 'com.neenbedankt.gradle.plugins:android-apt:1.8'
+        
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        jcenter()
+        
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+  #+END_SRC
+- 应用APP级别build.gradle
+  #+BEGIN_SRC groovy
+apply plugin: 'com.android.application'
+//apply plugin: 'com.neenbedankt.android-apt'
+
+android {
+    compileSdkVersion 28
+    buildToolsVersion '28.0.3'
+    defaultConfig {
+        applicationId "com.me.daggertrial"
+        minSdkVersion 26
+        targetSdkVersion 28
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    compileOnly 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+    implementation 'com.android.support:design:28.0.0'
+    implementation 'com.google.dagger:dagger:2.7'
+    annotationProcessor 'com.google.dagger:dagger-compiler:2.7'
+    implementation 'org.glassfish:javax.annotation:10.0-b28'
+    //implementation 'com.google.dagger:dagger-android:2.11'
+    //implementation 'com.google.dagger:dagger-android-support:2.11'
+    //annotationProcessor 'com.google.dagger:dagger-android-processor:2.11'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'com.android.support.test:runner:1.0.2'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+}
+  #+END_SRC

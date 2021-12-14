@@ -1,0 +1,24 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k+kd}{public} \PYG{k+kd}{class} \PYG{n+nc}{BindService} \PYG{k+kd}{extends} \PYG{n}{Service} \PYG{o}{\PYGZob{}}
+    \PYG{c+c1}{// 实例化MyBinder得到mybinder对象；}
+    \PYG{k+kd}{private} \PYG{k+kd}{final} \PYG{n}{MyBinder} \PYG{n}{binder} \PYG{o}{=} \PYG{k}{new} \PYG{n}{MyBinder}\PYG{o}{();}
+    \PYG{c+c1}{// 返回Binder对象。}
+    \PYG{n+nd}{@Override}
+    \PYG{k+kd}{public} \PYG{n}{IBinder} \PYG{n+nf}{onBind}\PYG{o}{(}\PYG{n}{Intent} \PYG{n}{intent}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+        \PYG{c+c1}{// TODO Auto\PYGZhy{}generated method stub}
+        \PYG{k}{return} \PYG{n}{binder}\PYG{o}{;}
+    \PYG{o}{\PYGZcb{}}
+     \PYG{c+c1}{// 新建内部类MyBinder，继承自Binder(Binder实现IBinder接口),}
+     \PYG{c+c1}{// MyBinder提供方法返回BindService实例。}
+    \PYG{k+kd}{public} \PYG{k+kd}{class} \PYG{n+nc}{MyBinder} \PYG{k+kd}{extends} \PYG{n}{Binder}\PYG{o}{\PYGZob{}}
+        \PYG{k+kd}{public} \PYG{n}{BindService} \PYG{n+nf}{getService}\PYG{o}{()\PYGZob{}}
+            \PYG{k}{return} \PYG{n}{BindService}\PYG{o}{.}\PYG{n+na}{this}\PYG{o}{;}
+        \PYG{o}{\PYGZcb{}}
+    \PYG{o}{\PYGZcb{}}
+    \PYG{n+nd}{@Override}
+    \PYG{k+kd}{public} \PYG{k+kt}{boolean} \PYG{n+nf}{onUnbind}\PYG{o}{(}\PYG{n}{Intent} \PYG{n}{intent}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+        \PYG{c+c1}{// TODO Auto\PYGZhy{}generated method stub}
+        \PYG{k}{return} \PYG{k+kd}{super}\PYG{o}{.}\PYG{n+na}{onUnbind}\PYG{o}{(}\PYG{n}{intent}\PYG{o}{);}
+    \PYG{o}{\PYGZcb{}}
+\PYG{o}{\PYGZcb{}}
+\end{Verbatim}

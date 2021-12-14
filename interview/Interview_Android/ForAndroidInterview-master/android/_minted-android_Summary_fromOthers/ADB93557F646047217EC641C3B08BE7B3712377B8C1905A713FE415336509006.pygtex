@@ -1,0 +1,40 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k+kd}{public} \PYG{k+kd}{class} \PYG{n+nc}{myIntentService} \PYG{k+kd}{extends} \PYG{n}{IntentService} \PYG{o}{\PYGZob{}}
+    \PYG{c+c1}{//\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}必须实现\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}}
+    \PYG{k+kd}{public} \PYG{n+nf}{myIntentService}\PYG{o}{()} \PYG{o}{\PYGZob{}}
+        \PYG{k+kd}{super}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}myIntentService\PYGZdq{}}\PYG{o}{);}
+        \PYG{c+c1}{// 注意构造函数参数为空，这个字符串就是worker thread的名字}
+    \PYG{o}{\PYGZcb{}}
+    \PYG{n+nd}{@Override}
+    \PYG{k+kd}{protected} \PYG{k+kt}{void} \PYG{n+nf}{onHandleIntent}\PYG{o}{(}\PYG{n}{Intent} \PYG{n}{intent}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+        \PYG{c+c1}{//根据Intent的不同进行不同的事务处理}
+        \PYG{n}{String} \PYG{n}{taskName} \PYG{o}{=} \PYG{n}{intent}\PYG{o}{.}\PYG{n+na}{getExtras}\PYG{o}{().}\PYG{n+na}{getString}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}taskName\PYGZdq{}}\PYG{o}{);}
+        \PYG{k}{switch} \PYG{o}{(}\PYG{n}{taskName}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+        \PYG{k}{case} \PYG{l+s}{\PYGZdq{}task1\PYGZdq{}}\PYG{o}{:}
+            \PYG{n}{Log}\PYG{o}{.}\PYG{n+na}{i}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}myIntentService\PYGZdq{}}\PYG{o}{,} \PYG{l+s}{\PYGZdq{}do task1\PYGZdq{}}\PYG{o}{);}
+            \PYG{k}{break}\PYG{o}{;}
+        \PYG{k}{case} \PYG{l+s}{\PYGZdq{}task2\PYGZdq{}}\PYG{o}{:}
+            \PYG{n}{Log}\PYG{o}{.}\PYG{n+na}{i}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}myIntentService\PYGZdq{}}\PYG{o}{,} \PYG{l+s}{\PYGZdq{}do task2\PYGZdq{}}\PYG{o}{);}
+            \PYG{k}{break}\PYG{o}{;}
+        \PYG{k}{default}\PYG{o}{:}
+            \PYG{k}{break}\PYG{o}{;}
+        \PYG{o}{\PYGZcb{}}
+    \PYG{o}{\PYGZcb{}}
+    \PYG{c+c1}{//\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}用于打印生命周期\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}\PYGZhy{}}
+    \PYG{n+nd}{@Override}
+    \PYG{k+kd}{public} \PYG{k+kt}{void} \PYG{n+nf}{onCreate}\PYG{o}{()} \PYG{o}{\PYGZob{}}
+        \PYG{n}{Log}\PYG{o}{.}\PYG{n+na}{i}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}myIntentService\PYGZdq{}}\PYG{o}{,} \PYG{l+s}{\PYGZdq{}onCreate\PYGZdq{}}\PYG{o}{);}
+        \PYG{k+kd}{super}\PYG{o}{.}\PYG{n+na}{onCreate}\PYG{o}{();}
+    \PYG{o}{\PYGZcb{}}
+    \PYG{n+nd}{@Override}
+    \PYG{k+kd}{public} \PYG{k+kt}{int} \PYG{n+nf}{onStartCommand}\PYG{o}{(}\PYG{n}{Intent} \PYG{n}{intent}\PYG{o}{,} \PYG{k+kt}{int} \PYG{n}{flags}\PYG{o}{,} \PYG{k+kt}{int} \PYG{n}{startId}\PYG{o}{)} \PYG{o}{\PYGZob{}}
+        \PYG{n}{Log}\PYG{o}{.}\PYG{n+na}{i}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}myIntentService\PYGZdq{}}\PYG{o}{,} \PYG{l+s}{\PYGZdq{}onStartCommand\PYGZdq{}}\PYG{o}{);}
+        \PYG{k}{return} \PYG{k+kd}{super}\PYG{o}{.}\PYG{n+na}{onStartCommand}\PYG{o}{(}\PYG{n}{intent}\PYG{o}{,} \PYG{n}{flags}\PYG{o}{,} \PYG{n}{startId}\PYG{o}{);}
+    \PYG{o}{\PYGZcb{}}
+    \PYG{n+nd}{@Override}
+    \PYG{k+kd}{public} \PYG{k+kt}{void} \PYG{n+nf}{onDestroy}\PYG{o}{()} \PYG{o}{\PYGZob{}}
+        \PYG{n}{Log}\PYG{o}{.}\PYG{n+na}{i}\PYG{o}{(}\PYG{l+s}{\PYGZdq{}myIntentService\PYGZdq{}}\PYG{o}{,} \PYG{l+s}{\PYGZdq{}onDestroy\PYGZdq{}}\PYG{o}{);}
+        \PYG{k+kd}{super}\PYG{o}{.}\PYG{n+na}{onDestroy}\PYG{o}{();}
+    \PYG{o}{\PYGZcb{}}
+\PYG{o}{\PYGZcb{}}
+\end{Verbatim}

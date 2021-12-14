@@ -1,0 +1,1171 @@
+#+latex_class: cn-article
+#+title: StrangeIoC framework
+#+author: deepwaterooo
+ 
+* StrangeIoC framework
+** Unity与C#的序列化与反序列化
+- https://zhuanlan.zhihu.com/p/27990334
+
+** 细说C#中的序列化与反序列化的基本原理和过程
+- https://www.cnblogs.com/susufufu/p/6894034.html
+
+** UNITY的序列化 (更深入更透彻)
+- http://gad.qq.com/article/detail/17385%20target=
+
+** 序列化和反序列化（一点儿补充）
+- https://blog.csdn.net/u011484013/article/details/51140820
+
+
+** 框架学习笔记：Unity3D的MVC框架——StrangeICo
+- http://www.cnblogs.com/hammerc/p/4743070.html
+
+** StrangeIoC 框架
+** Unity3d架构之-Unity MVC框架 StrangeIoC (实例)
+- http://www.unity.5helpyou.com/2645.html
+
+** 框架学习笔记：Unity3D的MVC框架——StrangeIoC (下载代码)
+- https://www.bbsmax.com/A/rV57K9nq5P/ ~/Downloads/StrangeIoC.zip
+
+** 框架学习笔记：深度解析StrangeIoC内部运行机制
+- http://www.cnblogs.com/hammerc/p/4763037.html
+
+** Unity StrangeIoc框架 （二）
+- http://www.cnblogs.com/android-blogs/p/6807344.html
+
+** Unity StrangeIoc框架 (三）signal信号方式
+- http://www.cnblogs.com/android-blogs/p/6807499.html
+** Unity3d架构系列之- FSM有限状态机设计四（总结篇）
+- http://www.unity.5helpyou.com/2600.html
+** StrangeIOC MVCS框架介绍及进阶
+- http://gad.qq.com/article/detail/11630%20target=
+** StrangeIoc框架的详细介绍
+- https://blog.csdn.net/leoleocs/article/details/48023823
+** [Wahh] Unity StrangeIoC框架
+- https://www.taidous.com/thread-68594-1-1.html
+** Dynamic Injection
+- https://groups.google.com/forum/#!searchin/strangeioc/dynamic/strangeioc/Mm7l2DKE19Y/BB_hov4FiD8J
+- code: https://github.com/strangeioc/strangeioc/pull/90/files
+- StringIoC https://strangeioc.wordpress.com/2015/06/06/best-practices-draft/
+- https://forum.unity.com/threads/released-strangeioc-inversion-of-control-framework-for-unity-c.186190/page-4
+- https://coffeebraingames.wordpress.com/2014/03/05/getting-started-with-strange-ioc/
+
+** NET笔记——IOC详解和Unity基础使用介绍 (关于程序集)
+- http://www.echojb.com/dotnet-other/2016/11/16/260876.html
+** C#反射详解
+- https://www.jianshu.com/p/3db64ccd4aef
+** 异步编程，在Unity中使用Coroutine 与TAP
+- https://blogs.msdn.microsoft.com/appconsult/2017/08/29/unity-coroutine-tap-zh-cn/
+** StrangeIOC MVCS框架介绍及进阶
+- http://www.cnblogs.com/Keyle/p/4708825.html
+ 
+** Unity中的mvc框架_StrangeIoC（之八）
+- https://hiramtan.wordpress.com/2015/06/03/unity%E4%B8%AD%E7%9A%84mvc%E6%A1%86%E6%9E%B6_strangeioc%EF%BC%88%E4%B9%8B%E5%85%AB%EF%BC%89/
+** Unity StrangeIoc框架 (三）signal信号方式
+- https://www.bbsmax.com/A/l1dyxO105e/
+** Pools at last…
+- https://strangeioc.wordpress.com/2013/12/18/pools-at-last/
+** 和Keyle一起学StrangeIoc – Extensions
+- https://www.tqcto.com/article/internet/181527.html
+** Unity StrangeIoc框架 （一）
+- https://www.bbsmax.com/A/ke5j4OKazr/
+** StrangeIOC翻译 the-big-strange
+- https://blog.csdn.net/suifeng0467441844/article/details/53832642
+** StrangeIoc框架学习----在项目中实战
+- https://www.bbsmax.com/A/ZOJPRyDPdv/
+
+
+** Unity StrangeIoc 框架介绍 (去看英文版 the-big-strange)
+- http://gad.qq.com/article/detail/19392
+** StrangeIOC翻译 the-big-strange
+- https://blog.csdn.net/suifeng0467441844/article/details/53832642
+Strange attractors create predictable patterns, often in chaotic systems.
+在混乱的系统中创建一个可预测的模式。
+*** Introduction 简介
+- Strange is a super-lightweight and highly extensible Inversion-of-Control (IoC) framework, written specifically for C# and Unity. We’ve validated Strange on web, standalone, and iOS and Android. It contains the following features, most of which are optional:
+- Strange是为C#和unity编写的轻量级和高扩展性的IOC框架。我们已经将Strange在web，standalone，IOS和android平台。它包含以下功能，其中大部分是可选的：
+  - A core binding framework that pretty much lets you bind one or more of anything to one or more of anything else.
+  - 一个绑定框架是核心，可以让你将一个或对个物体绑定带一个或者多个其他物体。
+  - Dependency Injection
+  - 依赖出入
+  - Map as singleton, value or factory (get a new instance each time you need one)
+  - 映射可以处理单例，数值或者工厂模式（随时可以取得一个新的实例）
+  - Name injections
+  - 名称注入
+  - Perform constructor or setter injection
+  - 执行constructor（构造器）或者 setter 注入
+  - Tag your preferred constructor
+  - 标记首选的构造器
+  - Tag a method to fire after construction
+  - 标记构造器之后执行的方法
+  - Inject into MonoBehaviours
+  - 向MonoBehaviour注入
+  - Bind polymorphically (bind any or all of your interfaces to a single concrete class)
+  - 多态绑定模式（将任何或全部接口绑定到单个具体类）
+  - Reflection binding dramatically reduces overhead of employing reflectivity
+  - 反射与绑定结合，减少反射的性能开销
+  - Two styles of shared event bus.
+  - 两种类型的事件共享总线
+  - Both dispatch events to any point in your application
+  - 二者的dispatch事件可在程序的任何一处调用
+  - Both map local event bus for local communication
+  - 二者映射的本地事件总线为了本地通信
+  - Both map events to Command classes to separate business logic
+  - 二者为了分离逻辑都需要映射事件
+  - The new Signals implementation adds type saftety
+  - 新的Signals的实现增加了类型安全
+  - NB: Examples in this document use the default EventDispatcher. We’ve added a section explaining Signals, but didn’t, frankly, have the patience to re-write the entire guide. Nevertheless, we encourage the use of Signals as the preferred means of communication.
+  - 本文档中使用默认的EventDispatcher实例。我们增加了一段Signals使用，但没有，坦率地说，有耐心重写整个指南。然而，我们鼓励使用Signals作为首选的通信方式。
+  - MonoBehaviour mediation   MonoBehaviour中介
+  - Facilitate separation of a view from the application using it
+  - 使用应用程序将视图与应用程序分离
+  - Keep Unity-specific code isolated from the rest of the app
+  - 保持Unity特定代码与应用程序的其余部分隔离
+  - Optional MVCS (Model/View/Controller/Service) structure
+  - 可选的MVCS结构
+  - Multiple contexts
+  - 多context结构
+  - Allow subcomponents (separate Scenes) to function on their own, or in the context of larger apps.
+  - 允许组件（单独的场景）在他们自己的功能，或在较大的应用程序上下文
+  - Allow communication between contexts.
+  - 允许上下文之间的通信
+  - Don’t see what you need? The core binding framework is simple to extend. Build new Binders like:
+  - 不知道你需要什么吗？核心绑定框架扩展简单。建立新的Binders：
+  - A different type of dispatcher
+  - 一种不同类型的调度程序
+  - An entity framework
+  - 一个实体框架
+  - A multi-loader
+  - 多线加载
+  - In addition to organizing your project into a sensible structure, Strange offers the following benefits:
+  - 除了把你的项目组织成一个合理的结构，Strange提供以下好处：
+  - Designed to play well with Unity3D. Also designed to play well without it.
+  - 可以很好的支持Unity3D，也可以使用在其他地方。
+  - Separate UnityEngine code from the rest of your app.
+  - 从你的应用程序其他部分中分离UnityEngine代码
+  - Improves portability
+  - 提高可移植性
+  - Improves unit testability
+  - 提高单元可测试性
+  - A common event bus makes information flow easy and highly decoupled. (Note: Unity’s SendMessage method does this, of course, but it’s dangerous as all get-out. I may write a whole article on just this topic at some point.)
+  - 公共事件总线是信息流更容易和高度解耦。（Note: Unity’s SendMessage不是这样的，当然，这样会比较危险。我可能会写一篇关于这个话题的文章）
+  - The extensible binder really is amazing (a friend used to tell me “it’s good to like your own cookin’!”). The number of things you can accomplish with the tiny core framework would justify Strange all on its own.
+  - 可扩展的binder真的是了不起的（一个使用过的朋友告诉我，他喜欢自己来扩展）。你是用核心框架完成的事情将证明Strange的本身。
+  - Multiple contexts allow you to “bootstrap” subcomponents so they operate fine either on their own or as an integrated part. This can hugely speed up your development process and allow developers to work in isolation, then integrate in later stages of development.
+  - 多context允许你“引导程序（bootstrap）”子组件当做整体的一部分，无论是对自己还是其他部分。这可以极大地加快您的开发过程，并允许开发人员在隔离工作，然后整合在以后的发展阶段。
+- Acknowledgements致谢
+  - It is hard to adequately credit the creators of the open source Actionscript framework Robotlegs for their influence on the creation of StrangeIoC. While Strange is not a port of Robotlegs, the ensigns of that library are copiously reflected throughout this one. For their great service to my professional development, I offer that team my sincerest thanks. And a donut. Seriously, if you’re ever in town, let me buy you a donut.
+  - Kudos to Will Corwin for contributing the awesome Signals implementation (and implicit bindings, now on the dev branch).
+  - I also need to thank and congratulate the folks at ThirdMotion who inexplicably gave me time to build Strange and license to open source it.
+- Glossary
+  - This document uses lots of words which have lots of meaning to engineers…but little to non-engineers…and sometimes not that much to engineers who come from different backgrounds. If you run across a word you don’t understand never fear! Check out this glossary to see if we’ve explained it there.
+- Introduction: the directories 目录简介
+  - The downloaded project contains everything you need to get going, including a few example scenes. To find the code, which is most of what we’re going to discuss, look insideStrangeIoC > scripts > strange. You’ll find three subdirectories (if you’re looking from inside Unity, you’ll only see two).
+  - 下载的项目包含了你需要的一切，包括一些示例场景。要找到代码，这是我们要讨论的，看里面StrangeIoC > scripts > strange. 你会发现三个子目录（如果你从unity内部看，你只会看到两）。
+    - 1.    framework – The handful of classes that make Strange what it is
+    - framework – 较少的类，构成了Strange
+    - 2.    extensions – Various libraries that build upon the core framework to provide useful functionality
+    - extensions –建立在核心框架上提供有用功能的各种库
+    - 3.    examples – Code for the example projects (examples moved to StrangeIoC > examples).
+    - 示例已经更改到 StrangeIoC > examples，需要单独下载
+    - 4.    .tests – Contains unit tests to validate that the framework and extensions work properly
+    - .tests –包含单元测试，以验证框架和扩展是否正常工作
+*** Binding
+- The core of Strange is a very simple package for binding. This means, essentially, that we can bind (connect) one or more of anything to one or more of anything else. Tie an interface to a class that implements that interface. Or tie an event to a handler. Or tie two classes such that when one comes into being, the other one is automatically created. Why would we do this? So glad you asked! It turns out that much of what we do when programming comes down to binding. If you’ve ever dispatched an event (or a SendMessage in Unity), if you’ve ever indicated that one class uses another class, if you’ve ever written so much as an “if…else” statement, you’ve engaged in some form of binding. That is, you’ve tied something to something else.
+- Strange核心是一个非常简单的绑定包。这就意味着，我们能绑定一个或多个物体到一个或多个物体。把一个接口绑定一个接口的实现类。或者事件绑定一个处理函数。或者绑定两个类，当一个被生成时，另一个自动被创建。我们为什么要这样做？很高兴你问！事实证明，我们所做的许多编程操作，可以归结为绑定。如果你曾经派发一个事件（或者使用Unity的SendMessage）,如果你曾经在一个类中调用另一个类，如果你曾经写过类似“if….else”代码块，你就已经从某种形式上使用过绑定了。也就是说，你把一些事物绑定到另外的一些事物上。
+- But binding things directly is problematic, because it results in code that’s hard to change (rigid) and easy to break (brittle). For example, I’m sure you’ve programmed something in which you’ve expressed the idea “this is a Thing. And a Thing contains these other SubThings.” For example, a Spaceship class, which contains both a Gun and a keyboard control. You write this — and all’s well-and-good, until your boss says he wants mouse control instead of keyboard. So now you go back and re-write the Spaceship class. But wait a second. Your Spaceship class didn’t really change any. It’s the control that changed. So why are you re-writing Spaceship?
+- 但是直接的绑定是有问题的，因为它导致代码难以改变（rigid）和易中断（brittle）。例如，我肯定你编写过的东西有表达过这样的想法“这是一个类，这个类包涵其它子类或操作”。例如，一个飞船（Spaceship）类，里面包含了一个枪炮（Gun）类和键盘控制。你负责这个类，一切都是正常的，直到你的老板说他想用鼠标控制替代键盘控制。所以现在你回去重新写飞船（Spaceship）类。但是你的飞船（Spaceship）类没有没有真正的改变。只是控制的改变。那么你为什么要重写飞船（Spaceship）类？
+- Instead of writing the controls right into the Spaceship class, you could create a MouseControl Class and use that. But if Spaceship includes a reference to the MouseControl class, you’re still directly binding. In order to change from KeyboardControl to MouseControl (and back again, when your boss changes his mind), you have to change the reference inside Spaceship.
+- 你可以创建一个MouseControl类，而不是直接把控制写进Spaceship类中。但是如果Spaceship类中包括一个MouseControl类的引用，你依然使用的是直接绑定。为了更该KeyboardControl 到MouseControl（我们回到上面，当你的老板改变主意时），你必须更该Spaceship类里面的引用类型。
+- Strange’s binders make it possible to create indirect bindings that relieve your code’s reliance on other parts of the program. This is a fundamental (but often misunderstood) tenet of Object-Oriented Programming. Your code isn’t really Object-Oriented until the objects themselves can function without reliance on other concrete classes. Using binders can give your code lots more freedom and flexibility.
+- Strange的binder可以创建间接的绑定，解除你程序中代码对另外部分的依赖。这是面向对象编程的基本宗旨（但是经常被误解）。只有你的对象功能不依赖于其他的具体类时，你的代码才是真正的面向对象。使用binder可以给你的代码更多的自由度和灵活性。
+**** The structure of a binding绑定的结构
+- Let’s look quickly at the structure of a single binding. This structure is repeated throughout Strange and all its extensions, so you’ll want to understand the pattern.
+- 我们先来看下单一绑定。这结构将重复的出现在Strange和扩展内容里面，所以你会想了解这种模式的。
+- A Strange binding is made up of two required parts and one optional part. The required parts are a key and a value. The key triggers the value; thus an event can be the key that triggers a callback. Or the instantiation of one class can be the key that leads to the instantiation of another class. The optional part is a name. Under some circumstances, it is useful to qualify two bindings with identical keys. Under these circumstances, the name serves as a discriminator.
+- 一个Strange的绑定由两个必须部分和一个可选部分组成。必须的部分是一个key和一个value。Key触发value，就像一个事件可以触发一个回调。或一个类的实例化可以导致另一个类的实例化。可选部分是一个名字。在一些情况下，我们会使用相同的键来限定不同两个的绑定。在这种情况下，这个名字作为一个鉴别器。
+-  
+- All three of these parts can be structured in one of two ways, either as a value or as a type using C# generics. Using generics, for example we might say:
+- 三个部分的结构存在两种表达方式，使用值（value）或者使用c#的泛型。使用泛型：
+- Bind<Spaceship>().To<Liberator>();
+- The “Bind” is the key, the “To” is the value. We might express the binding as a value:
+- “Bind”是key，“To”是value。我们也可以表示成值（value）的方式：
+- Bind(“MeaningOfLife”).To(42);
+- A binder fed with the input “MeaningOfLife” would react with the output 42.
+- 当输入的key是“MeaningOfLife”，42将会输出
+- There are times when these two styles get mixed:
+- 我们还可以将两种风格混合使用：
+- Bind<Spaceship>().To(“Enterprise”);
+- When this binder is fed with the Type Spaceship, it outputs the string value “Enterprise”.
+- 当binder满足类型是Spaceship时，它将返回一个字符串“Enterprise”
+- When naming is called for, the binding looks much the same:
+- 当name类型使用时，绑定样式如下：
+- Bind<IComputer>().To<SuperComputer>().ToName(“DeepThought”);
+- Finally, note that the following things are all the same:
+- 最后，请注意以下的写法都是一样的：
+- Bind<IDrive>().To<WarpDrive>();
+- Bind(typeof(IDrive)).To(typeof(WarpDrive));
+- IBinding binding = Bind<IDrive>();
+- binding.To<WarpDrive>();
+- The differences are nothing more than syntactical sugar.
+- 无非是写法的差异
+- There are countless forms of binding, and Strange gives you access to a few really useful ones. What’s more, the binding framework is so simple that you can extend it yourself to create new binder components. We go into each of the included binders in the following section.
+- 绑定有很多种形式，Strange提供你真正使用的方法。更重要的是，绑定框架很简单，我们可以通过扩展来实现新的绑定组件。在下一节中我们会讲一些扩展binder。
+*** Extensions 扩展
+- You may have heard that Strange is a Dependency Injection framework. I’m a little uncomfortable with that description. Sure, Strange offers DI and it’s a great use, but the core of the framework — as I’ve said — is binding. The installation comes with several useful extensions of the core Binder, which I’m going to detail in this section. Remember, though, that nothing stops you from extending the Binder to create your own custom implementations.
+- 你可能听说过Strange是一个依赖注入框架。我有点不赞同这种说法。当然，Strange提供了DI（依赖注入）并广泛的使用了，但是框架的核心是绑定。框架自带了几个非常有用的核心Binder，我们将在这一节详细的讲解。但是，记住，没有什么会阻止您扩展Binder，以创建您自己的自定义实现。
+- Note: in the sections that follow, I regularly refer to the MVCSContext version of Strange. MVCSContext is the recommended version, which includes all the extensions mentioned below. It’s the easiest way to get started with Strange.
+- 注意：在下面的章节中，我们将参考MVCSContext版本的Strange。MVCSContext是推荐版本，它包含了下面所有的扩展。这是Strange最简单的入门方式。
+- The injection extension 注入扩展
+- The Binder extension most closely related to Inversion-of-Control (IoC) is the injector package. We hinted at injection a bit in the prior section, now let’s get into the particulars.
+- Binder扩展中injector（注入）包是和控制反转（IOC）最密切相关的。我们在前面的一节中暗示了injection（注入），现在让我们进入详细的说明。
+- You may be familiar with the idea of writing Interfaces. An Interface contains no implementation itself, it just defines what a class’s inputs and outputs look like. In C# this looks like:
+- 你可能已经很熟悉接口的写法了。一个接口不能实例化自己，它仅仅是定义一个类的输入输出的样式。在C#中就像下面一样：
+- interface ISpaceship
+- {
+  -        void input(float angle, float velocity);
+  -        IWeapon weapon{get;set;}
+- }
+- And the class that implements the interface looks like:
+- 实现接口的类如实如下：
+- class Spaceship : ISpaceship
+- {
+  -        public void input(float angle, float velocity)
+  -        {
+  -                 //do stuff here
+  -        }
+  -  
+  -        public IWeapon weapon{get;set;}
+- }
+- By programming to interfaces, we relieve some of the Thing-Contains-SubThings problem. Our Spaceship no longer needs to contain a keyboard listener, it simply needs a method to react to input. It no longer needs a Gun, just something (what we call a ‘concrete’ class) that satisfies the IWeapon interface. That’s a big step forward.
+- 通过接口编程，我们可以解决Thing-Contains-SubThings（对象包含子对象）问题。我们的Spaceship（飞船）类不在需要一个键盘监听器，只需要一个方法用来对输入进行处理。你也不在需要一个Gun（枪炮）类，我们仅仅需要（一个实体类）满足IWeapon接口的类。这是一个很大的一步。
+- But here’s a question for you: who tells the Spaceship what type of IWeapon to use? Well, let’s say the Spaceship will be in a GameField, so maybe the GameField could tell the Spaceship what weapon it would use? But that would mean that the GameField would need to know about the concrete class. All that does is shift the location of the dependency, so that’s no good.
+- 但是有一个问题：谁告诉Spaceship类，哪一个满足IWeapon接口的类被调用？那么，我们就当Spaceship在会在GameField类里，那么GameField会告诉Spaceship类那种武器类被调用？但是那就意味着GameField必须知道那个实体类被调用。所有的一切只是改变了依赖的位置，所以这样处理不好。
+- The GameField could have an interface that pushed all of its dependencies (including everything the Spaceship needs),.
+- GameField可以有一个接口，把所有的依赖（包括Spaceship类所需要的所有）关系，对应到程序顶部。
+- TopOfApp > GameModule > GameField > Spaceship
+- Phaser —————————————————>
+- That would remove the concrete classes, but it would also mean a long chain of dependency pushes through the entire class hierarchy. That’s brittle, meaning that a change anywhere could break lots of things and be very hard to locate. It also means that the GameField (and any other classes in the chain) needs to know about IWeapon. But GameField probably doesn’t care about IWeapon, so why create a dependency where none is needed?
+- 这样做将删除具体的类,但这也意味着一个长链的依赖将贯穿整个类层次结构。首先这是脆弱的,这意味着任何部分的修改都可能打破这个结构连。它也意味着GameField(和任何其它链中的类)需要知道IWeapon这个接口。但GameField并不关心IWeapon的具体实现,为什么要创建一个没必要的依赖项呢？
+- How about a Factory pattern? If I create a SpaceshipFactory, a class that creates Spaceships and simply follows the IFactory interface, then the GameField needs only that one dependency. Now we’re getting somewhere.
+- 用工厂模式实现怎么样?如果我创建一个SpaceshipFactory,用这个类创造宇宙飞船和遵循IFactory接口,然后GameField此时就只需要一个依赖项。现在我们已经取得了一些进展。
+- GameField ———> SpaceshipFactory : IFactory
+- ISpaceship <———      (creates concrete Spaceship)
+- No need to know about IWeapon, though I need to know about ISpaceship and now I need IFactory too. Hmmm, and probably IEnemy, come to think of it. And, yeah, I need to wire up all those factories and figure out how they’re being provided. So not bad (and this is as far as many programmers get). But you can see that even this well-regarded pattern has significant weaknesses.
+- 我不需要知道IWeapon,虽然我需要知道ISpaceship,也需要知道IFactory。也可能需要一个IEnemy接口,再考虑下吧。的确,我需要连接所有的工厂以及搞清楚他们是如何装配实例的，所以不是很坏的实现(许多程序员就是这样做的)。你也看到了,即使是这个成熟的设计模式也有存在缺陷。
+- So consider a completely different model, one where no class ever has to fulfill another class’s dependencies explicitly. This model is called Dependency Injection (DI). In DI, a class requests what it needs (ideally in the form of an Interface) and a class called an Injector provides that need. Most traditionally, this is accomplished by means of a mechanism called Reflection.
+- 所以考虑一个完全不同的模式，一个类永远不需要显式地完成另一个类的依赖关系。这种模式叫做依赖注入（DI）。在依赖注入模式（DI）下，一个类请求它所需要的（理想的是一个接口的形式）和一个被称为一个注入器的类提供了它的需要。通常，这是通过一种称为反射的机制来完成的。
+- With DI, if GameField needs an ISpaceship, it sets up a dependency that looks like this:
+- 通过DI（依赖注入），如果GameField 需要ISpaceship，我们的依赖关系就像下面：
+- ISpaceship <———      (as if by magic)
+- There’s no reliance on dependency chains or factories. There are no dependencies except the ones your class actually needs. And you never need to make the dependency explicit (though of course you can choose to do so).
+- 没有依赖依赖链或工厂。有没有依赖关系，除了你的类的实际需求。你不需要让依赖显式（当然，你可以选择这样做）。
+- So how’s the “magic” work?
+- 那么“magic”是如何工作的呢？
+- C#’s System.Reflection package allows a class to be deconstructed at runtime and analyzed. It’s worth noting that this isn’t the fastest process, so we use it sparingly in Strange, and so should you. When reflecting a class, we can examine its methods and properties. We can see what its construction methods look like and what parameters they require. By examining all these clues we can deduce what a class’s dependencies look like, then provide them.
+- c# System.Reflection类库下允许一个类在运行时被拆解(反射)和分析。值得注意的是,这个过程不是很快,所以我们在StrangeIOC中要谨慎使用,即使你不是用strangeioc框架你也应该尽量少的使用反射。反映出一个类时,我们可以检查它的方法和属性。我们可以看到函数签名是什么样子,他们需要什么参数。通过检索这些参数,我们可以推断出类的依赖关系是什么样子,然后给返回给它。
+- The code for setting up a dependency in Strange usually looks like this:
+- 设置一个依赖项的代码如下：
+- [Inject]
+- public IInterface myInstance {get;set;}
+- And how does Strange know what concrete class to provide for IInterface? You tell it by binding  dependencies in a central file called the Context. As I’ve mentioned, the “standard” Context is MVCSContext, which is a class you can extend to get all of Strange’s wacky goodness. When extending MVCSContext, you can create your bindings right in the extended class like so:
+- Strange 是如何知道IInterface要使用的具体的类？我们在一个叫做上下文（Context）的里面确定依赖关系。正如我提到过的，“标准”的Context是MVCSContext，这是一个类，你可以扩展包到得到所需的Strange。当你延伸MVCSContext的时候，你可以参考如下：
+- injectionBinder.Bind<IWeapon>().To<PhaserGun>();
+- Now, whenever a class requires an IWeapon, the concrete class PhaserGun is provided. If you decide to change PhaserGun to SquirtCannon, you make no changes whatsoever to Spaceship or to any other class. You simple remap:
+- 现在，当一个类需要使用IWeapon，提供一个具体的类PhaserGun。如果你决定改变PhaserGun为SquirtCannon，你不许要改变飞船的其他的类，只需要简单的更改映射：
+- injectionBinder.Bind<IWeapon>().To<SquirtCannon>();
+- Hey presto! The Spaceship now uses a SquirtCannon. All this from simply a one-word acknowledgement that this is a dependency to be injected:
+- 嘿，我亲爱的小伙子们！Spaceship现在就使用了SquirtCannon。所有这一切从简单的一个字的确认，这是一个依赖注入：
+- class Spaceship : ISpaceship
+- {
+  -   public void input(float angle, float velocity)
+  -   {
+  -        //do stuff here
+  -   }
+  -  
+  -   [Inject] //<—– The magic word!
+  -   public IWeapon weapon{get;set;}
+- }
+- It might be of interest to note that this [Inject] attribute tag is entirely innocuous if you’re not using DI. So you can add it to your classes and then, if you someday decide this DI lark is all some terrible mistake (which it most emphatically is not), the tags in your code will make no difference to you whatsoever. Without that [Inject] tag, ‘weapon’ is now just a regular ol’ getter/setter.
+- 你可能会对[Inject]属性标签感兴趣，如果你不使用DI，属性标签完全是无害的。所以你可以把它添加到你的类，如果有一天你发现DI不适合你的项目你可以直接将属性的[inject]标签去掉，属性还是普通的get/set
+- Instantiating injectable instances 实例注入
+- Now there is one big “take note” in all this. If you want all this injectable goodness, you need to do two things:
+- 现在我们需要特别注意。实例注入你需要做两件事：
+- 1.    Bind classes in the Context, which we’ve discussed, and
+- 绑定类在上下文（Context）中， 上文中提到过了
+- 2.    Instantiate instances from the InjectionBinder
+- 从InjectionBinder实例化实例
+- The second one feels unusual at first, but it’s really very straightforward. It’s just like a factory, only instead of oen factory for every Type, we just go to the Injector for everything. Also, most of the time the InjectionBinder is entirely invisible. Most of us are used to constructing through constructors…
+- 第二个感觉不同寻常,但它真的很简单。这就像一个工厂,只需要往工厂里插入各种各样的类型,我们就能注入一切。此外,大多数时候InjectionBinder是完全看不见的。我们大多数人通过构造函数用于构建
+- IClass myInstance = new MyClass();
+- …so this takes a little retraining. Let me re-emphasize, most of the time you’ll not need to use this method, since your instances will come via injection. You only need what I’m about to tell you in those cases where you’d otherwise be inclined to write new MyClass().
+- 所以我们需要一些训练，我必须强调,你不需要使用这种方法,因为您的实例将会被注入，你只需要我什么告诉你在这种情况下,你会倾向于编写新的MyClass()。
+- IClass myInstance = injectionBinder.GetInstance<IClass>() as IClass;
+- As you can see, we’re still freeing ourselves from the tyranny of concrete classes. And the instance you get will come pre-injected with all its dependencies. It’s just a little different from what you’re used to.
+- 正如你所看到的，我们从具体类型的束缚下解脱了。你的实例将预先注入其所有依赖项。这可能和你用过架构不同
+- Types of injection mapping类型注入映射
+- So we can bind injections in lots of ways, and they’re all useful. One of the most useful bindings is ToSingleton. It looks like this:
+- 我们可以在很多地方使用注入绑定，它们都非常有用，比较常用的单例的绑定实现。代码如下：
+- injectionBinder.Bind<ISocialService>().To<TwitterService>().ToSingleton();
+- A Singleton is a design pattern you probably know. It indicates that there will only ever be one of something in an app. If you use this pattern, you might have seen a line like this:
+- 你一定知道单例设计模式，就是在你的程序域中只存在一个实例，你可能会看到这样的代码 如下：
+- ISocialService socialService = TwitterService.Get();
+- There are some problems with Singletons, most notably that sometimes they turn out to not be so singular. In the above line, for example, it may turn out that there’s only one ISocialService (Twitter) one day, but due to a design change, there are three (Twitter, Facebook and G+) tomorrow. The writer of TwitterService.Get() is not only concretely relying on TwitterService, she’s explicitly stating that she knows it’s a Singleton. If that changes, she’s got refactoring to do.
+- 单例模式自身也有问题，实际应用中可能实例并非完全的单例，在上面的代码中，也许结果只有一个ISocialService(Twitter),但由于设计更改,明天有三个(Twitter,Facebook和google +)。TwitterService.Get()的作者不仅是依赖具体的TwitterService,它知道这是一个单例。如果改变做法,她就只有重构。
+- Compare this to the Singleton “Get” in Strange:
+- 我们把单利应用在Strange就如下：
+- [Inject]
+- public ISocialService {get;set;}
+- Oh wait, that can’t be right. That looks exactly the same as the injection tag we saw before. Yep. That’s the point. Your class doesn’t need a TwitterService, it needs an ISocialService. And it certainly doesn’t care whether that service is a Singleton or not.
+- 哦，这不可能是正确的。这和我们之前看到的注入标签一样。是的，这正是问题的关键。你的类不需要TwitterService，它需要一个ISocialService。它当然不在乎该服务是一个单利或不是。
+- Because Strange’s dependency is only a mapping, it becomes a trivial matter in Strange to re-map our Singleton to a different service. Not only doesn’t the client have any idea which ISocialService it is, it has no idea whether the service is a Singleton or anything else. That’s as it should be. Once you start using DI, you will never write a Singleton again. You will mapSingletons.
+- 因为Strange的依赖仅仅是一个映射。Strange映射一个不同的单例服务只是一个很简单的功能。我们使用只需要关注ISocialService，并不需要知道service是单例或其他。这是理所应当的。一旦你使用了DI，你就不在需要使用单例，你只需要使用单例映射。
+- But in my example we’re not just changing services, we’re adding multiple services. So how do we tell them apart? This brings us to the second type of mapping: named injections.
+- 但是在我们的示例中我们不仅仅是改变服务,我们添加多个服务。那么,我们如何区分它们?这就引出了第二种类型的映射:名称注入
+- injectionBinder.Bind<ISocialService>()
+  -        .To<TwitterService>().ToSingleton()
+  -        .ToName(ServiceTypes.PRIMARY);
+  -  
+- injectionBinder.Bind<ISocialService>()
+  -        .To<TwitterService>().ToSingleton()
+  -        .ToName(ServiceTypes.SECONDARY);
+-  
+- injectionBinder.Bind<ISocialService>()
+  -        .To<TwitterService>().ToSingleton()
+  -        .ToName(ServiceTypes.TERTIARY);
+- Named injections are a tiny bit different from other injections. The name allows the injector to discriminate between different classes that satisfy the same Interface. In this way, you can inject ISocialService in different places and get the specific version you want. The client class needs the matching name added to the [Inject] tag:
+- 命名注入与其他注入方式稍有不同。允许用注入器名称区分不同类别,满足相同的接口。通过这种方式,您可以在不同的地方,注入ISocialService得到你想要的特定版本。客户端类只需要将匹配的名称添加到注入标签内。
+- [Inject (ServiceTypes.TERTIARY)] //We mapped TwitterService to TERTIARY
+- public ISocialService socialService{get;set;}
+- Names can be anything, but in practice an Enum is usually a good choice. Note that this name-tagging in your classes creates a dependency of sorts (we are, after all, stating that the client expects something more than just a generic interface), so we suggest using this feature sparingly.
+- 注入的名称可以是任何类型,但实际运用中枚举是一个不错的选择。注意,这个名称标签在你的创建一个类有各种各样的依赖项时使用(毕竟,客户期望的不仅仅是一个通用的接口),因此我们建议谨慎使用此功能。
+- Sometimes you know exactly what you want to inject. Perhaps you’ve loaded a config file and you need that available in different areas around the application. This is accomplished by value mapping.
+- 有时你想要确切地知道你的注入。也许你在正在不同的程序域中加载配置文件。这是通过值映射实现。
+- Configuration myConfig = loadConfiguration();
+- injectionBinder.Bind<IConfig>().ToValue(myConfig);
+- In the example, myConfig would be the result of loading some configuration file. Now wherever you need an IConfig, you’ll receive the value myConfig. Again, note that the client class has no idea whatsoever whether this is a Singleton, a value, or whatever. Its job is to use IConfig, not to wonder where it comes from.
+- 在这个例子中,myConfig将加载一些配置文件的结果。在你需要的地方使用IConfig,您将收到myConfig值。再一次,请注意,客户端类不知道是否这是一个单例,一个值,等等。它的工作是使用IConfig,而不知道它从哪里来。
+- You might also come across a situation where you have no control over a class. Perhaps it comes from a package you’ve downloaded and has already been written as a Singleton. You can still accomplish mapping with ToValue. Just call the Singleton’s Get() (perhaps in the Context) and map the result:
+- 你也会遇到一个情景,在这个情景中你无法控制一个类。也许它来自一个你下载的程序库，并且已经是一个单例模式的存在。你仍然可以使用ToValue映射来完成单例绑定。Get()取得实例(也许在上下文)然后映射结果:
+- TouchCommander instance = TouchCommander.Get();
+- injectionBinder.Bind<TouchCommander>().ToValue(instance);
+- It would of course be better to bind it to an Interface if TouchCommander adheres to one. Or (and I do this a lot), you can create an interface and wrap TouchCommander inside afacade. After all, you might someday decide to change from TouchCommander to some other touch handling system. If you did that and had TouchCommander references throughout your app, you’d again be faced with a lot of refactoring. A facade class that adheres to an interface of your choosing saves you from this problem and keeps concrete references to TouchCommander tightly controlled.
+- 当然，如果touchcommander能够始终绑定到一个接口。或者（我经常这么做），你可以创建一个接口和包在touchcommander里使用外观模式。毕竟，总有一天你会决定改变touchcommander的实现。如果你在你的应用程序有touchcommander引用，你会再次面临重构。Tips: 使用外观类(face设计模式)，坚持使用接口，严格控制touchcommander的具体引用。
+- Now what about if you need a new instance every time you ask for one? We accomplish this with what’s called a factory mapping:
+- 如果你每次请求都需要一个新实例 使用如下工厂映射
+- injectionBinder.Bind<IEnemy>().To<Borg>();
+- This is basically the same as the ToSingleton mapping, just without the instruction ToSingleton. Whenever this injection is satisfied, you’ll get a new IEnemy, in this case mapped to the concrete class Borg. Note that we can combine these mappings so that, for example, a factory mapping can also be named:
+- 这结构和ToSingleton映射基本一样，只是没有调用ToSingleton。在注入时，你会得到一个IEnemy的具体的实现类Borg的实例。注意,我们可以使用名称映射和工厂映射相结合，如下：
+- injectionBinder.Bind<IEnemy>().To<Borg>().ToName(EnemyType.ADVANCED);
+- injectionBinder.Bind<IEnemy>().To<Romulan>().ToName(EnemyType.BASIC);
+- You can also bind multiple times, allowing a binding to be polymorphous, which is a fancy-pants way of saying that a class can have more than one interface:
+- 您还可以绑定多次,允许绑定是多接口的,这是一个高级的方式,因为一个类可以有多个接口
+- injectionBinder.Bind<IHittable>().Bind<IUpdateable>().To<Romulan>();
+- This would allow you to get an enemy regardless whether the [Inject] tag was marked IHittable or IUpdateable. Note that while multiple ‘Bind’s make sense, in this context multiple ‘To’s do not. You can map to any of multiple Interfaces, but injection only makes sense if the result is a single concrete type or value.
+- 注入标记标记的是IHittable或IUpdateable时，你都会获得一个敌人实例。注意,多绑定的意义不在于在这个上下文中多个To。如果结果是一个具体类型或值，你可以映射到多个接口,但是只有注入之后才有意义。
+- Some things you can do with Injectable Classes注入类的同时你可以做一些事
+- I’ve already mentioned how you declare injection setters in your classes. To recap, to make a property injectable, use the [Inject] attribute:
+- 我们已经提到如何设置注入。总的来说，使用属性注入，使用[Inject] 属性标签。
+- [Inject]
+- public ICompensator compensator{get;set;}
+- Or, to make it a named injection:
+- 或者使用名称注入：
+- [Inject(CompensatorTypes.HEISENBERG)]
+- public ICompensator compensator{get;set;}
+- or, to mark it with a marker class:
+- 或者标记成一个类的类型：
+- [Inject(typeof(HeisenbergMarker))]
+- public ICompensator compensator{get;set;}
+- These are all examples of setter injection, which is one of two types of injection available in Strange. The other type of injection is constructor injection, in which your injections are provided as part of the actual call to the class’s constructor. There are two notable disadvantage to setter injection. First, injecting requires making the injectable properties public. This may or may not be what you would have chosen were you not injecting. With constructor injection you can keep the private values private. Second, you have to be careful in your actual constructors if you’re using setter injection. By definition, construction has to occur before setters are set. Thus any injected properties will be unavailable until after construction. Because constructor injection provides the dependencies as constructor parameters, all values are available immediately.
+- 这些都是setter注入的例子,只是Strange两种注入类型中的一种。还有一种类型的注入是构造函数注入,你注入的一部分提供实际调用类的构造函数。setter注入有两个明显的缺点。首先,注入要求公共属性。这可能是你不选择使用注入的原因。使用构造函数注入可以保持私有值。其次,如果你使用setter注入你必须小心你的实际构造函数。根据定义,构造函数在setter之后执行。因此任何注入属性将在构造函数中不可以使用,直到构造函数结束。
+- 1.    Type of Injection
+- 2.    类型注入的优缺点
+- 3.    Advantages
+- 4.    优点
+- 5.    Disadvantages
+- 6.    缺点
+- 7.    Setter
+- 8.    属性注入
+- 9.    Allows named injection
+- 10.  允许名称注入
+- 11.  Less code
+- 12.  写更少的代码
+- 13.  More flexible
+- 14.  更灵活
+- 15.  Injected dependencies not available in constructors
+- 16.  不可以在构造函数注入
+- 17.  Some properties made public that should be private
+- 18.  不得不公开一些私有的属性
+- 19.  Constructor
+- 20.  构造函数注入
+- 21.  Private properties remain private
+- 22.  保持属性私有
+- 23.  Injected dependencies available in constructors
+- 24.  可以在构造函数注入
+- 25.  Does not allow named injection
+- 26.  不允许名称注入
+- 27.  More code
+- 28.  更多的代码量
+- 29.  Less flexible
+- 30.  不灵活
+-  
+- In addition to [Inject] there are a couple of other attributes you should know about.
+- 除了[Inject]这个标签之外，还有其它的一些标签你也应该知道。
+- If your class has multiple constructors, the [Construct] tag is a way to mark which one you want Strange to use. If no constructor is marked with [Construct], Strange chooses the constructor with the fewest parameters. Of course, if you have only one constructor, you needn’t use the [Construct] attribute at all.
+- 如果你的类有多个构造函数你可以用[Construct]来标记，让StrangeIoc执行的构造函数，如果你没有加[Construct]标签的话，StrangeIoc默认执行构造函数的参数列表参数最少的函数，如果你只有一个构造函数那么相应不需要加[Construct]标签
+- public Spaceship()
+- {
+  -        //This constructor gets called by default…
+- }
+-  
+- [Construct]
+- public Spaceship(IWeapon weapon)
+- {
+  -        //…but this one is marked, so Strange will call it instead
+- }
+- [PostConstruct] is a useful attribute if you choose to go with setter injection. Any method marked with [PostConstruct] is called immediately following injection. This allows you to work with any injections as soon as they’re ready, safe in the knowledge that the dependencies won’t return a null pointer.
+- 如果你选择使用setter注入的话[PostConstruct]是个非常有用的标签，任何方法被[PostConstruct]标记，在setter注入完成之后调用，它允许你在注入工作完成之后调用，他是一个安全类型不会返回空指针，如果你有多个[PostConstruct]标签，你可以在参数列表内指定执行顺序
+- [PostConstruct]
+- public void PostConstruct()
+- {
+  -        //Do stuff you’d normally do in a constructor
+- }
+- You can have as many [PostConstruct] methods as you like, and they can be ordered (as of v0.7).
+- 你可以标记顺序执行，如下面代码中所示：
+- [PostConstruct(1)]
+- public void PostConstructOne()
+- {
+  -        //This fires first
+- }
+-  
+- [PostConstruct(2)]
+- public void PostConstructTwo()
+- {
+  -        //This fires second
+- }
+- Should you use setter injection or constructor injection? Shaun Smith, one of the authors of Robotlegs, has an excellent post on the subject here.
+- 你应该使用setter注入还是构造函数注入？Shaun Smith, Robotlegs的作者之一，这里有一个极好的介绍。
+- Warnings 警告
+- There are a couple of potential gotchas to beware of with injection.
+- 在注入使用的时候有几个潜在的陷阱
+- 1. Be careful of dependency loops. If classes inject each other, this can lead to a never-ending dependency loop. Strange armors against this to avoid bringing down your app (and will throw an InjectionException to alert you), but you should avoid doing it in the first place.
+- 避免循环依赖。如果类相互注入，这可能会导致一个永无止境的依赖循环。Strange会保护你的应用程序不会出现这种问题（抛出一个InjectionException异常提醒您），但是你应该直接避免使用这种方式。
+- 2. Injection employs reflection, which, as I’ve noted, is slow. Strange uses ReflectionBinder to minimize this problem (and delivers very formidable results), but consider carefully whether this method is appropriate for performance-sensitive code, such as your main game loop.
+- 采用反射注入，是非常的慢的
+- 使用ReflectionBinder 解决这个问题(并提供了非常好的效果),但是性能要求较高的地方尽量不要使用或者不使用，比如你游戏的主循环中。
+- 3. It might be obvious to say, but remember that if you inject something, you have to map it. Creating dependencies then forgetting to fulfill them results in null pointer errors. Fortunately, Strange looks for these and does its level best to help you figure out what you forgot to map and who needs it.
+- 这是个显而易见的错,但请记住,如果你注入什么东西,你必须将它映射。空指针错误中大多是你创建依赖关系然后忘记实现它们。幸运的是,Strange会自动匹配相似度最高的映射(这里指自动完成映射)
+- The reflector extension反射扩展
+- Honestly, you don’t need to know too much about this extension, except that it’s there and that it handles Reflection during injection. Reflection is the process of analyzing classes at runtime. Strange uses this process to determine what to inject.
+- 老实说，你不需要知道太多关于这个扩展，因为反射的处理实在注入过程中完成。反射是在运行时分析类的过程。StrangeIoc通过这个过程来确定注入内容。
+- (It’s probably worth noting that the reflector extension was written late in development as an optimization for the slow process of Reflection. I felt that Reflection performance could be improved if I cached the result of reflecting, so I wrote ReflectionBinder to do just that. Before the reflector, every class went through Reflection every time time it was instantiated. Now it goes through that process just once per class. The result was an estimated 5x improvement over 1000 moderately complex instances. It’s a great example of extending the core Binder to solve a problem.)
+- (值得注意的是，Reflection是开开发后期作为一个优化程序缓慢问题。我觉得如果我缓存反射的结果反射性能可以改善,所以我写ReflectionBinder做到这一点。通过反射在反射器之前，每个类都每次时间被实例化。现在,经过这个过程每个类只有一次。结果是估计的5倍提升超过1000中等复杂实例。这是一个很好的例子,解决了核心的绑定延伸问题)。
+- One feature that might be worth your notice is the ability to “pre-reflect” classes. That is, you can trigger the expensive process of reflection at a moment when processing requirements are minimal (say, while the player is looking at some static UI). This is accessed via the injectionBinder.
+- 可能是值得你注意的一个特点是“pre-reflect”类的能力。那就是，通过 injectionBinder 访问。您可以触发的反射，在那一刻当处理的要求最小 （比如，当玩家看一些静态的 UI） 高消耗的过程。通过 injectionBinder 访问。
+- The first example demonstrates how to reflect a list of classes:
+- 第一个例子演示反射类型列表
+- List<Type> list = new List<Type> ();
+- list.Add (typeof(Borg));
+- list.Add (typeof(DeathStar));
+- list.Add (typeof(Galactus));
+- list.Add (typeof(Berserker));
+- //count should equal 4, verifying that all four classes were reflected.
+- int count = injectionBinder.Reflect (list);
+- The second example simply reflects everything already mapped to the injectionBinder;
+- 第二个例子演示一切都被映射到了InjectionBinder
+- injectionBinder.ReflectAll();
+- The dispatcher extension调度器的扩展
+- NB: EventDispatcher is the original and default dispatch system for Strange. There is now a Signals extension which adds type-safety to your dispatches. We recommend the new system, but plan to support both for the foreseeable future. Which package you use is up to you.
+- 注：EventDispatcher是Strange最初的和默认的派发系统。现在Signals 扩展的派发更加安全。我们建议新的系统，但是我们计划在将来都进行支持。你可以选择你使用那一个包。
+- In principle, a dispatcher is any class that functions as the ‘subject’ in a classic Observer Pattern. That is, it allows clients to listen to it, and then tells those clients whenever certain events occur. In Strange, we’ve implemented the EventDispatcher, which binds a trigger (which can be anything, but a string or Enum usually does the trick) to single-parameter or no-parameter methods which will react when that trigger fires. The resulting parameter (if required) will be in the form of an IEvent, a simple value object which contains any data relevant to that event (while you can write your own event that satisfies the IEvent interface, the canonical Strange event is called TmEvent).
+- 原则上，调度程序可以是我们的此次话题中经典的观察者模式的任何类。它允许客户端监听它，然后告诉那些客户某些事件发生时。我们已经实现了 EventDispatcher，将绑定一个触发器 （这可以是任何东西，但字符串或枚举通常比较管用） 对单参数或没有参数的方法，调用的时候，可能会有些问题。最后得到的参数(如果需要的话)的形式 IEvent,一个简单的值对象包含任何数据相关事件(虽然您可以编写自己的事件,满足IEvent接口,StrangeIoc规范的事件叫做TmEvent)。
+- If you’re using the MVCSContext version of Strange, there’s a global EventDispatcher (dubbed ‘contextDispatcher’) automatically injected at various points around the app and you can use that to send messages throughout your app. There’s also a crossContextDispatcher for communicating between Contexts.
+- 如果你使用MVCSContext版本的StrangeIOC,有一个全局的EventDispatcher(称为“contextDispatcher”)在应用程序中自动注入周围各点发送消息,您可以在你的应用程序中使用,还有一个crossContextDispatcher用于上下文之间的通讯。
+- There are two basic things you can do with EventDipatcher: dispatch events and listen to them. That said, there are quite a few ways to configure just how those events are sent and received. Let’s start with the simplest form of listening.
+- EventDipatcher里你要做两个最起初的事情,分派事件与监听,有相当多的方法来配置这些事件发送和接收。让我们从最简单的监听开始。
+- dispatcher.AddListener(“FIRE_MISSILE”, onMissileFire);
+- This will listen to the dispatcher until an event called “FIRE_MISSILE” is dispatched, at which point a method called onMissileFire will be triggered.
+- 直到FIRE_MISSILE被调度器调用，OnMissileFire方法才被调用
+- Let me suggest that while this is simple, it’s not very good. Strings make code brittle, that is, they make code that breaks easily. A string in one place can change without the rest of the code knowing, and that’s a recipe for disaster. A better form of the same thing would be a const…perhaps an Enum:
+- 我想说这样做虽然简单却不是很好，使用字符串作为Key会使代码变得很脆弱,换句话说就是,他们让代码很容易出错。在一个地方一个字符串可以改变代码的其余部分不知晓,这一定是一个灾难。用常量或者枚举会更好:
+- dispatcher.AddListener(AttackEvent.FIRE_MISSILE, onMissileFire);
+- You can remove the listener like so:
+- 你可以通过下面的方法移除监听：
+- dispatcher.RemoveListener(AttackEvent.FIRE_MISSILE, onMissileFire);
+- Under the hood, AddListener and RemoveListener are just synonyms for Bind and Unbind. The AddListener/RemoveListener pair is just syntactic sugar to provide an interface with which many people are familiar. There’s also a convenience method for updating the listener based on a boolean:
+- AddListener与RemoveListener都是大家都很容易认知的语法糖，还有一个基于bool变量更新Listener的方法
+- dispatcher.UpdateListener(true, AttackEvent.FIRE_MISSILE, onMissileFire);
+- The method called can either have one argument or none, depending on whether you care about any event payload:
+- 调用的方法的参数有无完全取决于你这个事件要承载什么样的责任
+- private void onMissileFire()
+- {
+  -        //this works…
+- }
+-  
+- private void onMissileFire(IEvent evt)
+- {
+  -        //…and so does this.
+  -        Vector3 direction = evt.data as Vector3;
+- }
+- You’ll also want to be able to dispatch events. This is how you say “Look over here! I’m doing something cool!” There are a few ways to do this. Again, starting simple:
+- 如果你想继续了解事件调用(Event Dispath)我们接下来看几个简单的例子
+- dispatcher.Dispatch(AttackEvent.FIRE_MISSILE);
+- This form of dispatch will generate a new TmEvent and call any listeners, but since you’ve provided no data, the data field of the TmEvent will of course be null. You can also call Dispatch and provide data:
+- 这种调用方式会生成一个新的TmEvent并调用函数， 既然你已经不提供任何数据(这里指的是你没有Add过函数)，TmEvent 字段将为空。你也可以调用调度器提供数据：
+- Vector3 orientation = gameObject.transform.localRotation.eulerAngles;
+- dispatcher.Dispatch(AttackEvent.FIRE_MISSILE, orientation);
+- Now the TmEvent created will have Vector3 data that matches orientation.
+- 现在new出来的 TmEvent 将会匹配定位到 Vector3 数据。
+- Finally, you can actually create the TmEvent explicitly and dispatch that:
+- 最后，你其实可以显式创建的 TmEvent 和调用
+- TmEvent evt = new TmEvent(AttackEvent.FIRE_MISSILE, dispatcher, this.orientation);
+- dispatcher.Dispatch(evt);
+- Which version of Dispatch you use is largely a stylistic choice. Every version looks the same to a listener.
+- 使用哪种形势的调度器(Dispath)是你的代码风格体现，其实每个版本的调度器看起来都差不多
+- The command extension指令扩展
+- In addition to binding events to methods, you can bind them to Commands. Commands are the Controllers in the classic Model-View-Controller-Service structure. In the MVCSContext version of Strange, the CommandBinder listens to every dispatch from the dispatcher (of course you can change this if you want in your own Context). Signals, described below, can also be bound to Commands. Whenever an event or Signal fires, the CommandBinder determines whether that event or Signal is bound to one or more Commands. If CommandBinder finds a binding, a new Command instance is instantiated. The Command is injected, executed, then disposed of. Let’s start by looking at a simple Command:
+- 除了方法绑定到事件，也可以将它绑定到命令，也是MVCS中很常见的一种设计模式(命令模式)，在StrangeIOC的MVCSContext版本中，CommandBinder 监听着每个调度(Dispath)的执行(当然你可以在自己的上下文中改变这种监听方式)，Signals也可以绑定到命令，如果CommandBinder 找到了一个绑定，一个新的命令实例进行实例化。该命令是先注入，然后执行，最后释放。让我们先来看一个简单的命令：
+- using strange.extensions.command.impl;
+- using com.example.spacebattle.utils;
+-  
+- namespace com.example.spacebattle.controller
+- {
+  -        class StartGameCommand : EventCommand
+  -        {
+  -                [Inject]
+  -                public ITimer gameTimer{get;set;}
+-  
+  -                override public void Execute()
+  -                {
+  -                         gameTimer.start();
+  -                         dispatcher.dispatch(GameEvent.STARTED);
+  -                }
+  -        }
+- }
+- There are several things to note about this simple example. First, observe that we’re using the strange.extensions.command.impl namespace since this Command extendsEventCommand. You don’t have to extend EventCommand or even Command, but your commands do have to adhere to the ICommand interface. Second, note that you can inject into commands. This is really useful, since it means that any model or service can be accessed and interacted with. Finally notice that by extending EventCommand we automatically have access to dispatcher (the EventDispatcher injected everywhere within a Context), so any listener to contextDispatcher, anywhere in the app, can hear that GameEvent.STARTED we just fired. Since this is a synchronous Command, we simply fire and forget. As soon as Execute() completes, the Command will get cleaned up.
+- 有几件事情需要注意这个简单的例子。首先，观察我们正在使用thestrange.extensions.command.impl 命名空间，因为该命令延伸EventCommand。你不需要延伸 EventCommand，甚至命令，但您必须要实现 ICommand 接口。第二，注意你可以注入命令。这样做确实很爽，因为它意味着可以访问和交往的任何模型或服务。最后请注意通过延伸的EventCommand 我们自动获得对Dispatcher访问 (范围内的EventDispatcher 注入无处不在），所以 contextDispatcher，该应用程序，在任何地方任何侦听器可以听到 GameEvent.STARTED 我们刚触发。因为这是一个同步命令，我们只是触发和释放。 execute ()完成后，该命令将被清理掉。
+- But what about asynchronous Commands, like calling on a web service? We can handle these with a really simple pair of methods called Retain() and Release(). Look at this:
+- 异步调用命令如同调用一个WebService，我们有两个很简单的方法 Retain() 与 Release() 如下：
+- using strange.extensions.command.impl;
+- using com.example.spacebattle.service;
+-  
+- namespace com.example.spacebattle.controller
+- {
+  -        class PostScoreCommand : EventCommand
+  -        {
+  -                [Inject]
+  -                IServer gameServer{get;set;}
+  -      
+  -                override public void Execute()
+  -                {
+  -                         Retain();
+  -                         int score = (int)evt.data;
+  -                         gameServer.dispatcher.AddListener(ServerEvent.SUCCESS, onSuccess);
+  -                         gameServer.dispatcher.AddListener(ServerEvent.FAILURE, onFailure);
+  -                         gameServer.send(score);
+  -                }
+-  
+  -                private void onSuccess()
+  -                {
+  -                         gameServer.dispatcher.RemoveListener(ServerEvent.SUCCESS, onSuccess);
+  -                         gameServer.dispatcher.RemoveListener(ServerEvent.FAILURE, onFailure);
+  -                         //…do something to report success…
+  -                         Release();
+  -                }
+-  
+  -                private void onFailure(object payload)
+  -                {
+  -                         gameServer.dispatcher.RemoveListener(ServerEvent.SUCCESS, onSuccess);
+  -                         gameServer.dispatcher.RemoveListener(
+  -                         ServerEvent.FAILURE, onFailure);
+  -                         //…do something to report failure…
+  -                         Release();
+  -                }
+  -        }
+- }
+- You can probably understand pretty much everything happening here. We pass off the SendScore request to the gameServer, which chews on it for awhile. The Command will hang around while the server does what it needs to do. By calling Retain() at the top of the Execute method, we keep the command in memory. Whenever you call Retain(), it is critically important that you call Release(), however the callback turns out. Failure to do so will result in a memory leak.
+- 你差不多了解了 Retain与Release的作用了，打个比方你调用了Retain该命名保持在内存中，如果你没有调用release可能会造成内存泄漏。
+- Mapping commands命令映射
+- Although technically we can map Commands to events almost anywhere, we typically do so in the Context. Doing so makes it easy to locate when you (or anyone else) needs to find what’s mapped to what. Command mapping looks a lot like injection mapping:
+- 虽然技术实现上可以将我们的命令事件在任何一个地方执行,但是我们通常只在上下文中这样做，方便你和其他人找到你所想要的映射。命令映射有点像注入映射
+- commandBinder.Bind(ServerEvent.POST_SCORE).To<PostScoreCommand>();
+- You can bind multiple Commands to a single event if you like:
+- 你可以将多个命令绑定到一个事件上
+- commandBinder.Bind(GameEvent.HIT).To<DestroyEnemyCommand>().To<UpdateScoreCommand>();
+- And you can unbind at any time to remove a binding:
+- 取消绑定
+- commandBinder.Unbind(ServerEvent.POST_SCORE);
+- There’s also a nice “one-off” directive for those times where you only want a Command to fire just the next time an event occurs.
+- 仅执行一次的命令
+- commandBinder.Bind(GameEvent.HIT).To<DestroyEnemyCommand>().Once();
+- By declaring Once, you ensure that the binding will be destroyed the next time the Command fires.
+- 使用Once()声明可以保证在下次调用之前销毁这个命令
+- Sequences are a group of commands fired in order. The commands fire one-by-one either until the sequence reaches the end, or one of the commands fails. A command can callFail() at any point, which breaks the sequence. This can be useful for setting up a chain of dependent events, for building ordered animations, or for setting a guard to determine whether or not a Command should really execute.
+- Mapping a sequence simply requires the addition of the InSequence() instruction:
+- 命令组是一连串连贯的命令，命令组中命令一个接一个执行如果其中一个失败便终止立刻调用Fail()函数 ，命令组只需要调用InSequence()函数便可以使用
+- commandBinder.Bind(GameEvent.HIT).InSequence()
+  -        .To<CheckLevelClearedCommand>()
+  -        .To<EndLevelCommand>()
+  -        .To<GameOverCommand>();
+- The idea behind this sequence is that a hit might indicate that a level has been cleared. So we run the CheckLevelClearedCommand. If it passes, we run EndLevelCommand. If that Command indicates we’ve reached the final level, run the GameOverCommand. Commands in a sequence execute successively, so at any point along the way, a Command can simply callFail() to stop the execution flow.
+- As with regular Commands, commands in a sequence may execute asynchronously. If they do (and presuming Fail() isn’t called), the subsequent Command will be fired as soon as Release() is invoked.
+- 与常规命令一样命令组(序列)也可以异步执行，如果这样做(先假定Fail()不会执行)，剩下的命令会被触发，然后执行Release()函数
+- The signal extension   Signal扩展
+- Signals are a dispatch mechanism — an alternative to EventDispatcher — introduced with Strange v.0.6.0. Whereas EventDispatcher creates and dispatches IEvent objects with a single data property, Signals hook to callbacks, passing 0-4 strongly-typed arguments. This has two major advantages over the EventDispatcher. First, Signal dispatch results in no new object creation, and therefore no need to GC a lot of created instances. Second, and far more importantly, Signal dispatches are type-safe and will break at compile-time if the Signals and their mapped callbacks don’t match.
+- Signal一种调度机制– EventDispatcher 的替代品 – StrangeIOC的 v.0.6.0 介绍了。而 EventDispatcher 创建和调度具有单一的 dataproperty IEvent 对象，Signal挂钩回调，传递 0-4 个强类型参数。Signal比起EventDispatcher有有两个主要优点。第一，Signal调度结果中没有创建新的对象，因此GC没有必要创建很多实例。第二，更重要的是，Signal调度是类型安全的而且Signal和其映射的回调不匹配在编译时就会报错(编译器强类型检查)
+- Another important distinction is that while there is a single ‘global’ EventDispatcher for each context (and another ‘even-more-global’ CrossContextDispatcher) firing off Event triggers, Signals uses a different model. Each ‘Event’ is the result of an individual Signal tasked to some duty. So while EventDispatcher is monolithic, there may be any number of Signals. Let’s show some examples.
+- 另一个重要的区别全局 EventDispatcher是单一的，为每个上下文 （和另一个或更多的全局上下文 CrossContextDispatcher） 。每个 ‘事件‘ 是Signal都是独立的，职责单一的结果。所以虽然EventDispatcher 是铁板一块，可能有任意数量的Signal。我们一起看下下面几个例子
+- Here are two Signals, each with one parameter:
+- 这里有两个Signal，带一个参数
+- Signal<int> signalDispatchesInt = new Signal<int>();
+- Signal<string> signalDispatchesString = new Signal<string>();
+- Notice how the dispatch type of each Signal has been baked right into the instantiation. Let’s build this out with some callbacks:
+- 如何使用Signal的派发和相关的实例化。让我们来创建回调函数：
+- Signal<int> signalDispatchesInt = new Signal<int>();
+- Signal<string> signalDispatchesString = new Signal<string>();
+-  
+- signalDispatchesInt.AddListener(callbackInt);                //Add a callback with an int parameter
+- signalDispatchesString.AddListener(callbackString); //Add a callback with a string parameter
+-  
+- signalDispatchesInt.Dispatch(42);                   //dispatch an int
+- signalDispatchesString.Dispatch(“Ender Wiggin”);    //dispatch a string
+-  
+- void callbackInt(int value)
+- {
+  -        //Do something with this int
+- }
+-  
+- void callback(string value)
+- {
+  -        //Do something with this string
+- }
+- What’s worth noticing here is that once the Signal bakes in its type, that type is a compile-time requirement of any listener to that Signal. This means the app simply won’t compile if, for example, you accidentally do this:
+- 当Signal确定需要的类型后就必须提供正确的回调。下面演示一个被编译器报错的写法 Signal避免了程序猿的一些可能性失误：
+- Signal<int> signalDispatchesInt = new Signal<int>();
+- Signal<string> signalDispatchesString = new Signal<string>();
+-  
+- signalDispatchesInt.AddListener(callbackString); //Oops! I attached the wrong callback to my Signal!
+- signalDispatchesString.AddListener(callbackInt); //Oops! I did it again! (Am I klutzy or what?!)
+- This makes screwing up your listeners pretty darned difficult.
+- 这使监听变得非常困难。
+- The parameters of a Signal are type-safe and down-castable. This means that anything assignable from the parameter’s Type is a legal mapping.
+- Signal是类型安全的，而且是向下转型，它意味着每次赋值都是一次映射
+- //You can do this…
+- Signal<SuperClass> signal = new Signal<SuperClass>();
+- signal.Dispatch(instanceOfASubclass);
+-  
+- //…but never this
+- Signal<SubClass> signal = new Signal<SubClass>();
+- signal.Dispatch(instanceOfASuperclass);
+- You can write Signals with 0-4 parameters. Signals use the Action Class as the underlying mechanism for type safety. Unity’s C# implementation allows a maximum of four parameters to an Action, so that’s as far as we can take you. If you require more than four parameters, consider creating a value object and sending that instead.
+- Signal实现了最多4个参数的重载 如果有更多的参数你可以考虑包装成对象发送
+- //works
+- Signal signal0 = new Signal();
+-  
+- //works
+- Signal<SomeValueObject> signal1 = new Signal<SomeValueObject>();
+-  
+- //works
+- Signal<int, string> signal2 = new Signal<int, string>();
+-  
+- //works
+- Signal<int, int, int> signal3 = new Signal<int, int, int>();
+-  
+- //works
+- Signal<SomeValueObject, int, string, MonoBehaviour> signal4 = new Signal<SomeValueObject, int, string, MonoBehaviour>();
+-  
+- //FAILS!!!! Too many params.
+- Signal<int, string, float, Vector2, Rect> signal5 = new Signal<int, string, float, Vector2, Rect>();
+- You can write your own Signal subclasses, of course, instead of declaring them like the inline examples above. This is especially useful in Strange, where you probably want to have some handy, human-readable names for mapping Signals within and between Contexts. Here’s an example of a Signal subclass:
+- 你当然可以按照如下方法，写Signal子类，而不是像上面在内部声明他们。这种做法在StrangeIOC中还挺有用的，在你想映射Signal内部与上下文的时候派上用场
+- using System;
+  -   using UnityEngine;
+  -   using strange.extensions.signal.impl;
+-  
+  -   namespace mynamespace
+  -   {
+  -       //We’re typing this Signal’s payloads to MonoBehaviour and int
+  -       public class ShipDestroyedSignal : Signal<MonoBehaviour, int>
+  -       {
+  -       }
+  -   }
+  -   
+- Mapping Signals to Commands将Signal映射到命令
+- If you want your Context to be able to bind Signals to Commands (a very good idea) you need to make one small plumbing change. If you’d rather get the full Signals experience, then add this to your Context:
+- 将Signal绑定到上下文，你需要做一些修改，将下面的更改引用到你的上下文中（可以直接让你的Context继承SignalContext）:
+- protected override void addCoreComponents()
+- {
+  -        base.addCoreComponents();
+  -        injectionBinder.Unbind<ICommandBinder>();
+  -        injectionBinder.Bind<ICommandBinder>().To<SignalCommandBinder>().ToSingleton();
+- }
+- Doing this informs Strange that we’re doing away with the default CommandBinder and replacing it with the SignalCommandBinder. Thus Signals, rather than Events, will trigger Commands. Note that Strange currently supports eitherEvents or Signals mapped to Commands, but not both.
+- 这样做会通知Strange使用SignalCommandBinder替换默认的 CommandBinder 。因此Signal而不是事件，将会触发命令。请注意Strange目前支持事件或信号映射到命令，但不是两个同时一起映射。
+- Having done this, Signals can now be mapped to Commands much as Events can. The basic syntax is:
+- 这样处理之后，你就可以绑定Signals来处理Commands。格式如下：
+- commandBinder.Bind<SomeSignal>().To<SomeCommand>();
+- Note that it’s still commandBinder. We simply unmapped the one that worked with EventDispatcher and hooked it up to a new one that works with Signals. Of course the full range of Command-mapping behavior is supported, including multiple Commands, sequences and mapping Once().
+- 请注意它仍然是 commandBinder，我们只是取消了EventDispatcher的映射简单的连接了一个新的Signal，当然全部的映射函数都被继承下来了包括命令组(序列)与Once()等等
+- Mapping a Signal to a Command automatically creates an injection mapping which you can retrieve with the [Inject] tag, like so:
+- 创建注入映射它自动映射一个Signal到一个命令
+- [Inject]
+- public ShipDestroyedSignal shipDestroyedSignal{get; set;}
+- Use this injection wherever necessary (always remembering to apply some common sense), including in Commands or Mediators.
+- 可以在需要的地方使用这样的注入,包括Commands 和 Mediators.
+- To clarify how Signal/Command mapping works, let’s briefly go through an example by mapping the ShipDestroyedSignal above to a Command. We’ll start in the Context by binding the Signal:
+- 为了演示Signal/ Command 映射是如何进行，让我们简要地去通过一个ShipDestroyedSignal 实例映射ShipDestroyedCommand命令。我们将通过绑定Signal来启动上下文：
+- commandBinder.Bind<ShipDestroyedSignal>().To<ShipDestroyedCommand>();
+- In a ShipMediator, we Inject the signal, then Dispatch it:
+- ShipMediator中我们注入Signal然后调用它
+- [Inject]
+- public ShipDestroyedSignal shipDestroyedSignal{get; set;}
+-  
+- private int basePointValue; //imagining that the Mediator holds a value for this ship
+-  
+- //Something happened that resulted in destruction
+- private void OnShipDestroyed()
+- {
+  -        shipDestroyedSignal.Dispatch(view, basePointValue);
+- }
+- Dispatching a Signal mapped via the SignalCommandBinder results in the instantiation of a ShipDestroyedCommand:
+- 通过Signal的Dispatching来调用ShipDestroyedCommand
+- using System;
+- using strange.extensions.command.impl;
+- using UnityEngine;
+-  
+- namespace mynamespace
+- {
+  -        //Note how we extend Command, not EventCommand
+  -        public class ShipDestroyedCommand : Command
+  -        {
+  -                [Inject]
+  -                public MonoBehaviour view{ get; set;}
+-  
+  -                [Inject]
+  -                public int basePointValue{ get; set;}
+-  
+  -                public override void Execute ()
+  -                {
+  -                         //Do unspeakable things to the destroyed ship
+  -                }
+  -        }
+- }
+- As you can see, the methodology for mapping Signals to Commands is very similar to the methodology used with Events.
+- 正如你所看到的将Signal映射到命令的方法是非常相似的方法与事件使用。
+- Two important caveats: first, while Signals support multiple parameters of the same Type, injections do not. It is therefore not possible for a Signal with two parameters of the same Type to be mapped to a Command.
+- 两个重要注意事项： 第一，虽然信号支持相同类型的多个参数，注入不能这样做。因此不可能为具有相同类型的两个参数的信号映射到一个命令。
+- //This works
+- Signal<int, int> twoIntSignal = new Signal<int, int>();
+- twoIntSignal.AddListener(twoIntCallback);
+-  
+- //This fails
+- Signal<int, int> twoIntSignal = new Signal<int, int>();
+- commandBinder.Bind(twoIntSignal).To<SomeCommand>();
+- Once again, this you can work around this limitation by mapping ValueObjects instead.
+- 这次,这可以通过映射ValueObjects绕过这个限制。
+- The second caveat: Strange has a handy-dandy, built-in START event for kicking things off. Unbinding the EventDispatcher turns this off. It is therefore the recommended practice to override your Context’s Launch method with a custom StartSignal, like so:
+- 第二个注意事项：StrangeIoc很方便，内建了启动事件。解除了EventDispatcher的绑定，因此，建议使用自定义startsignal重写你的上下文启动方式，如下
+- override public void Launch()
+- {
+  -        base.Launch();
+  -        //Make sure you’ve mapped this to a StartCommand!
+  -        StartSignal startSignal= (StartSignal)injectionBinder.GetInstance<StartSignal>();
+  -        startSignal.Dispatch();
+- }
+- Mapping Signals without Commands不使用命令映射Signal
+- As mentioned above, mapping a Signal to a Command automatically creates a mapping which you can retrieve by injecting elsewhere, but what if you want to Inject a Signal without binding to a Command? In this case, simply map it using the injectionBinder, just like any other injected class:
+- 如上所述，Signal映射到一个命令会自动创建一个映射，你可以检索注入的地方，但如果你想注入Signal并不去绑定到命令上在这种情况下，只需要使用injectionbinder，就像注入其他类：
+- injectionBinder.Bind<ShipDestroyedSignal>().ToSingleton();
+- The mediation extension mediation(中介)扩展
+- The MediationContext is the only part of Strange written exclusively for use with Unity3D. This is because mediation is all about carefully controlling how your views (GameObjects) interface with the rest of your app. Views are by nature highly volatile during development, and it’s advisable to constrain that natural chaos to within the view classes themseves. For this reason, we suggest that your view consist of at least two distinct MonoBehaviours: View and Mediator.
+- MediationContext是StrangeIOC中专门Unity3D写的唯一的一部分。这是因为中介者(Mediation)都是小心地控制你的视图（GameObjects）与您的应用程序的其余部分的接口。视图是由性质极不稳定，在开发中，用它来控制内部视图的混乱，我们建议您的视图中包含至少两个不同的组件对象：视图和中介。
+- View 视图
+- The View class represents the ‘V’ in our MVCS structure. A View is a MonoBehaviour that you extend to write the behavior that controls the visual (and audible) input and output that a user sees. This class can be attached in the Unity3D IDE to the relevant GameObject. If it has public components, these can be tweaked right in the IDE as normal. Want a green button? Wire it up in the View. Want the green button to have a number on it? Wire that up in the View. Want to inject a model or service? WAIT! Don’t do that! Why?
+- 视图在我们的MVCS结构中代表“V”。一个视图是一个MonoBehaviour，您扩展写控制用户看到的视觉（和听觉）输入和输出的行为。Unity3D IDE中这个类可以附加相关GameObject 。如果是公开的components可以在IDE中正常的使用(拖拽赋值)。想要一个绿色的按钮吗?线在视图中。希望绿色按钮上有一个数字,把按钮连接在视图上吗? 。想注入模型或服务吗?等等!别干那事!为什么?
+- While your Views are injectable, it’s almost always bad practice to tie your Views directly to models and services. As we’ve said, your View code is apt to get messy and it’s worth insulating your other classes from that mess. In the next chapter we’ll get into what we consider the best structure for app development with Strange, but for now just humor us and consider the idea that your View should only be responsible for the following:
+- 而你的视图是可注入的，把你的View直接依赖模型和服务的几乎都是不好的做法。正如我们已经说过，你的视图代码容易混乱。在下一章我们会进入我们认为使用StrangeIoc开发的最佳结构,你需要做到下面的事情：
+- 1.    Wiring up the visual components.
+- 连接视觉组件（让View在视觉组件上）
+- 2.    Dispatching events when the user interacts with those components.
+- 当用户与这些组件交互，使用Dispatching方式
+- 3.    Exposing an api which allows another actor to change the visual state of those components.
+- 暴露API允许另一个角色(Mediator)来改变这些组件的可视状态。
+- By limiting yourself to those three functions, by keeping all logic or state out of your Views, by refusing to Inject models and services, you contain the View and make your life much, much better in the long run. Trust me on this. Please.
+- 通过限制自己的这三个功能，通过保持所有逻辑或状态离开Views，不适用注入Models和services，从长远来看这是非常必要的，请相信我。
+- Now, in item ‘3’ above I mention exposing an api to another actor. Who might this actor be…?
+- 我面上面说的3条中说的角色是谁（Mediator）？
+- Mediator 中介
+- The Mediator class is a separate MonoBehaviour whose responsibility is to know about the View and about the app in general. It is a thin class, which means that its responsibilities should be very, very lean. It is allowed intimate knowledge of the View, is injectable and knows enough about the app to send and receive events or Signals. So think back to the number on the green button. You were going to inject a service into the View to display, say, the number of friends who are online. Well, you could inject the service into the Mediator, but since the Mediator is meant to be thin, a better answer would be to dispatch a request, let a Command handle the Service call, then dispatch a response. This is a lot of indirection, but the payoff for this indirection is clean, structured code.
+- 中介类是单独的 MonoBehaviour，其职责是在一般沟通关于视图和应用程序。它是一个职责单一类，这意味着其职责应该是很少很少。它允许视图的高度共享数据(注入,应用程序数据来发送和接收事件或信号)。回到上面的绿色按钮的数字。你正要在视图中注入一个服务来显示在线玩家数量。嗯，可以将服务注入中介，应为中介需要单一职业，更好的答案是分派一个请求，让命令获得服务的句柄(调用)，然后发送请求。这是大量的间接寻址，但对这种间接方式的回报是干净结构的代码。
+- Here’s how this might look in a Mediator:
+- 下面就是一个Mediator的例子：
+- using Strange.extensions.mediation.impl;
+- using com.example.spacebattle.events;
+- using com.example.spacebattle.model;
+- namespace com.example.spacebattle.view
+- {
+  -        class DashboardMediator : EventMediator
+  -        {
+  -                [Inject]
+  -                public DashboardView view{get;set;}
+-  
+  -                override public void OnRegister()
+  -                {
+  -                         view.init();
+  -                         dispatcher.AddListener
+  -                                  (ServiceEvent.FULFILL_ONLINE_PLAYERS, onPlayers);
+  -                         dispatcher.Dispatch
+  -                                  (ServiceEvent.REQUEST_ONLINE_PLAYERS);
+  -                }
+  -               
+  -                override public void OnRemove()
+  -                {
+  -                         dispatcher.RemoveListener
+  -                                  (ServiceEvent.FULFILL_ONLINE_PLAYERS, onPlayers);
+  -                }
+-  
+  -                private void onPlayers(IEvent evt)
+  -                {
+  -                         IPlayers[] playerList = evt.data as IPlayers[];
+  -                         view.updatePlayerCount(playerList.Length);
+  -                }
+  -        }
+- }
+- Some things to note here:
+- 注意事项:
+- 1.    The injection of DashboardView is how the Mediator knows about its View.
+- 注入DashboardView的中介知道这个视图
+- 2.    OnRegister() is the method that fires immediately after injection. It’s kind of like a constructor and you can use it to initialize the view and perform other setup processes, including — as we do here — request important data.
+- OnRegister() 是注入后立即触发的方法。它就像一个构造函数，你可以使用它来初始化视图，并执行其他初始化过程，包括 — — 正如我们正在做的 — — 请求重要数据
+- 3.    The contextDispatcher is injected into any Mediator that extends EventMediator, so you always have access to the context-wide event bus.
+- ContextDispatcher 可以被注入任何扩展的 EventMediator，因此您总是可以在中介的上下文范围内访问事件总线
+- 4.    OnRemove() is for cleanup; it’s called just before a View is destroyed. Remember to remove any listeners you’ve added.
+- OnRemove() 是为清理添加过的监听 ；刚好在一个视图销毁前。请记住删除所有已经添加的侦听器。
+- 5.    The View in this example has exposed an api of two methods: init() and updatePlayerCount(float value). In a real situation you’d probably expect a larger api, but the principle is the same: limit the Mediator to nothing but the thin task of relaying information between the View and the rest of the app.
+- 在这个例子中，视图暴露了两个方法：Init() 和 updatePlayerCount(float value)。在真实的情况，你可能会有更多的API，但原则是相同的，保持中介的职责单一
+- Binding a View to a Mediator should look pretty familiar by now:
+- 绑定一个中介到视图上
+- mediationBinder.Bind<DashboardView>().To<DashboardMediator>();
+- A couple of other points worth noting:
+- 其他几个值得注意的要点：
+- 1.    Not any MonoBehaviour qualifies as a View. There’s a little behind-the-scenes magic going on to allow the View to inform Strange of its existence. So either extend View, or duplicate that magic in your own code (it’s only a few lines), or perhaps create a View of your very own which extends View and which your classes extend. This latter pattern is useful, since you might want to insert debugging code that will later be accessible to all your Views.
+- 没有任何的 MonoBehaviour 有资格作为一个视图, 有一个小的幕后魔术，让视图通知Strange的存在。所以，要么扩展视图，要么复制你自己代码中的魔法（只有几行），或者创建一个你自己的视图，它扩展了视图。后一种模式是有用的，因为您可能需要插入调试代码，稍后将访问您的所有视图.。
+- 2.    Mediation binding is instance-to-instance. Whenever a new View comes into the world a new Mediator is created to support it. So lots of Views means lots of Mediators.
+- 一个新视图对应一个新的中介，当一个视图创建，一个新的中介被创建用来支持它。 这意味着你将会由很多很多中介。
+- The context extension上下文扩展
+- The context package puts all your various Binders under one roof, so to speak. For example, the MVCSContext includes an EventDispatcher, an InjectionBinder, a MediationBinder, and a CommandBinder. You can, as we have discussed, remap the CommandBinder to a SignalCommandBinder. The (Signal)CommandBinder listens to the EventDispatcher (or Signals). Commands and Mediators rely on Injection. The Context is where we wire up these dependencies. To create a project, you’ll override Context or MVCSContext and it’s in this child class that you’ll write all the bindings that make your application do what it does.
+- 上下文包把你的各种Binders放在一起。例如，MVCSContext包涵一个EventDispatcher，一个InjectionBinder，一个MediationBinder，一个SignalCommandBinder。(Signal)CommandBinder监听EventDispatcher (或 Signals)。Commands和Mediators依靠注入，上下文是我们连接这些依赖的地方。创建一个项目，你需要重写一个Context或者MVCSContext，在这个类里面处理你的绑定和依赖。
+- It is also possible — desirable even — to have multiple Contexts. This allows your app to be highly modular. Self-standing modules can run on their own, only interfacing with other modules as needed. Thus a core game can be written as one app, a social media component written separately, and a chat app as a third, and all three can be bound together late in development, each only sharing the pieces that the other components care about.
+- 这里也有可能存在多个Contexts，这允许您的应用程序是高度模块化的。独立模块可以自己运行，只需要与其他模块存在接口。因此，一个核心游戏可以写成一个应用程序，一个单独写的社交媒体组件，一个聊天应用程序为三分之一，所有这三个可以绑定在一起，在开发后期，每个共享的其他组件关心。
+*** MVCSContext: the big picture
+- This section is basically a recipe for building a Strange app with MVCSContext. In the last section I described all the parts; in this one I’ll explain how to assemble them.
+- 本篇基本上就是介绍Strange框架的基本方法使用与部署Unity3d项目,另外所有框架的思路都是一致的，让项目变得易于维护。现在让我们一起开始吧。
+- So you want to write a game. You’ve got Unity humming, MonoDevelop all warmed up and a cup of coffee in your hand (or whisky, if you’re surfing the Ballmer Curve). Then someone says, “Hey, use Strange!” Now, she’s a smart cookie; she explains all the benefits and convinces you that you want to give it a go. Where to start?
+- 现在你要写一个游戏。你已经确定使用Unity开发了，安装好了MonoDevelop，咖啡也已经端在手里了。这是有人说，我们使用Strange。….。从哪里开始呢？
+- Well, in the best vonTrapp tradition, let’s start at the very beginning.
+- 那么让我们从头开始讲解。
+- Concepts 基本概念
+- MVCSContext is Strange’s way of wrapping up the whole micro-architecture into a convenient, easy-to-use package. As the name suggests, it’s designed to work as an MVCS application (The ‘S’ is for Service, which refers to anything outside your application, such as a web service).
+- MVCSContext 是 Strange封装的一个简单易用的开发包。顾名思义，它的设计是基于MVCS结构的（“S”是Service，指应用程序以外的任何东西，例如web服务）。
+- So here again are all the parts you’ll be assembling:
+- 我们来看下各个部分：
+- 1.    The entry point to your app is a class called a ContextView, which is simply a MonoBehaviour that instantiates the MVCSContext.
+- 您的应用程序的入口点是一个叫ContextView类，这是一个简单的MonoBehaviour ，用来对MVCSContext实例化。
+- 2.    The MVCSContext (technically, a subclass of MVCSContext) is where you set up all your bindings (see Section 1, Binding).
+- MVCSContext（实际上是MVCSContext的子类）是你设置绑定信息的位置。
+- 3.    The dispatcher is a communication bus, allowing you to send messages throughout your app. The dispatcher used in MVCSContext sends objects called TmEvents. Alternatively, you can follow the steps outlined above to re-wire the Context to use Signals.
+- 调度程序是一个通信总线，允许您在您的应用程序中发送消息。在MVCSContext派发的对象是TmEvents，或者，您可以按照上面列出的步骤重新对上下文使用Signals进行重写
+- 4.    Commands are classes triggered by IEvents or Signals. When a Command executes it carries out some part of the application logic.
+- Commands是通过IEvents或者Signals来出发的。当命令执行时，它执行部分应用程序逻辑.。
+- 5.    Models store state.
+- Models 的存储状态
+- 6.    Services communicate with the world outside the application.
+- Services和应用以外的部分沟通
+- 7.    Views are MonoBehaviours attached to GameObjects: the bits of the game your player actually sees and interacts with.
+- Views 是MonoBehaviours附加再GameObjects：玩家实际看到和操作的地方。
+- 8.    Mediators are also MonoBehaviours, but with the very specific function of insulating the View from the rest of the app.
+- Mediators也是MonoBehaviours，但是功能非常明确，用来解耦View和应用程序的其他部分。
+- Here’s a chart showing how these pieces work together:
+- 这里有一张图表显示这些碎片是如何一起工作的：
+- MVCSContext Architecture
+- Set up your project设置你的项目
+- Download the Strange repo. Inside it you’ll find a complete Unity project with examples to look at (I suggest you go through these). Find a folder called “myfirstproject” and open the TextView.unity file within (StrangeIoC > examples > Assets > scenes > myfirstproject > TestView.unity).
+- 下载Strange。在里面你会找到一个完整的Unity项目的例子来看看（我建议你去这么做）。查找一个叫“myfirstproject”的文件夹打开TextView.unity，问价路径(StrangeIoC > examples > Assets > scenes > myfirstproject > TestView.unity).
+- Take note that, while I’m going to walk you through this project to get you comfy, you don’t need nearly all the stuff you’ve downloaded when you use Strange in your own project. Everything you really need is in:
+- 值得注意的，我们通过这个项目让你了解用法，实际上你并不需要所有的文件，当你将Strange应用在你自己的项目时，你只需要下面文件中的内容：
+- Assets/scripts/strange
+- and within that the important subdirectories are framework and extensions.
+- 在这个里有两个重要的子目录是framework 和 extensions。
+- A scene is set… 第一个场景的设置
+- When you open the scene in Unity you’ll find a GameObject named “ViewGO” and a camera inside of it. ContextView will be the top of your game hierarchy and everything else will go inside it. Although Unity does not require you to have a singular top-level GameObject, Strange works best this way (specifically, when there is more than one context, Strange uses the display hierarchy to determine which Context any given View belongs to). There’s also a MonoBehaviour attached called “MyFirstProjectRoot”.
+- 当你打开场景你，你回看到一个叫“ViewGO”的GameObject，一个相机在他里面。ContextView将是您的游戏层次结构的顶部，其他一切将放入里面。虽然unity不需要你有一个顶级游戏对象，Strange最好这样处理（具体来说，当有多个上下文时，Strange使用显示层次结构来确定给定视图所属的上下文）。这里还有一个叫“MyFirstProjectRoot”的MonoBehaviour组件。
+- Play this simple app and see what it does. See what happens when you click on the rotating text. Nothing spectacular here. We’re just demonstrating structure for now.
+- 运行这个简单的应用程序，看看它做什么。看看当你点击旋转文本时会发生什么。这里没有什么壮观的事情发生。我们现在只是在演示结构。
+- In the Property Inspector, double-click MyFirstProjectRoot to launch MonoDevelop.
+- 双击组件可以在MonoDevelop中查看代码。
+- A ContextView begins… ContextView项目的开始
+- ContextView is a MonoBehaviour that instantiates your context. MyFirstProjectRoot subclasses ContextView, and is where our app begins.
+- ContextView是一个MonoBehaviour，用来实例化你的上下文（context）。MyFirstProjectRoot是ContextView的子类，这是你应用程序开始的地方。
+- using System;
+- using UnityEngine;
+- using strange.extensions.context.impl;
+-  
+- namespace strange.examples.myfirstproject
+- {
+  -   public class MyFirstProjectRoot : ContextView
+  -   {
+  -       void Awake()
+  -       {
+  -           context = new MyFirstContext(this, true);
+  -           context.Start ();
+  -       }
+  -   }
+- }
+- Note how we’re “using” the strange.extensions.context.impl folder. Everything in Strange is tightly namespaced like this, so you import only what you need.
+- 我们应用了strange.extensions.context.impl命名空间，其他的部分的命名空间格式和这个类似，你可以应用你需要的命名空间。
+- The rest of this code is really simple. ContextView defines a property called context which of course refers to our context. We simply need to define what it is. We’ve writen one called MyFirstContext. The reference this refers to MyFirstProjectRoot. It tells the Context which GameObject is to be considered the ContextView. The true indicates that once we call start, everything else will proceed. It can sometimes be useful to have the context run, but not actually launch the app (for example, if you’re awaiting the loading of a file), but this is a more advanced use case than we care about here.
+- 剩下的代码真的很简单。ContextView定义一个称为上下文的属性，该上下文指的是我们的上下文. 我们只需要定义它是什么。我们实例化一个叫MyFirstContext的类。 this 指的是MyFirstProjectRoot。它告诉上下文（Context）哪一个GameObject包涵ContextView。True表明，一旦我们调用开始，一切都将继续。
+- Finally, call context.Start() to kick it into action.
+- 最后，调用context.Start() 进行运行。
+- The Context binds… Context处理绑定
+- As I explained above, the Context is where all the binding happens. Without bindings, a Strange application is just a pile of disconnected parts. The Context is the glue that brings order to the chaos. Since we’re extending MVCSContext, we get a whole bunch of binding goodness for free without any work. MVCSContext is designed to give us everything we need to cleanly structure an IoC-style application: an Injector, a message bus, Command patterns, model and service support, and View mediation. Here’s the code for our simple Context.
+- 正如我上面解释的，上下文是所有绑定发生的地方。没有绑定，Strange的应用程序只是一堆分离的部分。通过MVCSContext扩展，我们得到了一套良好的绑定框架。MVCSContext旨在给我们所需的一切，干净地构造一个IOC风格的应用程序：一个注入器（Injector），消息总线，Command模式，model和service支持，和视图和视图中介。下面就是一个简单的Context.
+- using System;
+- using UnityEngine;
+- using strange.extensions.context.api;
+- using strange.extensions.context.impl;
+- using strange.extensions.dispatcher.eventdispatcher.api;
+- using strange.extensions.dispatcher.eventdispatcher.impl;
+-  
+- namespace strange.examples.myfirstproject
+- {
+  -   public class MyFirstContext : MVCSContext
+  -   {
+-  
+  -       public MyFirstContext () : base()
+  -       {
+  -       }
+  -      
+  -       public MyFirstContext (MonoBehaviour view, bool autoStartup) : base(view, autoStartup)
+  -       {
+  -       }
+  -      
+  -       protected override void mapBindings()
+  -       {
+  -           injectionBinder.Bind<IExampleModel>()
+  -               .To<ExampleModel>()
+  -               .ToSingleton();
+  -           injectionBinder.Bind<IExampleService>()
+  -               .To<ExampleService>()
+  -               .ToSingleton();
+-  
+  -           mediationBinder.Bind<ExampleView>()
+  -               .To<ExampleMediator>();
+-  
+  -           commandBinder.Bind(ExampleEvent.REQUEST_WEB_SERVICE)
+  -               .To<CallWebServiceCommand>();
+  -           commandBinder.Bind(ContextEvent.START)
+  -               .To<StartCommand>().Once ();
+-  
+  -       }
+  -   }
+- }
+- As you see we’re extending MVCSContext, which means we inherit all its mappings (you might find it interesting to explore that class in depth). So we already have things like an injectionBinder and a commandBinder and a dispatcher. Note that the dispatcher is accessible all across the app, and is coupled to the commandBinder, so any event dispatched can trigger callbacks and also trigger commands and sequences.
+- 我们扩展了MVCSContext，这就意味着我们继承了他的所有映射（你也许会发现深入研究那个类很有趣）。所以我们已经有类似的东西injectionBinder和commandBinder和一个派发器（dispatcher）。请注意，dispatcher可以访问整个应用程序，并连接到commandBinder，所以任何事件可以触发回调并触发发送命令和序列。
+- The mappings here are just what you’d expect if you’ve read about the various components. For injection, we’re mapping one model and one service, both as Singletons. We’re going to have just one view (ExampleView) for this example, and we bind it to a Mediator (ExampleMediator). Finally, we’re mapping two commands. The more important of the two is StartCommand. It’s bound to a special event: ContextEvent.START. This is the event fired to kick off your app. You should bind some command (or sequence) to it and think of that command as being like an init() for your entire app. Also see that we’ve bound it with .Once(), which a special method that Unbinds the event after a single firing.
+- 这里的映射正是你所期望的，如果你已经阅读的各种组件。对于注入，我们已经映射了一个model和service，他们都是单例。我们要有一个视图（ExampleView）在这个例子中，我们将它绑定到一个中介（ExampleMediator）。最后我们映射了两个命令（command）。比较重要的是StartCommand，它绑定了ContextEvent.START事件，这是事件启动你的应用程序。你可以绑定一些命令（或序列）给他，把它想象成你应用程序的初始化。我们把它设置为 .Once(),说我该方法仅会被执行一次，然后进行取消绑定。
+- Note that there’s also a postBindings() method. This is a useful place to put other code you need to run after binding, but before Launch(). MVCSContext uses this to process any Views which register early (before mapBindings() is called). Another obvious and useful case for this is to call DontDestroyOnLoad(contextView) inside postBindings(), in order to retain the contextView (and the Context!) when you load in a new scene.
+- 值得注意的是这里还有一个postBindings() 方法。这是一个有用的地方，可以在绑定后运行你需要的代码，但是会在 Launch()方法前面。MVCSContext使用此方法处理早期注册的任何视图（在mapBindings() 被调用前）。另一个明显的和有用的情况下，调用DontDestroyOnLoad(contextView) 在 postBindings()里面。在加载新场景时保留contextView(和 Context!)。
+- A Command fires… Command的触发
+- So ContextEvent.START fires, and because it’s bound to StartCommand, a new instance of StartCommand will be instantiated and executed.
+- 当调用ContextEvent.START时，被绑定的StartCommand会被实例化并被执行。
+- using System;
+- using UnityEngine;
+- using strange.extensions.context.api;
+- using strange.extensions.command.impl;
+- using strange.extensions.dispatcher.eventdispatcher.impl;
+-  
+- namespace strange.examples.myfirstproject
+- {
+  -        public class StartCommand : EventCommand
+  -        {
+  -                [Inject(ContextKeys.CONTEXT_VIEW)]      
+  -                public GameObject contextView{get;set;}            
+  -               
+  -                public override void Execute()      
+  -                {         
+  -                         GameObject go = new GameObject();         
+  -                         go.name = “ExampleView”;         
+  -                         go.AddComponent<ExampleView>();         
+  -                         go.transform.parent = contextView.transform;      
+  -                }   
+  -        }
+- }
+- StartCommand extends EventCommand which means that (a) it’s a legal Command that the commandBinder can work with and (b) it inherits everything from Command and from EventCommand. In particular, extending EventCommand means that you get an IEvent injected and you get access to the dispatcher.
+- StartCommand继承自EventCommand ，也就说明可以和commandBinder很好的配合，因为他继承了Command和EventCommand所有的特性。特别是，扩展EventCommand意味你可以获得一个IEvent的注入，并可以进行派发。
+- If you just extended Command, you wouldn’t have automatic access to those objects, but you could still inject them manually by adding this:
+- 如果你只是继承了Command，你就不会自动访问这些对象，但你仍然可以手动添加它们：
+- [Inject(ContextKeys.CONTEXT_DISPATCHER)]
+- IEventDispatcher dispatcher{get;set;}
+-  
+- [Inject]
+- IEvent evt{get;set;}
+- Note the two different types of injection being used here. IEventDispatcher and GameObject are both using named instances. That’s because we want to refer to very specific versions of these objects. We don’t want just any GameObject, we want the one marked as ContextView. Nor do will we settle for any old IEventDispatcher. The only one that will serve to communicate around the Context is the one marked by ContextKeys.CONTEXT_DISPATCHER. The IEvent, on the other hand, is simply mapped for the consumption of this particular command (technically it’s mapped to a “value”). So no name is required.
+- 注意这里使用的两种不同类型的注射。IEventDispatcher和GameObject使用的是名称注入。这是因为我们想引用这些对象的特定版本。我们仅仅需要被标记为ContextView的GameObject。
+- The dependency we’ll use in the current scenario is the ContextView. We’ll add a child view to it.
+- 我们在当前场景中使用的依赖项是ContextView，我们将添加一个子视图到它。
+- The Execute() method is automatically fired by the commandBinder. In most situations, the order of execution looks like this
+- Execute() 方法被commandBinder触发，在大多数情况下，执行顺序看起来像这样
+- 1.    Instantiate the Command(s) bound to the IEvent.type.
+- 初始化绑定的IEvent.type对应的Command.
+- 2.    Inject the dependencies, including the IEvent itself.
+- 注入相关的依赖，包括IEvent本身
+- 3.    Call Execute()
+- 执行 Execute()
+- 4.    Delete the Command
+- 删除Command
+- The Command doesn’t have to be cleaned up immediately, but we’ll get to that in a bit. If you look at the code inside the Execute() method, you’ll see that it’s pure Unity. Create a GameObject, attach a MonoBehaviour to it, then parent that GameObject to ContextView. The specific MonoBehaviour we’re using, however, happens to be a Strange IView. And since we mapped that view in our context…
+- Command并不是立即被销毁的，但是我们可以不用太在意这一点。如果你在unity看了Execute() 方法，它创建了一个GameObject，添加一个MonoBehaviour到它上面，ContextView是父对象。一个特殊的MonoBehaviour被使用，就是一个Strange的IView。然后我们在上下文中映射了这个视图…
+- mediationBinder.Bind<ExampleView>().To<ExampleMediator>();
+- …the view is automatically mediated, which means a new ExampleMediator has just been created!
+- 视图是自动创建的中介的，这就意味着一个ExampleMediator被创建了。
+- A View is mediated… 视图和中介的关系
+- If you’ve spent more than a few minutes coding for Unity, you’ve created a View. You’d call it a MonoBehaviour, but the point is that a View is anything you see or interact with. I’m not going to spend any time walking through the ExampleView code. You can look in the example files and if you already know C# and Unity you won’t need it explained. I only want to draw your attention to two bits. First:
+- 如果你已经编写了一些Unity的代码，你已创建了一个视图。你叫他MonoBehaviour，但是视图是你能看见和互动的部分。我不想过多的讲解ExampleView的代码。你可以查看现有的例子，如果你已经熟悉C#和unity我不需要过多的解释。我只想提请你注意两点。第一：
+- public class ExampleView : View
+- By extending View, you get the code that connects each View to the Context. To use Strange, you either need to extend View or write this functionality yourself. But if you don’t extend View, you still need to implement the IView interface. This is required to ensure that the Context can operate on your MonoBehaviour. (I might look for ways to fix this in a future version, allowing you to map a Mediator onto any MonoBehaviour).
+- 继承View，将视图添加到上下文中。使用Strange，你可以继承View或者自己实现。但是如果你不继承View，你就需要实现IView接口。这就需要确保你的Context可以操作MonoBehaviour。
+- The second item to point out:
+- 第二点：
+- [Inject]
+- public IEventDispatcher dispatcher{get; set;}
+- Note that we’re injecting IEventDispatcher. But this is NOT the same dispatcher as the one in StartCommand. Look closely at the code. The one in written in EventCommand (which I showed above) looks like this:
+- 值得注意的是，这个注入的IEventDispatcher,这个并不是StartCommand中的dispatcher。我们可以看下EventCommand里面的代码。
+- [Inject(ContextKeys.CONTEXT_DISPATCHER)]
+- public IEventDispatcher dispatcher{get; set;}
+- By naming the injection, the command specifies that it’s using the common context dispatcher. The View should never inject that dispatcher. The whole point of mediation is to insulate your view from the app and vice-versa. Strange allows injection into the View, but that capability is best when it’s tightly confined. Injecting a local dispatcher for communication with the Mediator is fine. So is injecting a config/layout file (which is useful if you’re publishing to multiple platforms). But if you listen to my advice at all, never inject a model or service or anything else that extends outside the pool of the View and its Mediator.
+- 通过名称调用，该命令指定它使用公共上下文调度程序。 视图不应该注入调度程序。你应该中介（mediation）中调用。Strange允许在视图中注入，但是你最好不要这样做。但是，如果你听我的建议，永远不要注入一个数据（model）或服务（service）或任何其他扩展的视图和它的中介。
+- I’ll tell you right now: this is the hardest concept of this entire framework for most developers to grasp. A View should solely be about display and input. The View should inform the Mediator when certain inputs have occurred. The Mediator (which is allowed to inject the context dispatcher) abstracts the bit of View that is concerned with communicating with the rest of your app. This protects the app from view code — which is often chaotic — and protects your views when the reverse situation is the case.
+- 我现在就告诉你：对于大多数开发者来说，这是整个框架中最难理解的概念。视图应该解决的是展示和输入。当输入发生时，视图应该通知中介（Mediator），中介（Mediator）和你应用程序的其他部分进行通信。如果不这样做很容易造成代码的混乱。
+- So don’t say I never did nuthin’ for ya.
+- 所以不要说我没有提醒你。
+- Finally in regard to views, note that the base View class uses standard MonoBehaviour handlers Awake(), Start(), and OnDestroy(). So if you override those handlers, make sure you call base.Awake(), etc so that the Strange bits run properly.
+- 视图继承自View，View使用了MonoBehaviour的Awake(), Start(), 和 OnDestroy(). 所以如果你重写了上面的操作，你需要调用基类的方法，如 base.Awake()。
+- Now let’s look at the Mediator.
+- 现在让我们看下Mediator。
+- using System;
+- using UnityEngine;
+- using strange.extensions.dispatcher.eventdispatcher.api;
+- using strange.extensions.mediation.impl;
+-  
+- namespace strange.examples.myfirstproject
+- {
+  -   public class ExampleMediator : EventMediator
+  -   {
+  -       [Inject]
+  -       public ExampleView view{ get; set;}
+  -      
+  -       public override void OnRegister()
+  -       {
+  -           view.dispatcher.AddListener
+  -                                  (ExampleView.CLICK_EVENT, onViewClicked);
+  -           dispatcher.AddListener
+  -                                  (ExampleEvent.SCORE_CHANGE, onScoreChange);
+  -           view.init ();
+  -       }
+  -      
+  -       public override void OnRemove()
+  -       {
+  -           view.dispatcher.RemoveListener
+  -                                  (ExampleView.CLICK_EVENT, onViewClicked);
+  -           dispatcher.RemoveListener
+  -                                  (ExampleEvent.SCORE_CHANGE, onScoreChange);
+  -           Debug.Log(“Mediator OnRemove”);
+  -       }
+  -      
+  -       private void onViewClicked()
+  -       {
+  -           Debug.Log(“View click detected”);
+  -           dispatcher.Dispatch(ExampleEvent.REQUEST_WEB_SERVICE,
+  -                                  “http://www.thirdmotion.com/”);
+  -       }
+  -      
+  -       private void onScoreChange(IEvent evt)
+  -       {
+  -           string score = (string)evt.data;
+  -           view.updateScore(score);
+  -       }
+  -   }
+- }
+- At the top, see where we’ve injected the ExampleView. This is how the Mediator knows about the View it’s mediating. Mediators are allowed to know quite a lot about their View. (The Mediator is often considered “throw-away code”, because it’s highly particular to the specifics of both the View and the App). Certainly this Mediator is allowed to know that the View has a dispatcher and that this dispatcher has an event called ExampleView.CLICK_EVENT. By listening to this event, the Mediator sets up a handler (onViewClicked()) which tells the rest of the app what this click means.
+- 最一开始我们可以看见ExampleView的注入。这是Mediator如何知道他需要操作的视图。Mediators可以知道很多关于自己的View信息。当然Mediator允许View发送时间给自己，如上面的ExampleView.CLICK_EVENT。Mediator创建一个函数(onViewClicked()) 用来监听事件，告诉应用程序的其他部分。
+- I emphasized those last words to once again clarify my earlier point: the View should not be sending the event REQUEST_WEB_SERVICE. The View is just a View. It should dispatch events like: HELP_BUTTON_CLICKED, COLLISION, SWIPE_RIGHT. It would be the job of the Mediator to map those events to ones meaningful to the rest of the app, such as REQUEST_HELP, MISSILE_ENEMY_COLLISION, PLAYER_RELOAD. The latter events are mapped to Commands and it’s these Commands which will call the help system, calculate a score increase (adding it to a score model) or determine if the player is allowed to reload.
+- 我再次强调一下我的观点：View不应该发送这样的事件REQUEST_WEB_SERVICE(向服务器请求数据)。View应该发送这样的事件：HELP_BUTTON_CLICKED, COLLISION, SWIPE_RIGHT。应该同过中介（Mediator）来和应用程序的其他部分进行通信，比如REQUEST_HELP, MISSILE_ENEMY_COLLISION, PLAYER_RELOAD。后者的事件被映射到命令，它的这些命令将调用帮助系统，计算得分增加（添加到一个评分模型）或确定是否允许玩家重新加载。
+- The OnRegister() and OnRemove() methods are like constructors and deconstructors for the mediator. OnRegister() occurs right after injection, so I usually use it to set up listeners and call an init() function on the View. OnRemove() occurs as a result of the MonoBehaviour OnDestroy() call. It fires in time for you to clean up. Make sure you remove all your listeners or the Mediator may not be properly garbage collected.
+- OnRegister() 和 OnRemove() 方法就像构造器和销毁处理一样，OnRegister() 发生在注入后，所以通常用来进行监听的添加，调用初始化函数init() 。 OnRemove() 函数实在MonoBehaviour 的OnDestroy() 函数中调用的。确定删除所有的监听，否者的话Mediator可能如法正常被垃圾回收清理。
+- Finally note that by extending EventMediator we have access to the common dispatcher. The Mediator listens for the SCORE_CHANGE event off the common bus, which we’ll come to in a moment. And when the View issues a click, the Mediator dispatches REQUEST_WEB_SERVICE to that same bus. Which brings us to…
+- 最后指出，通过扩展EventMediator我们访问公用的dispatcher。Mediator监听SCORE_CHANGE在公用总线，我们可以随时监测改变。当你视图中有点击时，Mediator发送REQUEST_WEB_SERVICE的事件到总线，等待返回…
+- Another Command fires… 另一正Command的处理
+- Looking way back at the Context, there was this line which we sort of glossed over:
+- 我们在看下Context的这句话：
+- commandBinder.Bind(ExampleEvent.REQUEST_WEB_SERVICE).To<CallWebServiceCommand>();
+- This means that whenever the common bus receives this event, it’ll launch the CallWebServiceCommand. Now, we’re not going to actually call a web service, since this isn’t that kind of tutorial, but it draws your attention to a slightly different way of using Commands.
+- 这就是说明当我们接受到事件时CallWebServiceCommand被执行。现在我们得调用web服务来取得数据，这和上面的Command用法有所不同。
+- using System;
+- using System.Collections;
+- using UnityEngine;
+- using strange.extensions.context.api;
+- using strange.extensions.command.impl;
+- using strange.extensions.dispatcher.eventdispatcher.api;
+-  
+- namespace strange.examples.myfirstproject
+- {
+  -   public class CallWebServiceCommand : EventCommand
+  -   {
+  -       [Inject]
+  -       public IExampleModel model{get;set;}
+  -      
+  -       [Inject]
+  -       public IExampleService service{get;set;}
+-  
+  -       public override void Execute()
+  -       {
+  -           Retain ();
+  -           service.dispatcher.AddListener
+  -               (ExampleEvent.FULFILL_SERVICE_REQUEST, onComplete);
+  -           string url = evt.data as string
+  -           service.Request(url);
+  -       }
+  -      
+  -       private void onComplete(IEvent result)
+  -       {
+  -           service.dispatcher.RemoveListener
+  -                             (ExampleEvent.FULFILL_SERVICE_REQUEST, onComplete);
+  -           model.data = result.data as string;
+  -           dispatcher.Dispatch(ExampleEvent.SCORE_CHANGE, evt.data);
+  -           Release ();
+  -       }
+  -   }
+- }
+- So by now, most of this should be intelligible to you. We’re injecting the ExampleModel and ExampleService into this command. We listen to the service, and call a method on it. We’re using the data payload of the event fired by the mediator (the url). When the service finishes (which could be instantly or in 5ms or in 30 seconds!) it dispatches, triggeringonComplete(). We unmap the listener, set a value on the model, then dispatch a SCORE_CHANGE which is received by the mediator.
+- 现在你应该理解了大部分了。我们将ExampleModel和ExampleService注入到command中。我们监听服务器的返回。当服务器返回，我们会触发onComplete()函数。我们移除监听，在model设置新的数值，然后派发SCORE_CHANGE事件，mediator将会接收到这个事件。
+- This is all great, but if you’ve been paying close attention you’ll recall that I mentioned before that Commands are immediately cleaned up after Execute() complete. So why isn’t this Command garbage collected? The answer is the Retain() method called at the top of the Command. Retain() marks this Command as exempt from cleanup. It will be held onto untilRelease() is called. Obviously, this means that calling Release() is very important, or you run the risk of a memory leak.
+- 当我们调用Retain() 方法后，Command不会被销毁。只有我们再次调用Release() 后，Command才会被销毁。
+- And we’re served…
+- You can look at ExampleModel and ExampleService to see how they work, but they’re really simple. Models are just places to store data, and Services are involved in calling out to the Web (or elsewhere). They really have only one rule, but it’s simple.
+- 我们可以看到ExampleModel和ExampleService代码很简单。Models就是用来存储数据的，Services就是来请求服务器返回的。他们只有一条规则，但很简单。
+- DON’T ALLOW MODELS AND SERVICES TO LISTEN FOR EVENTS.
+- 不允许模型和服务监听事件
+- Let me repeat that. No, nevermind, it’s bold and in caps so you probably heard me. Models and Services are used by Commands, they’re not part of the communication chain, nor should they be used in that way. I can’t emphasize strongly enough that you don’t want to do this.
+- You can certainly inject into them, and there’s nothing the matter with injecting a local dispatcher (as we do here) and allowing it to talk back to your Commands. There’s also nothing wrong with injecting the context dispatcher and dispatching events. But…
+- DON’T ALLOW MODELS AND SERVICES TO LISTEN FOR EVENTS.
+- 不允许模型和服务监听事件
+- Oh, did I say that again? So sorry.
+- Mapping Across Contexts 跨Contexts的映射
+- Generally speaking, you want to abide by the Context boundary. After all, the boundary is there for a reason: it allows parts of your app to function in isolation, increasing modularity. But there are times when some object…perhaps a model, a service or a Signal…needs to be accessible across more than one Context. In v.0.6.0 of Strange we added a mechanism to make this easier, and easy it is:
+- injectionBinder.Bind<IStarship>().To<HeartOfGold>().ToSingleton().CrossContext();
+- Adding CrossContext() signals that the binding should be instantiated across the Context boundary. It will be available to all child Contexts. Note that you can also override a CrossContext binding. If you map the key locally, the local binding will override the CrossContext one.
+- 当你完成某项功能需要跨context访问的时候，提供了一个 CrossContext 函数，如果你使用这个函数该context将会与所有上下文共享
+*** Conclusion结论
+- That wraps up the Big, Strange How-To. You now know a lot about how Strange works and what it can do to make your world a better place. I suggest you try out the multiplecontexts example since that’ll open you up to more possibilities. I also suggest you build something with Strange, since there’s nothing like making for learning. If you’ve never used an IoC framework before, I guarantee it will improve your approach to coding. If you have, I hope it lives up to the experience you’ve had so far.
+- Finally, Strange was written to be extended. An endless number of Binders can be made to allow anything to trigger anything else. As others turn their minds to this way of thinking, I hope we’ll see loads of amazing (and Strange) add-ons.
+- After all, doesn’t everyone love a Strange world?

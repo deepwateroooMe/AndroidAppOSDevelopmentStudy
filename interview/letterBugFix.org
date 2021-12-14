@@ -1,0 +1,58 @@
+#+latex_class: cn-article
+#+title: Letterlullaby Bug Fixes
+#+author: deepwaterooo
+
+* LLA-48 pause menu
+** 调用系统语言
+  #+BEGIN_SRC java
+private Locale[] getSystemLanguageList(){  
+    // 获取Android系统上的语言列表  
+    Locale mLanguagelist[] = Locale.getAvailableLocales();  
+    return mLanguagelist;  
+}  
+private static String getCurrentLauguage(){       
+    // 获取系统当前使用的语言  
+    String mCurrentLanguage = Locale.getDefault().getLanguage();  
+    // 设置成简体中文的时候，getLanguage()返回的是zh  
+    return mCurrentLanguage;          
+}  
+private String getCurrentLauguageUseResources(){  
+    // 获得当前系统语言 
+    Locale locale = getResources().getConfiguration().locale;  
+    String language = locale.getLanguage(); // 获得语言码  
+    return language;  
+}
+
+// 得到Android系统上的语言列表
+Locale mSystemLanguageList[]= Locale.getAvailableLocales();
+// 使用getLanguage()方法和getCountry方法，获取系统设置的语言和区域。 
+// 获取系统当前使用的语言
+String lan =Locale.getDefault().getLanguage();
+// 获取区域
+String country =Locale.getDefault().getCountry();
+// 设置成简体中文的时候，getLanguage()返回的是zh,getCountry()返回的是cn.
+  #+END_SRC
+- others
+  #+BEGIN_SRC java
+// PrintDebug: custome the debug information , has time and red color
+public static void PrintDebug(string debugInfo) {
+    Debug.Log("<color=red>Linkrules: [ " + Time.time + " ] " + debugInfo + "</color>");
+}
+  #+END_SRC
+- another
+  #+BEGIN_SRC java
+//  GetSystemLanguage
+//  With unity4.3 on Android device can't get system language, I found this method on the internet, and i don't know that theory.
+//  Return: "Chinese" or "English"
+static public string GetSystemLanguage() {
+    string systemLanguage;
+    if( Application.platform == RuntimePlatform.Android ) {
+        AndroidJavaClass localeClass = new AndroidJavaClass("java/util/Locale");
+        AndroidJavaObject defaultLocale = localeClass.CallStatic<AndroidJavaObject>("getDefault");
+        AndroidJavaObject usLocale = localeClass.GetStatic<AndroidJavaObject>("US");
+        systemLanguage = defaultLocale.Call<string>("getDisplayLanguage", usLocale);
+    } else 
+        systemLanguage = Application.systemLanguage.ToString();
+    return systemLanguage;
+}
+  #+END_SRC

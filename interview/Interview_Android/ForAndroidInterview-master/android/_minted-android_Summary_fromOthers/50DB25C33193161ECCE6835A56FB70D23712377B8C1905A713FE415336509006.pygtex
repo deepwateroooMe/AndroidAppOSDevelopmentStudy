@@ -1,0 +1,7 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+ \PYG{n}{Fragment} \PYG{n}{newFragment} \PYG{o}{=} \PYG{k}{new} \PYG{n}{ExampleFragment}\PYG{o}{();}
+ \PYG{n}{FragmentTransaction} \PYG{n}{transaction} \PYG{o}{=} \PYG{n}{getFragmentManager}\PYG{o}{().}\PYG{n+na}{beginTransaction}\PYG{o}{();}
+ \PYG{n}{transaction}\PYG{o}{.}\PYG{n+na}{replace}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{id}\PYG{o}{.}\PYG{n+na}{fragment\PYGZus{}container}\PYG{o}{,} \PYG{n}{newFragment}\PYG{o}{);}
+ \PYG{n}{transaction}\PYG{o}{.}\PYG{n+na}{addToBackStack}\PYG{o}{(}\PYG{k+kc}{null}\PYG{o}{);}
+ \PYG{n}{transaction}\PYG{o}{.}\PYG{n+na}{commit}\PYG{o}{();}
+\end{Verbatim}

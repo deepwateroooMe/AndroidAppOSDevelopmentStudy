@@ -1,0 +1,252 @@
+#+latex_class: cn-article
+#+title: Android Coding Assessment Prepare
+#+author: deepwaterooo
+
+* How would you communicate between two Fragments?
+
+All Fragment-to-Fragment communication is done either through a shared ViewModel or through the associated Activity. Two Fragments should never communicate directly.
+
+- The recommended way to communicate between fragments is to create a shared ViewModel object. Both fragments can access the ViewModel through their containing Activity. The Fragments can update data within the ViewModel and if the data is exposed using LiveData the new state will be pushed to the other fragment as long as it is observing the LiveData from the ViewModel.
+#+BEGIN_SRC java
+public class SharedViewModel extends ViewModel {
+    private final MutableLiveData <Item> selected = new MutableLiveData < Item > ();
+    public void select(Item item) {
+        selected.setValue(item);
+    }
+    public LiveData <Item> getSelected() {
+        return selected;
+    }
+}
+public class MasterFragment extends Fragment {
+    private SharedViewModel model;
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        model = ViewModelProviders.of(getActivity()).get(SharedViewModel.class);
+        itemSelector.setOnClickListener(item -> {
+                model.select(item);
+            });
+    }
+}
+public class DetailFragment extends Fragment {
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        SharedViewModel model = ViewModelProviders.of(getActivity()).get(SharedViewModel.class);
+        model.getSelected().observe(this, {
+                item ->
+                    // Update the UI.
+                    // model.select(item); // 这行充当占位符，复制的上面的
+                    });
+    }
+}
+#+END_SRC
+- Another way is to define an interface in your Fragment A, and let your Activity implement that Interface. Now you can call the interface method in your Fragment, and your Activity will receive the event. Now in your activity, you can call your second Fragment to update the textview with the received value.
+
+* What are Retained Fragments?
+- By default, Fragments are destroyed and recreated along with their parent Activity’s when a configuration change occurs.
+- Calling setRetainInstance(true) allows us to bypass this destroy-and-recreate cycle, signaling the system to retain the current instance of the fragment when the activity is recreated.
+
+* What are the permission protection levels in Android?
+- Normal — A lower-risk permission that gives requesting applications access to isolated application-level features, with minimal risk to other applications, the system, or the user. The system automatically grants this type of permission to a requesting application at installation, without asking for the user’s explicit approval.
+- Dangerous — A higher-risk permission. Any dangerous permissions requested by an application may be displayed to the user and require confirmation before proceeding, or some other approach may be taken to avoid the user automatically allowing the use of such facilities.
+- Signature — A permission that the system grants only if the requesting application is signed with the same certificate as the application that declared the permission. If the certificates match, the system automatically grants the permission without notifying the user or asking for the user’s explicit approval.
+- SignatureOrSystem — A permission that the system grants only to applications that are in the Android system image or that are signed with the same certificate as the application that declared the permission.
+
+* What is Android Data Binding?
+
+The Data Binding Library is a support library that allows you to bind UI components in your layouts to data sources in your app using a declarative format rather than programmatically.
+
+Layouts are often defined in activities with code that calls UI framework methods. For example, the code below calls findViewById() to find a TextView widget and bind it to the userName property of the viewModel variable:
+
+#+BEGIN_SRC java
+TextView textView = findViewById(R.id.sample_text);
+textView.setText(viewModel.getUserName());
+#+END_SRC
+
+The following example shows how to use the Data Binding Library to assign text to the widget directly in the layout file. This removes the need to call any of the Java code shown above.
+
+#+BEGIN_SRC java
+<TextView
+    android:text="@{viewmodel.userName}" />
+#+END_SRC
+
+- The pros of using Android Data Binding:
+  - Reduces boilerplate code which in turns brings
+  - Less coupling
+  - Stronger readability
+  - Powerful, easy to implement custom attribute and custom view
+  - Even faster than findViewById - The binding does a single pass on the View hierarchy, extracting the Views with IDs. This mechanism can be faster than calling findViewById for several Views.
+
+* What is the ViewHolder pattern? Why should we use it?
+
+Every time when the adapter calls getView() method, the findViewById() method is also called. This is a very intensive work for the mobile CPU and so affects the performance of the application and the battery consumption increases. ViewHolder is a design pattern which can be applied as a way around repeated use of findViewById().
+
+A ViewHolder holds the reference to the id of the view resource and calls to the resource will not be required after you "find" them: Thus performance of the application increases.
+#+BEGIN_SRC java
+private static class ViewHolder {
+    final TextView text;
+    final TextView timestamp;
+    final ImageView icon;
+    final ProgressBar progress;
+
+    ViewHolder(TextView text, TextView timestamp, ImageView icon, ProgressBar progress) {
+        this.text = text;
+        this.timestamp = timestamp;
+        this.icon = icon;
+        this.progress = progress;
+    }
+}
+public View getView(int position, View convertView, ViewGroup parent) {
+    View view = convertView;
+    if (view == null) {
+        view = // inflate new view
+        ViewHolder holder = createViewHolderFrom(view);
+        view.setTag(holder);  
+    }
+    ViewHolder holder = view.getTag();
+    // TODO: set correct data for this list item
+    // holder.icon.setImageDrawable(...)
+    // holder.text.setText(...)
+    // holder.timestamp.setText(...)
+    // holder.progress.setProgress(...)
+    return view;
+}
+private ViewHolder createViewHolderFrom(View view) {
+    ImageView icon = (ImageView) view.findViewById(R.id.listitem_image);
+    TextView text = (TextView) view.findViewById(R.id.listitem_text);
+    TextView timestamp = (TextView) view.findViewById(R.id.listitem_timestamp);
+    ProgressBar progress = (ProgressBar) view.findViewById(R.id.progress_spinner);
+    return new ViewHolder(text, timestamp, icon, progress);
+}
+#+END_SRC
+- View.setTag(Object) allows you to tell the View to hold an arbitrary object. If we use it to hold an instance of our ViewHolder after we do our findViewById(int) calls, then we can use View.getTag() on recycled views to avoid having to make the calls again and again.
+
+* Activity横竖屏切换生命周期变化
+** 新建一个Activity，并把各个生命周期打印出来
+onCreate,
+创建activity时调用。设置在该方法中，还以Bundle中可以提出用于创建该 Activity 所需的信息。
+onStart,
+activity变为在屏幕上对用户可见时，即获得焦点时，会调用。
+onResume,
+activity开始与用户交互时调用（无论是启动还是重新启动一个活动，该方法总是被调用的）
+onSaveInstanceState
+onPause,
+activity被暂停或收回cpu和其他资源时调用，该方法用于保存活动状态的
+onStop,
+activity被停止并转为不可见阶段及后续的生命周期事件时，即失去焦点时调用
+onDestroy,
+activity被完全从系统内存中移除时调用，该方法被调用可能是因为有人直接调用 finish()方法 或者系统决定停止该活动以释放资源。
+onRestoreInstanceState,
+Android在横竖排切换时候，将主动销毁activity和重新创建一个新的activity出来，在此过程中，onRestoreInstanceState就要被回调
+onConfigurationChanged,
+配置指定属性后,屏幕方向发生变化后回调此函数.
+** 运行Activity，得到如下信息
+#+BEGIN_SRC java
+onCreate  -->
+onStart  -->
+onResume  -->
+#+END_SRC
+** 按crtl+f12切换成横屏时
+#+BEGIN_SRC java
+onPause  -->
+onStop  -->
+onDestroy  -->
+onCreate  -->
+onStart  -->
+onRestoreInstanceState  -->
+onResume  -->
+#+END_SRC
+** 再按crtl+f12切换成竖屏时，发现又打印了相同的log
+#+BEGIN_SRC java
+onPause  -->
+onStop  -->
+onDestroy  -->
+onCreate  -->
+onStart  -->
+onRestoreInstanceState  -->
+onResume  -->
+#+END_SRC
+** 修改AndroidManifest.xml
+把该Activity添加
+#+BEGIN_SRC java
+android:configChanges="orientation"，
+#+END_SRC
+执行步骤3(切换成横屏时)
+#+BEGIN_SRC java
+onPause  -->
+onStop  -->
+onDestroy  -->
+onCreate  -->
+onStart  -->
+onRestoreInstanceState  -->
+onResume  -->
+#+END_SRC
+** 再执行步骤4(切换竖屏)，发现再打印相同信息
+#+BEGIN_SRC java
+onPause  -->
+onStop  -->
+onDestroy  -->
+onCreate  -->
+onStart  -->
+onRestoreInstanceState  -->
+onResume  -->
+#+END_SRC
+
+* What is the difference between Handler vs AsyncTask vs Thread?
+Mid 
+Top 113 Android Interview Questions  Android  113  
+Answer
+The Handler class can be used to register to a thread and provides a simple channel to send data to this thread. A Handler allows you communicate back with the UI thread from other background thread.
+The AsyncTask class encapsulates the creation of a background process and the synchronization with the main thread. It also supports reporting progress of the running tasks.
+And a Thread is basically the core element of multithreading which a developer can use with the following disadvantage:
+Handle synchronization with the main thread if you post back results to the user interface
+No default for canceling the thread
+No default thread pooling
+No default for handling configuration changes in Android
+Having Tech or Coding Interview? Check 👉 113 Android Interview Questions
+Source: stackoverflow.com
+* What is the difference between compileSdkVersion and targetSdkVersion?
+Mid 
+Top 113 Android Interview Questions  Android  113  
+Answer
+The compileSdkVersion is the version of the API the app is compiled against. This means you can use Android API features included in that version of the API (as well as all previous versions, obviously). If you try and use API 16 features but set compileSdkVersion to 15, you will get a compilation error. If you set compileSdkVersion to 16 you can still run the app on a API 15 device as long as your app's execution paths do not attempt to invoke any APIs specific to API 16.
+
+The targetSdkVersion has nothing to do with how your app is compiled or what APIs you can utilize. The targetSdkVersion is supposed to indicate that you have tested your app on (presumably up to and including) the version you specify. This is more like a certification or sign off you are giving the Android OS as a hint to how it should handle your app in terms of OS features.
+* What is the difference between a Bundle and an Intent?
+Mid 
+Top 113 Android Interview Questions  Android  113  
+Answer
+A Bundle is a collection of key-value pairs.
+However, an Intent is much more. It contains information about an operation that should be performed. This new operation is defined by the action it can be used for, and the data it should show/edit/add. The system uses this information for finding a suitable app component (activity/broadcast/service) for the requested action.
+Think of the Intent as a Bundle that also contains information on who should receive the contained data, and how it should be presented.
+
+
+* 项目中用到的小点
+#+BEGIN_SRC xm
+android.useAndroidX=true
+landroid.enableJetifier=true
+#+END_SRC
+
+- 什么是Jetifier？ 例如，要使用androidx打包的依赖项创建新项目，此新项目需要在gradle.properties文件中添加以下行：
+
+java version 8
+ compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+import android.os.Bundle;
+import android.support.design.widget.FloatingActionButton;
+import android.support.design.widget.Snackbar;
+import android.view.View;
+import android.view.Menu;
+import android.view.MenuItem;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.snackbar.Snackbar;
+
+    <com.me.generalprac.CustomTitleView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+    <include layout="@layout/custom_title"/>
+

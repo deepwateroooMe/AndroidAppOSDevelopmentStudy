@@ -1,0 +1,114 @@
+#+latex_class: cn-article
+#+title: Unity UI/GUI/UGUI/NGUI
+#+author: deepwaterooo
+ 
+* Unity UI/GUI/UGUI/NGUI
+** Unity3D快速实现UI架构设计一
+- https://blog.csdn.net/jxw167/article/details/72057771
+
+** NGUI与UGUI最详细对比
+- http://www.u3dc.com/archives/412
+- 1.ugui的ui根目录为canvas（画布），ngui则是uiroot。在命名上官方似乎更贴合想象力。
+- 2.在屏幕自适应方面，ugui为render mode。ngui则为scaling style。
+- 3.anchor（锚点）的使用方式差不多，都是用来固定位置，在可视化方面，ugui的花瓣锚点真不太好调。
+- 4.ngui灵活性不是一般的高，随意创建一个sprite，加了boxcollider，它就可以是按钮、滑动条……
+- 5.ugui的sprite的切图功能真心不错。ngui使用图集不能直接拖拉（毕竟是三方插件）略不方便。
+- 6.ngui的tween动画功能很省心，无需额外定义代码，使用封装好的脚本就可以实现一些简单动画，叠加脚本甚至能实现相对复杂的动画效果。
+- 最后，强大的网友分享了一张比较全面的对比图（点击图片放大）：
+-   [[./pic/ngui-ugui.png]]
+** 关于Unity中的UGUI优化，你可能遇到这些问题
+- https://blog.uwa4d.com/archives/QA_UGUI-1.html
+*** 界面制作
+**** UGUI里的这个选项 ，应该是ETC2拆分Alpha通道的意思，但是在使用中并没起作用？请问有没有什么拆分的标准和特别要求呢？
+
+  [[./pic/ugui1.jpg]]
+- 据我们所知，alpha split 的功能最初只对 Unity 2D 的 Sprite（SpriteRenderer）有完整的支持，而UI的支持是在Unity 5.4版本之后的。建议大家在Unity 5.4版本以后的UGUI中尝试该功能。
+**** 在UI界面中，用Canvas还是用RectTransform做根节点更好？哪种方法效率更高？
+- Canvas划分是个很大的话题。简单来说，因为一个Canvas下的所有UI元素都是合在一个Mesh中的，过大的Mesh在更新时开销很大，所以一般建议每个较复杂的UI界面，都自成一个Canvas(可以是子Canvas)，在UI界面很复杂时，甚至要划分更多的子Canvas。同时还要注意动态元素和静态元素的分离，因为动态元素会导致Canvas的mesh的更新。最后，Canvas又不能细分的太多，因为会导致Draw Call的上升。我们后续将对UI模块做具体的讲解，尽请期待。
+**** UWA性能检测报告中的Shared UI Mesh表示什么呢？
+
+  [[./pic/ugui2.jpg]]
+- Shared UI Mesh是在Unity 5.2 版本后UGUI系统维护的UI Mesh。在以前的版本中，UGUI会为每一个Canvas维护一个Mesh（名为BatchedMesh，其中再按材质分为不同的SubMesh）。而在Unity 5.2版本后，UGUI底层引入了多线程机制，而其Mesh的维护也发生了改变，目前Shared UI Mesh作为静态全局变量，由底层直接维护，其大小与当前场景中所有激活的UI元素所生成的网格数相关。
+- 一般来说当界面上UI元素较多，或者文字较多时该值都会较高，在使用UI/Effect/shadow和UI/Effect/Outline时需要注意该值，因为这两个Effect会明显增加文字所带来的网格数。
+**** 在使用NGUI时，我们通常会将很多小图打成一个大的图集，以优化内存和Draw Call。而在UGUI时代，UI所使用的Image必须是Sprite；Unity提供了SpritePacker。 它的工作流程和UGUI Atlas Paker有较大的差别。在Unity Asset中，我们压根看不到图集的存在。 问题是：
+- 1. SpritePacker大概的工作机制是什么样的？
+- 2. 如果Sprite没有打包成AssetBundle，直接在GameObject上引用，那么在Build时Unity会将分散的Sprite拼接在一起么？如果没有拼接，那SpritePacker是不是只会优化Draw Call，内存占用上和不用SpritePacker的分离图效果一样？
+- 3. 如果将Sprite打成AssetBundle，AssetBundle中的资源是分散的Sprite吗？如果不是，不同的AssetBundle中引用了两张Sprite，这两张Sprite恰好用SpritePacker拼在了一起，是不是就会存在两份拼接的Sprite集？
+- 4. 如果想使用NGUI Atlas Packer的工作流程，该如何去实现？
+  - 简单来说，UGUI和 NGUI 类似，但是更加自动化。只需要通过设定 Packing Tag 即可指定哪些 Sprite 放在同一个 Atlas 下。
+    - 可以通过 Edit -> Project Settings -> Editor -> Sprite Packer 的 Mode 来设置是否起效，何时起效（一种是进入 Play Mode 就生效，一种是 Build 时才生效）。所以只要不选 Disabled，Build 时就会把分散的 Sprite 拼起来。
+    - 可以认为 Sprite 就是一个壳子，实际上本身不包含纹理资源，所以打包的时候会把Atlas 打进去。如果不用依赖打包，那么分开打两个 Sprite 就意味各自的AssetBundle 里都会有一个 Atlas。
+    - 可以通过第三方工具（如 Texture Packer）制作 Atlas，导出 Sprite 信息（如，第 N 个 Sprite 的 Offset 和 Width，Height 等），然后在 Unity 中通过脚本将该 Atlas 转成一个 Multiple Mode 的 Sprite 纹理（即一张纹理上包含了多个 Sprite），同时禁用 Unity 的 Sprite Packer 即可。
+  - 两种做法各有利弊，建议分析一下两种做法对于自身项目的合适程度来进行选择。
+**** 在Unity 5.x版本下，我们在用UGUI的过程中发现它把图集都打进了包里，这样就不能自动更新了，请问图集怎么做自动更新呢？
+- 在Unity 5.x中UGUI使用的Atlas确实是不可见的，因此无法直接将其独立打包。但我们建议，可以把Packing Tag相同的源纹理文件，打到同一个AssetBundle中（设置一样的AssetBundle Name），从而避免Atlas的冗余。同时这样打包可以让依赖它的Canvas的打包更加自由，即不需要把依赖它的Canvas都打在一个AssetBundle中，在更新时直接更新Atlas所在的AssetBundle即可。
+**** ScrollRect在滚动的时候，会产生Canvas.SendwillRenderCanvases，有办法消除吗？
+- ScrollRect在滚动时，会产生OnTransformChanged的开销，这是UI元素在移动时触发的，但通常这不会触发Canvas.SendWillRenderCanvases。
+- 如果观察到Canvas.SendWillRenderCanvases耗时较高，可以检查下ScrollRect所在的Canvas是否开启了Pixel Perfect的选项，该选项的开启会导致UI元素在发生位移时，其长宽会被进行微调（为了对其像素），而ScrollRect中通常有较多的UI元素，从而产生较高的Canvas.SendWillRenderCanvases开销。因此可以尝试关闭Pixel Perfect看效果是否可以接受，或者尝试在滚动过程中暂时关闭Pixel Perfect等方式来消除其开销。
+*** 网格重建
+**** 我在UGUI里更改了Image的Color属性，那么Canvas是否会重建？我只想借用它的Color做Animation里的变化量。
+- 如果修改的是Image组件上的Color属性，其原理是修改顶点色，因此是会引起网格的Rebuild的（即Canvas.BuildBatch操作，同时也会有Canvas.SendWillRenderCanvases的开销）。而通过修改顶点色来实现UI元素变色的好处在于，修改顶点色可以保证其材质不变，因此不会产生额外的Draw Call。
+**** Unity自带的UI Shader处理颜色时，改_Color属性不会触发顶点重建吗?
+- 在UI的默认Shader中存在一个Tint Color的变量，正常情况下，该值为常数(1,1,1)，且并不会被修改。如果是用脚本访问Image的Material，并修改其上的Tint Color属性时，对UI元素产生的网格信息并没有影响，因此就不会引起网格的Rebuild。但这样做因为修改了材质，所以会增加一个Draw Call。
+**** 能否就UGUI Batch提出一些建议呢？是否有一些Batch的规则？
+- 在 UGUI 中，Batch是以Canvas为单位的，即在同一个Canvas下的UI元素最终都会被Batch到同一个Mesh中。而在Batch前，UGUI会根据这些UI元素的材质（通常就是Atlas）以及渲染顺序进行重排，在不改变渲染结果的前提下，尽可能将相同材质的UI元素合并在同一个SubMesh中，从而把DrawCall降到最低。而Batch的操作只会在UI元素发生变化时才进行，且合成的Mesh越大，操作的耗时也就越大。
+- 因此，我们建议尽可能把频繁变化（位置，颜色，长宽等）的UI元素从复杂的Canvas中分离出来，从而避免复杂的Canvas频繁重建。
+**** 我用的是UGUI Canvas，Unity 5.3.4版本，请问如何查看每次Rebuild Batch影响的顶点数， Memory Profiler是个办法但是不好定位。
+- 由于Unity引擎在5.2后开始使用Shared UI Mesh来存储UI Mesh，所以确实很难查看每次Rebuild的UI顶点数。但是，研发团队可以尝试通过Frame Debugger工具对UI界面进行进一步的查看。
+**** 动静分离或者多Canvas带来性能提升的理论基础是什么呢？如果静态部分不变动，整个Canvas就不刷新了？
+- 在UGUI中，网格的更新或重建（为了尽可能合并UI部分的DrawCall）是以Canvas为单位的，且只在其中的UI元素发生变动（位置、颜色等）时才会进行。因此，将动态UI元素与静态UI元素分离后，可以将动态UI元素的变化所引起的网格更新或重建所涉及到的范围变小，从而降低一定的开销。而静态UI元素所在的Canvas则不会出现网格更新和重建的开销。
+**** UWA建议“尽可能将静态UI元素和频繁变化的动态UI元素分开，存放于不同的Panel下。同时，对于不同频率的动态元素也建议存放于不同的Panel中。”那么请问，如果把特效放在Panel里面，需要把特效拆到动态的里面吗？
+- 通常特效是指粒子系统，而粒子系统的渲染和UI是独立的，仅能通过Render Order来改变两者的渲染顺序，而粒子系统的变化并不会引起UI部分的重建，因此特效的放置并没有特殊的要求。
+**** 多人同屏的时候，人物移动会使得头顶上的名字Mesh重组，从而导致较为严重的卡顿，请问一下是否有优化的办法？
+- 如果是用UGUI开发的，当头顶文字数量较多时，确实很容易引起性能问题，可以考虑从以下几点入手进行优化：
+  - 尽可能避免使用UI/Effect，特别是Outline，会使得文本的Mesh增加4倍，导致UI重建开销明显增大；
+  - 拆分Canvas，将屏幕中所有的头顶文字进行分组，放在不同的Canvas下，一方面可以降低更新的频率（如果分组中没有文字移动，该组就不会重建），另一方面可以减小重建时涉及到的Mesh大小（重建是以Canvas为单位进行的）；
+  - 降低移动中的文字的更新频率，可以考虑在文字移动的距离超过一个阈值时才真正进行位移，从而可以从概率上降低Canvas更新的频率。
+*** 界面切换
+**** 游戏中出现UI界面重叠，该怎么处理较好？比如当前有一个全屏显示的UI界面，点其中一个按钮会再起一个全屏界面，并把第一个UI界面盖住。我现在的做法是把被覆盖的界面 SetActive(False)，但发现后续 SetActive(True) 的时候会有 GC.Alloc 产生。这种情况下，希望既降低 Batches 又降低 GC Alloc 的话，有什么推荐的方案吗？
+- 可以尝试通过添加一个 Layer 如 OutUI， 且在 Camera 的 Culling Mask 中将其取消勾选（即不渲染该 Layer）。从而在 UI 界面切换时，直接通过修改 Canvas 的 Layer 来实现“隐藏”。但需要注意事件的屏蔽，禁用动态的 UI 元素等等。
+- 这种做法的优点在于切换时基本没有开销，也不会产生多余的 Draw Call，但缺点在于“隐藏时”依然还会有一定的持续开销（通常不太大），而其对应的 Mesh 也会始终存在于内存中（通常也不太大）。
+- 以上的方式可供参考，而性能影响依旧是需要视具体情况而定。
+**** 如图，我们在UI打开或者移动到某处的时候经常会观测到CPU上的冲激，经过进一步观察发现是因为Instantiate产生了大量的GC。想请问下Instantiate是否应该产生GC呢？我们能否通过资源制作上的调整来避免这样的GC呢？如下图，因为一次性产生若干MB的GC在直观感受上还是很可观的。
+
+  [[./pic/ugui3.jpg]]
+- 准确的说这些 GC Alloc 并不是由Instantiate 直接引起的，而是因为被实例化出来的组件会进行 OnEnable 操作，而在 OnEnable 操作中产生了 GC，比如以上图中的函数为例：
+- 上图中的 Text.OnEnable 是在实例化一个 UI 界面时，UI 中的文本（即 Text 组件）进行了 OnEnable 操作，其中主要是初始化文本网格的信息（每个文字所在的网格顶点，UV，顶点色等等属性），而这些信息都是储存在数组中（即堆内存中），所以文本越多，堆内存开销越大。但这是不可避免的，只能尽量减少出现次数。
+- 因此，我们不建议通过 Instantiate/Destroy 来处理切换频繁的 UI 界面，而是通过 SetActive(true/false)，甚至是直接移动 UI 的方式，以避免反复地造成堆内存开销。
+*** 加载相关
+**** UGUI的图集操作中我们有这么一个问题，加载完一张图集后，使用这个方式获取其中一张图的信息：assetBundle.Load (subFile, typeof (Sprite)) as Sprite; 这样会复制出一个新贴图（图集中的子图），不知道有什么办法可以不用复制新的子图，而是直接使用图集资源 。
+
+  [[./pic/ugui4.png]]
+- 经过测试，这确实是 Unity 在 4.x 版本中的一个缺陷，理论上这张“新贴图（图集中的子图）”是不需要的，并不应该加载。 因此，我们建议通过以下方法来绕过该问题：
+- 在 
+  #+BEGIN_SRC csharp
+assetBundle.Load (subFile, typeof (Sprite)) as Sprite; 
+  #+END_SRC
+之后，调用
+#+BEGIN_SRC csharp
+Texture2D t = assetBundle.Load (subFile, typeof (Texture2D)) as Texture2D;
+Resources.UnloadAsset(t);
+#+END_SRC
+- 从而卸载这部分多余的内存。
+**** 加载UI预制的时候，如果把特效放到预制里，会导致加载非常耗时。怎么优化这个加载时间呢？
+- UI和特效（粒子系统）的加载开销在多数项目中都占据较高的CPU耗时。UI界面的实例化和加载耗时主要由以下几个方面构成：
+- 纹理资源加载耗时
+  - UI界面加载的主要耗时开销，因为在其资源加载过程中，时常伴有大量较大分辨率的Atlas纹理加载，我们在之前的Unity加载模块深度分析之纹理篇有详细讲解。对此，我们建议研发团队在美术质量允许的情况下，尽可能对UI纹理进行简化，从而加快UI界面的加载效率。
+
+  [[./pic/ugui5.jpg]]
+- UI网格重建耗时
+  - UI界面在实例化或Active时，往往会造成Canvas（UGUI）或Panel（NGUI）中UIDrawCall的变化，进而触发网格重建操作。当Canvas或Panel中网格量较大时，其重建开销也会随之较大。
+- UI相关构造函数和初始化操作开销
+  - 这部分是指UI底层类在实例化时的ctor开销，以及OnEnable和OnDisable的自身开销。
+- 上述2和3主要为引擎或插件的自身逻辑开销，因此，我们应该尽可能避免或降低这两个操作的发生频率。我们的建议如下：
+  - 在内存允许的情况下，对于UI界面进行缓存。尽可能减少UI界面相关资源的重复加载以及相关类的重复初始化；
+  - 根据UI界面的使用频率，使用更为合适的切换方式。比如移进移出或使用Culling Layer来实现UI界面的切换效果等，从而降低UI界面的加载耗时，提升切换的流畅度。
+  - 对于特效（特别是粒子特效）来说，我们暂时并没有发现将UI界面和特效耦合在一起，其加载耗时会大于二者分别加载的耗时总和。因此，我们仅从优化粒子系统加载效率的角度来回答这个问题。粒子系统的加载开销，就目前来看，主要和其本身组件的反序列化耗时和加载数量相关。对于反序列化耗时而言，这是Unity引擎负责粒子系统的自身加载开销，开发者可以控制的空间并不大。对于加载数量，则是开发者需要密切关注的，因为在我们目前看到的项目中，不少都存在大量的粒子系统加载，有些项目的数量甚至超过1000个，如下图所示。因此，建议研发团队密切关注自身项目中粒子系统的数量使用情况。一般来说，建议我们建议粒子系统使用数量的峰值控制在400以下。
+
+  [[./pic/ugui6.png]]
+**** 我有一个UI预设，它使用了一个图集， 我在打包的时候把图集和UI一起打成了AssetBundle。我在加载生成了GameObject后立刻卸载了AssetBundle对象， 但是当我后面再销毁GameObject的时候发现图集依然存在，这是什么情况呢？
+- 这是很可能出现的。unload(false)卸载AssetBundle并不会销毁其加载的资源 ，是必须对其调用Resources.UnloadAsset，或者调用Resources.UnloadUnusedAssets才行。关于AssetBundle加载的详细解释可以参考我们之前的文章：你应该知道的AssetBundle管理机制。
+*** 字体相关
+**** 我在用Profiler真机查看iPhone App时，发现第一次打开某些UI时，Font.CacheFontForText占用时间超过2s，这块主要是由什么影响的?若iPhone5在这个接口消耗2s多，是不是问题很大？这个消耗和已经生成的RenderTexture的大小有关吗？
+- Font.CacheFontForText主要是指生成动态字体Font Texture的开销, 一次性打开UI界面中的文字越多，其开销越大。如果该项占用时间超过2s，那么确实是挺大的，这个消耗也与已经生成的Font Texture有关系。简单来说，它主要是看目前Font Texture中是否有地方可以容下接下来的文字，如果容不下才会进行一步扩大Font Texture，从而造成了性能开销。
+

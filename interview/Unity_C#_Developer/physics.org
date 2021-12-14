@@ -1,0 +1,241 @@
+#+latex_class: cn-article
+#+title: Unity3D - 物理引擎
+#+author: deepwaterooo
+
+* Unity3D - 物理引擎
+** Unity3D - 物理引擎之刚体部件(Rigidbody)详解
+- 在虚拟世界中，任何物体都是没有活力的，要想变的真实，Rigidbody是必不可少的组件，下面介绍Rigidbody的各个属性：
+  - Mass：质量
+  - Drag：阻力，对象在运动时遇到的空气阻力，0表示没有空气阻力，好比丢一个东西出去，如果这个东西没有阻力的话，则会一直不停的向你丢的方向所运动。
+  - Angular Drag：角阻力也称 扭矩力 ， 扭矩力是 使物体发生转动的 一种特殊的力炬 。
+  - Use Gravity：使用重力，开启后会受到重力影响。
+  - Is Kinematic：是否开启动力学，开启后不在受物理引擎的影响，只能通过Transform属性来操作。此属性一般用来模拟平台的移动，或带有铰链关节链接刚体的动画。
+  - Interpolate：插值，用于控制刚体运动抖动的情况，有以下三种值可选。
+  - None：没有插值 
+  - Interpolate：内插值，基于前一帧的Transform来平滑此次的Transfomr。 
+  - Extrapolate：外插值，基于下一帧的Transform来平滑此次的Transform。
+  - Collsion Detection：碰撞检测，用于控制避免高速运动的对象穿过其他对象而未发生碰撞。
+  - Discrete：离散碰撞检测（默认值），与场景中其他多有碰撞体进行碰撞检测。 
+  - Continuous：连续碰撞检测，此模式对物理性能会有很大影响，如果不需要对快速运动的对象进行碰撞检测，就是用离散模式。 
+  - Continuous Dynamic：连续动态碰撞检测模式。
+  - Constraints：约束，控制对刚体运动的约束。
+  - Freeze Position：冻结位置，刚体对象在世界坐标系中的X,YZ,轴方向上的移动将无效 
+  - Freeze Rotation：冻结旋转
+- 刚体会使对象在物理引擎下运动，真实模拟一个物体在现实世界中受到力后的行为。
+- 通常如果使用了刚体来操作游戏对象时没必要再对其Transform进行操作。
+
+** Unity3D Rigidbody详解
+- 刚体能让你的游戏对象被物理引擎所控制，它能通过受到推力和扭力来实现真实的物理表现效果。所有游戏对象必须包含刚体组件来实现重力、通过脚本施加力、或者与其他对象进行交互，这一切都通过NVIDIA的PhysX物理引擎来实现。
+*** 属性
+- Mass: 质量，单位为Kg，建议不要让对象之间的质量差达到100倍以上
+- Drag: 空气阻力，为0表示没有阻力，infinity表示立即停止移动
+- Angular Drag: 扭力的阻力，数值意义同上
+- Use Gravity: 是否受重力影响
+- Is Kinematic: 是否为Kinematic刚体，如果启用该参数，则对象不会被物理所控制，只能通过直接设置位置、旋转和缩放来操作它，一般用来实现移动平台，或者带有HingeJoint的动画刚体
+- Interpolate: 如果你的刚体运动时有抖动，尝试一下修改这个参数，None表示没有插值，Interpolate表示根据上一桢的位置来做平滑插值，Extrapolate表示根据预测的下一桢的位置来做平滑插值
+- Freeze Rotation: 如果选中了该选项，那么刚体将不会因为外力或者扭力而发生旋转，你只能通过脚本的旋转函数来进行操作
+- Collision Detection: 碰撞检测算法，用于防止刚体因快速移动而穿过其他对象
+- Constraints: 刚体运动的约束，包括位置约束和旋转约束，勾选表示在该坐标上不允许进行此类操作
+*** 详细描述
+- 刚体让你的游戏对象处于物理引擎的控制之下，这打开了实现真实碰撞，各种连接类型，以及其他各种效果的大门。通过给刚体施加外力来移动它，与以前的通过设置其位置变换来移动它有非常大的不同。通常情况下，你不会同时操作刚体和变换，你只会使用其中之一。
+- 这两者之间最大的差异在于力(Forces)的使用，刚体能接受推力和扭力，变换不可以。变换同样可以实现位置变化与旋转，但这与通过物理引擎来实现是不一样的。给刚体施加力来移动他的时候同时也会影响对象的变换数值，这也是为什么只能使用这两者之一的原因，如果同时直接操作了刚体的变换，那么在执行碰撞和其他操作的时候会出问题。
+- 你必须显示的将刚体组件添加到你的游戏对象上，通过菜单项 Component -> Physics -> Rigidbody即可添加，之后对象就处于物理引擎控制之下了，他会受到重力的影响而下落，也能够通过脚本来受力，不过你可能还需要添加一个Collider或者Joint来让他表现的更像你所期望的。
+**** Parenting
+- 当一个对象处于物理引擎控制之下，他的运动将会与其父对象的移动半独立开。如果你移动任意的父对象，他们将会拉动刚体子对象，然而，刚体在重力及碰撞影响下还会下落。
+**** Scripting
+- 控制刚体的方法主要是通过脚本来施加推力和扭力，通过在刚体对象上调用AddForce()和AddTorque()方法。再次注意，当你使用物理引擎来控制刚体的时候，不要直接操作对象的变换数值。
+**** Animation
+- 在某些时候，主要是创建纸娃娃效果的时候，你可能需要在动画与物理控制之间进行切换。你可以将刚体设置为IsKinematic，当设置为Kinematic模式，它将不再受到外力影响。这时你只能通过变换方式来操作对象，但是Kinematic刚体还会影响其他刚体，但他自己不会再受物理引擎控制。比如，连在Kinematic刚体上的Joints还会继续影响连接的另一个非Kinematic刚体，同时也能够给其他刚体产生碰撞力。
+**** Colliders
+- 碰撞体是另一类必须手动添加的的组件，用来让对象能够发生碰撞。当两个刚体接触到一起的时候，除非两个刚体都设置了碰撞属性，否则物理引擎是不会计算他们的碰撞的。没有碰撞体的刚体在进行物理模拟的时候将会简单的穿过其他刚体。
+**** Composed Colliders
+- 由多个基本的碰撞体对象组合而成，扮演一个独立的碰撞体对象。当你有一个复杂的模型，而你又不能使用Mesh Collider的时候就可以使用组合碰撞体。
+**** Continuous Collision Detection
+- CCD用来防止快速移动的物体穿过其他对象。
+- 当使用默认的离散式碰撞检测时，如果前一桢时对象在墙这一面，下一桢时对象已到到了墙另一面，那么碰撞检测算法将检测不到碰撞的发生，你可以将该对象的碰撞检测属性设置为Continuous，这时碰撞检测算法将会防止对象穿过所有的静态碰撞体，设置为Continuous Dynamic将还会防止穿过其他也设置为Continuous或者Continuous Dynamic的刚体。
+- CCD只支持Box，Sphere和Capsule的碰撞体。
+*** Use The Right Size
+- 当使用物理引擎的时候，游戏对象的大小比刚体的质量更重要。如果你发现刚体的行为不是你所期望的，比如移动的太慢，漂浮，或者不能正确的进行碰撞，尝试一下修改你的模型的缩放值。Unity的默认单位是1 unit = 1 米，物理引擎的计算也是按照这个单位来的。比如，一个摩天大楼的倒塌与一个由积木搭成的玩具房子的倒塌是完全不一样的，所以，不同大小的对象在建模时都应该按照统一的比例。
+- 对于一个人类角色模型来说，他应该有2米高。可以创建一个Box来作为参照物，默认的Box为1米，所以一个角色应该是Box的两倍高。
+- 当然，你也可以通过修改导入模型的缩放来调整比例，如果你不能直接修改模型本身的话。在Project面板中选中模型，调整其Importer属性，注意不是变换里的缩放。
+- 如果你的游戏需要你实例化具有不同缩放值的对象，你也可以调整变换里的缩放值，但是物理引擎来创建这个对象的时候会额外多做一点工作，这可能会引起一点性能问题。
+- 这个问题不会太严重，但性能显然会比上面两种方法低。
+- 同样要注意的是，non-uniform scales也会引起一些问题，如果这个对象具有父对象的话。基于以上原因，尽可能的在制作模型的时候就按照Unity的比例来建模。
+*** Hints
+- 两个刚体的相对质量决定他们在碰撞的时候将会如何反应。
+- 给刚体设置更大的质量并不会让它下降的更快，如果要实现这个目的，使用Drag参数。
+- 低的阻力值使得对象看起来更重，高的阻力值使对象看起来更轻。
+- 典型的Drag值介于0.001(固体金属)到10(羽毛)之间。
+- 如果你想同时使用变换和物理来控制对象，那么给他一个刚体组件并将其设置为Kinematic
+- 如果你通过变换来移动对象，同时又想收到对象的碰撞消息，那么必须给他一个刚体组件。
+- Mass（质量）：
+- 学过物理的同学们都知道的吧，质量越大，惯性越大。这里的单位可以自己统一规定，但是官方给出的建议是场景中的物体质量最好不要相差100倍率以上。估计是防止两个质量相差太大的物体碰撞后会产生过大的速度，从而影响游戏性能吧。Drag（阻力）：这里指的是空气阻力，当游戏物体收到某个作用力的时候，这个值越大越难移动。如果设置成无限的话，物体会立即停止移动。Angular Drag（角阻力）：
+- 同样指的是空气阻力，只不过是用来阻碍物体旋转的。如果设置成无限的话，物体会立即停止旋转。Use Gravity（使用重力）：
+- 勾选了这个项，游戏对象就会受到重力影响。Is Kinematic（是否动态）：
+- 勾选这个选项会使游戏对象不受物理引擎的影响，但这不等同于没有刚体组件。这通常用于需要用动画控制的刚体，这样就不会因为惯性而影响动画了。Interplate（差值类型）：如果看到刚体移动的时候一直抽风或者运动的不是很平滑，可以选择一种平滑方式：
+- None（无差值）：不使用差值平滑。
+- Interpolate（差值）：根据上一帧来平滑移动。
+- Extrapolate（推算）：根据推算下一帧物体的位置来平滑移动。Collision Detection（碰撞检测方式）：
+- Discrete（离散）：默认的碰撞检测方式。但若当物体A运动很快的时候，有可能前一帧还在B物体的前面，后一帧就在B物体后面了，这种情况下不会触发碰撞事件，所以如果需要检测这种情况，那就必须使用后两种检测方式。
+- Continuous（连续）：这种方式可以与有静态网格碰撞器的游戏对象进行碰撞检测。
+- Continuous Dynamic（动态连续）：这种方式可以与所有设置了2或3方式的游戏对象进行碰撞检测。Freeze Position/Rotation（冻结位置/旋转）：
+- 可以对物体在X、Y、Z三个轴上的位置/旋转进行锁定，即使受到相应的力也不会改变，但可以通过脚本来修改。
+- 最后顺便再提一下恒力组件（Constant Force），由于比较容易理解我就不做详细介绍了。一共有4个参数，分别是Force/Relative Force（世界/相对作用力）、Torque/Relative Torque（世界/相对扭力）。这些参数代表了附加在刚体上的XYZ轴方向恒力的大小，另外还要注意必须是刚体才可以添加恒力。有兴趣可以自己尝试一下给物体一个Y轴方向的力，物体就会像火箭一样飞向天际，哈哈。
+** Unity EventSystem 详解（Unity Version 5.5.1）
+- https://www.jianshu.com/p/229d9abc7bd9
+- 起因：想使用UGUI给项目设计一个万能拖拽系统（2d-3d，3d-3d, 3d-2d），做了快两天了，完成度99%，但就是有点小BUG无法解决，天气又冷，烦恼。
+- 静下心来，觉得还是对unity 的事件系统不熟悉，今晚坐下来读了读官网文档（终于），收获不小，写在这里，也算是一个记录：
+*** Unity EventSystem
+- Message System
+- Input Modules
+- Supported Events
+- Raycasters
+*** Message System（改进的消息系统）
+- 基本上可以看成是以前SendMessage的升级版。
+- 使用方法(照抄官网)：
+  - step1. 声明一个接口，继承自IEventSystemHandler
+    #+BEGIN_SRC csharp
+public interface ICustomMessageTarget : IEventSystemHandler {
+    // functions that can be called via the messaging system
+    void Message1();
+    void Message2();
+}
+    #+END_SRC
+  - step2. 实现这个接口 , 把这个脚本挂在某个物体上，这里假设为物体AAA
+    #+BEGIN_SRC csharp
+public class CustomMessageTarget : MonoBehaviour, ICustomMessageTarget {
+    public void Message1() {
+        Debug.Log ("Message 1 received");
+    }
+    public void Message2() {
+        Debug.Log ("Message 2 received");
+    }
+}
+    #+END_SRC
+  - step3. 在任何脚本中使用ExecuteEvents静态类发送Message，来执行接口中定义的方法
+    #+BEGIN_SRC csharp
+//target should be AAA
+ExecuteEvents.Execute<ICustomMessageTarget>(target, null, (x,y) => x.Message1());
+    #+END_SRC
+    - 注意 ： step3里的Excute泛型方法，有3个参数，第一个参数是发送message的gameobject对象，只有当对象上有IEventSystemHandler实现类的时候才可以，这个例子中自然就是AAA物体。
+    - 还要注意 ： ExecuteEvents静态类还有其他方法： ## Static Functions
+      - EventSystems.ExecuteEvents.CanHandleEvent: Can the given GameObject handle the IEventSystemHandler of type T. 
+      - EventSystems.ExecuteEvents.Execute: Execute the event of type T : IEventSystemHandler on GameObject.
+      - EventSystems.ExecuteEvents.ExecuteHierarchy: Recurse up the hierarchy calling Execute<T> until there is a GameObject that can handle the event. 
+      - EventSystems.ExecuteEvents.GetEventHandler: Traverse the object hierarchy starting at root, and return the GameObject which implements the event handler of type <T> 
+      - EventSystems.ExecuteEvents.ValidateEventData: Attempt to convert the data to type T. If conversion fails an ArgumentException is thrown.
+- 名字解释都比较直白，就不翻译了。比如那个EventSystems.ExecuteEvents.ExecuteHierarchy， 是递归寻找适合的gameobject，并执行方法。
+- 说实话，比以前的SendMessage科学了不少，以前只能在Hierarchy里上下求索，现在是有目的的寻找了。
+- 但....我看来也就仅此而已了，SendMessage我在实际工程中从来都没用过，这个估计也不会用。为什么？有了System.Action谁还用这个...
+*** Input Modules
+- 此部分略，大致就是unity支持所有的输入方式，包括键盘啦，手柄啦，触摸啦等等，balabala...
+*** Supported Events（支持的输入事件）
+- 这部分就比较重要了，unity事件系统支持以下17种输入事件
+|---------------------------------+----------------------------------------|
+| 事件接口                        | 含义                                   |
+|---------------------------------+----------------------------------------|
+| IPointerEnterHandler            | pointer进入                            |
+| IPointerExitHandler             | pointer离开                            |
+| IPointerDownHandler             | pointer按下                            |
+| IPointerUpHandler               | pointer抬起                            |
+| IPointerClickHandler            | pointer按下和抬起                      |
+| IInitializePotentialDragHandler | 可拖拽物体被发现，可用来初始化一些变量 |
+| IBeginDragHandler               | 开始拖拽                               |
+| IDragHandler                    | 拖拽中                                 |
+| IEndDragHandler                 | 拖拽结束时 （when）                    |
+| IDropHandler                    | 拖拽结束位置（where）                  |
+| IScrollHandler                  | 鼠标滚轮                               |
+| IUpdateSelectedHandler          | 选中物体时，持续发送                   |
+| ISelectHandler                  | 物体变为被选择                         |
+| IDeselectHandler                | 物体变为取消选择                       |
+| IMoveHandler                    | 物体移动（左右上下等）                 |
+| ISubmitHandler                  | submit（提交）按钮按下                 |
+| ICancelHandler                  | cancel（取消）按钮按下                 |
+|---------------------------------+----------------------------------------|
+- 注意： 这里的“pointer”可以是鼠标、touch等一切unity支持的类型
+- 那也就意味着，我们终于可以在PC和移动端共用一套代码了
+*** Raycasters（射线们）
+- 这也是另外一个重要的点：决定了unity对何种输入方式进行响应：
+|----------------------+-------------------------------------|
+| 射线类型             | 含义                                |
+|----------------------+-------------------------------------|
+| Graphic Raycaster    | UI使用                              |
+| Physics 2D Raycaster | 2D 物体组件使用，如 BoxCollider2D等 |
+| Physics Raycaster    | 3D物体使用（UI其实也能使用）        |
+|----------------------+-------------------------------------|
+*** Practice - 练习和测试
+- 我们来建个简单的场景：
+  - 场景中增加一个空物体，命名为 EventSystem，添加EventSystem组件，点击组件上的Add Default Input Modules按钮
+  - 场景中的摄像机上，添加Physics Raycaster组件
+  - 场景中建立一个3d的 Cude， 和一个2d的image
+  - 将以下脚本拖给Cude和Image：
+  #+BEGIN_SRC csharp
+using UnityEngine;
+using UnityEngine.EventSystems;
+public class SupportedEventsTest : MonoBehaviour,
+    IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler,
+    IPointerClickHandler, IInitializePotentialDragHandler, IBeginDragHandler, IDragHandler,
+    IEndDragHandler, IDropHandler, IScrollHandler, IUpdateSelectedHandler,
+    ISelectHandler, IDeselectHandler, IMoveHandler, ISubmitHandler, ICancelHandler
+{
+    public void OnBeginDrag(PointerEventData eventData) {
+        Debug.Log("OnBeginDrag");
+    }
+    public void OnCancel(BaseEventData eventData) {
+        Debug.Log("OnCancel");
+    }
+    public void OnDeselect(BaseEventData eventData) {
+        Debug.Log("OnDeselect");
+    }
+    public void OnDrag(PointerEventData eventData) {
+        Debug.Log("OnDrag");
+    }
+    public void OnDrop(PointerEventData eventData) {
+        Debug.Log("OnDrop");
+    }
+    public void OnEndDrag(PointerEventData eventData) {
+        Debug.Log("OnEndDrag");
+    }
+    public void OnInitializePotentialDrag(PointerEventData eventData) {
+        Debug.Log("OnInitializePotentialDrag");
+    }
+    public void OnMove(AxisEventData eventData) {
+        Debug.Log("OnMove");
+    }
+    public void OnPointerClick(PointerEventData eventData) {
+        Debug.Log("OnPointerClick");
+    }
+    public void OnPointerDown(PointerEventData eventData) {
+        Debug.Log("OnPointerDown");
+    }
+    public void OnPointerEnter(PointerEventData eventData) {
+        Debug.Log("OnPointerEnter");
+    }
+    public void OnPointerExit(PointerEventData eventData) {
+        Debug.Log("OnPointerExit");
+    }
+    public void OnPointerUp(PointerEventData eventData) {
+        Debug.Log("OnPointerUp");
+    }
+    public void OnScroll(PointerEventData eventData) {
+        Debug.Log("OnScroll");
+    }
+    public void OnSelect(BaseEventData eventData) {
+        Debug.Log("OnSelect");
+    }
+    public void OnSubmit(BaseEventData eventData) {
+        Debug.Log("OnSubmit");
+    }
+    public void OnUpdateSelected(BaseEventData eventData) {
+        Debug.Log("OnUpdateSelected");
+    }
+}
+  #+END_SRC
+- 运行游戏，我们可以看到，3d和2d物体都可以相应事件系统，这是由于我们给摄像机添加了Physics Raycaster组件。如果你换成Graphic Raycaster，那Cube是不会响应的。
+
+** Unity Physics.Raycast 深入理解
+- http://www.voidcn.com/article/p-zmgmgdzw-tk.html
+
+** 利用Shader以及更改Mesh实现2D游戏的动态阴影装效果
+- http://www.cnblogs.com/jeason1997/archive/2015/09/21/4826390.html
+

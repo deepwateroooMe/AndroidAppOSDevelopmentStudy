@@ -1,0 +1,8 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n+nd}{@Override}
+\PYG{k+kd}{public} \PYG{n}{View} \PYG{n+nf}{onCreateView}\PYG{o}{(}\PYG{n}{LayoutInflater} \PYG{n}{inflater}\PYG{o}{,} \PYG{n}{ViewGroup} \PYG{n}{container}\PYG{o}{,}
+                         \PYG{n}{Bundle} \PYG{n}{savedInstanceState}\PYG{o}{)} \PYG{o}{\PYGZob{}}　
+    \PYG{c+c1}{// Inflate the layout for this fragment}
+    \PYG{k}{return} \PYG{n}{inflater}\PYG{o}{.}\PYG{n+na}{inflate}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{layout}\PYG{o}{.}\PYG{n+na}{example\PYGZus{}fragment}\PYG{o}{,} \PYG{n}{container}\PYG{o}{,} \PYG{k+kc}{false}\PYG{o}{);}
+\PYG{o}{\PYGZcb{}}
+\end{Verbatim}

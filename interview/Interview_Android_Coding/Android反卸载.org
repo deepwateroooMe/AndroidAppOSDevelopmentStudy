@@ -1,0 +1,492 @@
+#+latex_class: cn-article
+#+title: Android反卸载
+#+author: deepwaterooo
+#+options: ^:nil
+
+* Android App不被手动强制停止和卸载的实现
+- https://blog.csdn.net/weiren1101/article/details/81668420
+- 最近在做项目时，遇到一个这样的问题，如何让我们的App在“系统设置”里面，不被手动强制停止和卸载？
+- 首先，我们分析一下：
+  - 要实现不被手动停止，必须让系统设置的App详情页面的“强制停止”按钮被置灰才能做到。
+  - 要实现不被手动卸载，必须让App 获取系统的设备管理权限。
+- 要实现以上两点，我们必须想办法让App在启动时自动获取系统的设备管理权限。接下来，我们通过查阅相关资料，需要按照以下步骤来做：
+** 实现步骤
+- 第一步：实现一个广播监听器，继承DeviceAdminReceiver。如下：
+  #+BEGIN_SRC java
+public class MyAdminReceiver extends DeviceAdminReceiver {
+    private static final String TAG = "MyAdminReceiver";
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        super.onReceive(context, intent);
+    }
+    @Override
+    public void onEnabled(Context context, Intent intent) {
+        super.onEnabled(context, intent);
+    }
+    @Override
+    public void onDisabled(Context context, Intent intent) {
+        // onDisabled
+    }
+}
+  #+END_SRC
+- 第二步：在工程的res目录下，创建xml目录，在xml目录下创建my_admin.xml文件，具体内容如下：
+  #+BEGIN_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-policies>
+    <!--设置密码规则-->
+    <limit-password />
+    <!--监控登录次数-->
+    <watch-login />
+    <!--重置密码-->
+    <reset-password />
+    <!--强制锁屏-->
+    <force-lock />
+    <!--清空数据（恢复出厂设置）-->
+    <wipe-data />
+  </uses-policies>
+</device-admin>
+  #+END_SRC
+- 第三步：在AndroidManifest.xml清单文件，添加以下内容：  
+  #+BEGIN_SRC java
+<uses-permission android:name="android.permission.BIND_DEVICE_ADMIN" />
+<receiver
+    android:name=".MyAdminReceiver"
+    android:exported="false"
+    android:permission="android.permission.BIND_DEVICE_ADMIN">
+  <meta-data
+      android:name="android.app.device_admin"
+      android:resource="@xml/my_admin" />
+  <intent-filter>
+    <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+  </intent-filter>
+</receiver>
+  #+END_SRC
+- 第四步：创建DeviceAdminUtil类，主要是做相关初始化，设备管理权限获取等。具体如下：
+  #+BEGIN_SRC java
+public class DeviceAdminUtil {
+    private static DeviceAdminUtil instance;
+    private DevicePolicyManager devicePolicyManager;
+    private ComponentName componentName;
+    private Context mContext;
+    
+    public static synchronized DeviceAdminUtil getInstance() {
+        if (instance == null) {
+            instance = new DeviceAdminUtil();
+        }
+        return instance;
+    }
+    /**
+     * 初始化“设备管理权限的获取”
+     *
+     * @param context
+     */
+    public void init(Context context) {
+        mContext = context.getApplicationContext();
+        // 获取系统管理权限
+        devicePolicyManager = (DevicePolicyManager) mContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
+        // 申请权限
+        componentName = new ComponentName(mContext, MyAdminReceiver.class);
+    }
+    /**
+     * 判断App是否已激活获取了设备管理权限,true:已激活，false:未激活
+     *
+     * @return
+     */
+    private boolean isAdminActive() {
+        // 判断组件是否有系统管理员权限
+        return devicePolicyManager.isAdminActive(componentName);
+    }
+    public void lockScreen() {
+        if (isAdminActive() && devicePolicyManager != null) {
+            // 立刻锁屏
+            devicePolicyManager.lockNow();
+        }
+    }
+}
+  #+END_SRC
+- 经过上述4步操作，已基本实现我们当初的想法。现在我们来验证下。
+** 验证一下
+- 首先：那我们在App的Application的onCreate方法调用
+  #+BEGIN_SRC java
+DeviceAdminUtil.getInstance().init(this);
+  #+END_SRC
+- 然后，再某一个按钮点击事件里，调用
+  #+BEGIN_SRC java
+DeviceAdminUtil.getInstance().lockScreen();
+  #+END_SRC
+- 接下来，我们运行下App，点击那个按钮并没有锁屏，在系统设置的App详情页面，我们也发现App还是可以手动强制停止，还是可以手动卸载。怎么回事呢？
+- 我们调试发现，做了上述4步，devicePolicyManager.isAdminActive(componentName)这个方法返回仍是false，也就是说App并没有被激活。原因找到了，我们就要想办法激活App。我们查阅DevicePolicyManager的源码，里面有很多方法，其中有一个方法如下：
+  #+BEGIN_SRC java
+public void setActiveAdmin(@NonNull ComponentName policyReceiver,
+                           boolean refreshing) {
+    setActiveAdmin(policyReceiver, refreshing, myUserId());
+}
+  #+END_SRC
+- 这个方法就是激活App获取设备管理权限的方法，但被@hide了，也就是说这个方法只有系统源码层才能直接调用，应用层不能直接调用。到这里，有经验的小伙伴应该会想到，用反射来调用setActiveAdmin方法，实现如下：
+  #+BEGIN_SRC java
+private void setDeviceAdminActive(boolean active) {
+    try {
+        if (devicePolicyManager != null && componentName != null) {
+            Method setActiveAdmin = devicePolicyManager.getClass().
+                getDeclaredMethod("setActiveAdmin",
+                                  ComponentName.class, boolean.class);
+            setActiveAdmin.setAccessible(true);
+            setActiveAdmin.invoke(devicePolicyManager, componentName, active);
+        }
+    } catch (Exception e) {
+        LogUtil.e(e);
+    }
+}
+  #+END_SRC
+- 这里给出DeviceAdminUtil类的最终实现，如下：
+  #+BEGIN_SRC java
+public class DeviceAdminTool {
+    private static DeviceAdminUtil instance;
+    private DevicePolicyManager devicePolicyManager;
+    private ComponentName componentName;
+    private Context mContext;
+
+    public static synchronized DeviceAdminUtil getInstance() {
+        if (instance == null) {
+            instance = new DeviceAdminUtil();
+        }
+        return instance;
+    }
+    /**
+     * 初始化“设备管理权限的获取”
+     *
+     * @param context
+     */
+    public void init(Context context) {
+        mContext = context.getApplicationContext();
+        // 获取系统管理权限
+        devicePolicyManager = (DevicePolicyManager) mContext.
+            getSystemService(Context.DEVICE_POLICY_SERVICE);
+        // 申请权限
+        componentName = new ComponentName(mContext, MyAdminReceiver.class);
+        setDeviceAdminActive(true);
+    }
+    /**
+     * 判断App是否已激活获取了设备管理权限,true:已激活，false:未激活
+     * app预装，启动后要授权静默激活
+     *
+     * @return
+     */
+    private boolean isAdminActive() {
+        // 判断组件是否有系统管理员权限
+        return devicePolicyManager.isAdminActive(componentName);
+    }
+    public void lockScreen() {
+        if (isAdminActive() && devicePolicyManager != null) {
+            // 立刻锁屏
+            devicePolicyManager.lockNow();
+        }
+    }
+    private void setDeviceAdminActive(boolean active) {
+        try {
+            if (devicePolicyManager != null && componentName != null) {
+                Method setActiveAdmin = devicePolicyManager.getClass().
+                    getDeclaredMethod("setActiveAdmin", 
+                                      ComponentName.class, boolean.class);
+                setActiveAdmin.setAccessible(true);
+                setActiveAdmin.invoke(devicePolicyManager, componentName, active);
+            }
+        } catch (Exception e) {
+            LogUtil.e(e);
+        }
+    }
+}
+  #+END_SRC
+- 以上，在Android7.1，Android8.1上测试有效。
+
+* 无法卸载app(DevicePolicManager)
+- https://www.jianshu.com/p/8f9b44302139
+** DevicePolicManager 可以做什么？
+1.恢复出厂设置
+2.修改屏幕解锁密码
+3.修改屏幕密码规则长度和字符
+4.监视屏幕解锁次数
+5.锁屏幕
+6.设置锁屏密码有效期
+7.设置应用数据加密
+8.禁止相机服务，所有app将无法使用相机
+- 首先我想，如果你是一个Android重度体验用户，在Rom支持一键锁屏之前，你也许装过一种叫快捷锁屏、一键锁屏之类的替代实体键锁屏的应用。其中导致的问题就是当我们不需要用它的时候却发现无法被卸载。
+** 原理解析
+- 从功能上来看，本身该项服务是用来控制设备管理，它是Android用来提供对系统进行管理的。所以一但获取到权限，不知道Android出于什么考虑,系统是不允许将其卸载掉的。我们只是在这里钻了空子。
+** 实现步骤
+- 继承DeviceAdminReceiver类，里面的可以不要做任何逻辑处理。
+  #+BEGIN_SRC java
+public class MyDeviceAdminReceiver extends DeviceAdminReceiver {
+}
+  #+END_SRC
+- 注册一下，description可以写一下你给用户看的描述。
+  #+BEGIN_SRC xml
+<receiver
+    android:name=".MyDeviceAdminReceiver"
+    android:description="@string/description"
+    android:label="防卸载"
+    android:permission="android.permission.BIND_DEVICE_ADMIN" >
+  <meta-data
+      android:name="android.app.device_admin"
+      android:resource="@xml/deviceadmin" />
+
+  <intent-filter>
+    <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+  </intent-filter>
+</receiver>
+  #+END_SRC
+- 调用系统激活服务
+  #+BEGIN_SRC java
+// 激活设备超级管理员
+public void activation() {
+    Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
+    // 初始化要激活的组件
+    ComponentName mDeviceAdminSample = new ComponentName(MainActivity.this, MyDeviceAdminReceiver.class);
+    intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, mDeviceAdminSample);
+    intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "激活可以防止随意卸载应用");
+    startActivity(intent);
+}
+  #+END_SRC
+- github地址：https://github.com/BolexLiu/SuPerApp
+
+* Android设备管理器——DevicePolicyManager
+- https://www.oschina.net/question/54100_29057
+
+
+
+* Android 防卸载实现代码
+- https://blog.csdn.net/Out_Put_Stream/article/details/50079801
+- 实现防卸载首先需要激活设备管理器。激活 设备管理器后应用将无法正常卸载，取消激活后可即可正常卸载。
+- 所以我们要禁止用户取消激活。
+- 激活设备管理器请参考：http://www.oschina.net/question/54100_29057
+- 由于app注册了android.app.action.DEVICE_ADMIN_ENABLED的广播接受，所以当用户将要点击取消激活时系统会调用app中注册android.app.action.DEVICE_ADMIN_ENABLED实现类中的onDisableRequested方法。
+- 我们可以在应用的onDisableRequested方法中添加以下代码阻止用户取消激活：
+** 通过锁屏方式
+  #+BEGIN_SRC java
+public  CharSequence onDisableRequested(Context context, Intent intent) {
+    // TODO Auto-generated method stub   
+    Intent intent1 = context.getPackageManager().getLaunchIntentForPackage("com.android.settings" );  
+    intent1.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);  
+    context.startActivity(intent1);
+    final DevicePolicyManager dpm = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);  
+    dpm.lockNow();  
+    new Thread(new Runnable() {            
+            @Override   
+            public void run() {  
+                int  i =  0 ;  
+                while (i < 70 ){  
+                    dpm.lockNow();  
+                    try {  
+                        Thread.sleep( 100 );  
+                        i++;  
+                    } catch (InterruptedException e) {  
+                        e.printStackTrace();  
+                    }  
+                }  
+            }  
+        }).start();  
+    return "This is a onDisableRequested response message";  
+}
+  #+END_SRC
+** 通过阻塞函数返回方式
+  #+BEGIN_SRC java
+@Override   
+public CharSequence onDisableRequested(Context context, Intent intent) {  
+    // TODO Auto-generated method stub   
+    Intent intent1 = context.getPackageManager().getLaunchIntentForPackage("com.android.settings" );  
+    intent1.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);  
+    context.startActivity(intent1);  
+    try {  
+        Thread.sleep( 7000 );  
+    } catch (InterruptedException e) {  
+        e.printStackTrace();  
+    }  
+    return "This is a onDisableRequested response message" ;  
+}
+  #+END_SRC
+** 通过透明窗口劫持方式
+  #+BEGIN_SRC java
+@Override   
+public CharSequence onDisableRequested(Context context, Intent intent) {  
+    // TODO Auto-generated method stub   
+    Intent intent1 = context.getPackageManager().getLaunchIntentForPackage("com.android.settings" );  
+    intent1.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);  
+    context.startActivity(intent1);
+    
+    WindowManager.LayoutParams wmParams;  
+    final WindowManager mWindowManager;  
+    wmParams = new WindowManager.LayoutParams();  
+    mWindowManager = (WindowManager)context.getSystemService(Context.WINDOW_SERVICE);  
+    wmParams.type = WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;   
+    wmParams.format = PixelFormat.RGBX_8888;   
+    wmParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;        
+    wmParams.gravity = Gravity.LEFT | Gravity.TOP;  
+    wmParams.alpha = 0;  
+    wmParams.x = 0;  
+    wmParams.y = 0;  
+    wmParams.width = WindowManager.LayoutParams.MATCH_PARENT;  
+    wmParams.height = WindowManager.LayoutParams.MATCH_PARENT;  
+    final View contentView =  new  Button(context);  
+    mWindowManager.addView(contentView, wmParams);  
+    new Thread(new Runnable() {            
+            @Override   
+            public void run() {  
+                try {  
+                    Thread.sleep( 7000 );  
+                } catch (InterruptedException e) {  
+                    // TODO Auto-generated catch block   
+                    e.printStackTrace();  
+                }  
+                mWindowManager.removeView(contentView);  
+            }  
+        }).start();  
+    return "This is a onDisableRequested response message" ;  
+}
+  #+END_SRC
+
+* 安卓防卸载的实现
+- https://blog.csdn.net/u012833250/article/details/50448136
+- 最近搞到个木马，安装之后确认了设备管理器权限竟然无法取消掉设备管理器的权限！！无法取消设备管理器的权限也就意味着软件不能以正常的方式卸载，然后我用终端模拟器在root环境下执行pm命令，竟然提示失败！！！最终还是直接使用rm命令删掉data空间中的apk才删掉的。 
+- 那究竟是什么原因呢，我反编译看了一下源码，原来在重写DeviceAdminReceiver的时候有个回调方法onDisableRequested，当取消设备管理器的时候就会执行这个方法，而返回值就是取消设备管理器的提示信息 
+  #+BEGIN_SRC java
+public CharSequence onDisableRequested(Context paramContext, Intent paramIntent) {
+    a(paramContext, paramIntent);
+    Log.i("Ray: ", "onDisableRequested");
+    return "谨慎操作：取消激活可能会影响手机正常使用。";
+}
+  #+END_SRC
+- 所以只要在return之前做一些不友好的事情，比如无限循环卡死设置之类的，就能够防止用户卸载应用，当然卸载应用的方式很多，这里只是防止正常的应用卸载，如果直接用root权限删除apk包还是可以卸载的。等下我会将测试源码上传到csdn，在第一个评论里面回复地址，感兴趣的可以下载看看
+
+* Android APP中卸载其他APP的三种方法
+- https://blog.csdn.net/ta_ab/article/details/77949348
+** 直接使用Intent卸载
+  #+BEGIN_SRC java
+Uri uri = Uri.fromParts("package", "com.example.demo", null);
+Intent intent = new Intent(Intent.ACTION_DELETE, uri);
+startActivity(intent);
+  #+END_SRC
+- 这是最简单的方式，调用卸载方法系统会弹出卸载APP对话框，点击确定就会立即卸载，不需要额外权限
+** 使用PackageManager静默卸载
+- 谷歌认为该方法是不安全的行为，因此该接口是@hide的，不是公开的接口，调用此接口需要有系统签名和相应的系统级权限
+- 具体来说就是需要 
+  #+BEGIN_SRC xml
+<uses-permission android:name="android.permission.DELETE_PACKAGES"/>
+  #+END_SRC
+权限，但<uses-permission android:name="android.permission.DELETE_PACKAGES"/> 是系统级权限，普通APP根本无法获取到，如果在AndroidManifest.xml强行加入该权限编译也不会通过
+- 唯一的办法就是使用APK反编译工具在Android Studio之外修改权限，比如用apktool反编译工具先把apk文件解压出来，用编辑器在AndroidManifest.xml中加入上面的两个权限，然后在用工具apktool重新打包
+- 获得<uses-permission android:name="android.permission.DELETE_PACKAGES"/>权限后，定义PackageDeleteObserver实现类，实现packageDeleted方法
+  #+BEGIN_SRC java
+private class PackageDeleteObserver extends IPackageDeleteObserver.Stub {  
+    private int position;  
+    private int mFlag;  
+    public PackageDeleteObserver(int index, int flag) {  
+        position = index;  
+        mFlag = flag;// 0卸载1个包，1卸载N个包 N>1  
+    }  
+    @Override  
+    public void packageDeleted(String arg0, int arg1)  
+    throws RemoteException {  
+        // TODO Auto-generated method stub 
+        Message msg;  
+        msg = mHandle.obtainMessage();  
+        msg.what = FLAG_DELETE_VIRUS;  
+        msg.arg1 = position;  
+        msg.arg2 = mFlag;  
+        msg.sendToTarget();  
+    }  
+}  
+  #+END_SRC
+- 获取PackageManager 对象，调用deletePackage方法
+  #+BEGIN_SRC java
+PackageManager pkgManager = mContext.getPackageManager();  
+PackageDeleteObserver observer = new PackageDeleteObserver(currVirus, 1);  
+pkgManager.deletePackage(pakName, observer, 0);  
+  #+END_SRC
+- 最后，还需要进行系统签名才能使用
+- 对apk进行系统签名：
+  #+BEGIN_SRC shell
+java -jar signapk.jar platform.x509.pem platform.pk8 test.apk test_signed.apk
+  #+END_SRC
+- 将签名之后的文件 push到手机中，需要root权限
+** 通过pm命令方式实现静默卸载
+- 该方法直接对Android系统执行卸载命令，需要root权限
+  #+BEGIN_SRC java
+//pm命令可以通过adb在shell中执行，同样，我们可以通过代码来执行 
+public static String execCommand(String... command) {
+    Process process = null;
+    InputStream errIs = null;
+    InputStream inIs = null;
+    String result = "";
+    try {
+        process = new ProcessBuilder().command(command).start();
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        int read = -1;
+        errIs = process.getErrorStream();
+        while ((read = errIs.read()) != -1) {
+            baos.write(read);
+        }
+        inIs = process.getInputStream();
+        while ((read = inIs.read()) != -1) {
+            baos.write(read);
+        }
+        result = new String(baos.toByteArray());
+        if (inIs != null)
+        inIs.close();
+        if (errIs != null)
+        errIs.close();
+        process.destroy();
+    } catch (IOException e) {
+        result = e.getMessage();
+    }
+    return result;
+}
+  #+END_SRC
+- 执行卸载命令
+  #+BEGIN_SRC shell
+execCommand("pm","uninstall", "packageName");
+  #+END_SRC
+- 编译生成apk时，要在manifest文件下添加Android:sharedUserId=”android.uid.system”
+  #+BEGIN_SRC xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"  
+          package="com.xieyuan.mhfilemanager"  
+          android:versionCode="1"  
+          android:versionName="1.0"  
+          android:installLocation="internalOnly"  
+          android:sharedUserId="android.uid.system" >  
+  #+END_SRC
+
+* 其它思路
+- Android系统原理与源码分析（1）：利用Java反射技术阻止通过按钮关闭对话框
+  - https://blog.csdn.net/nokiaguy/article/details/5770263
+- 
+  - 
+- 
+  - 
+- 
+  - 
+- 
+  - 
+
+- Android监听自身卸载，弹出用户反馈调查
+  - https://cloud.tencent.com/developer/article/1033962
+- Android如何监控本应用被卸载
+  - https://blog.csdn.net/huiguixian/article/details/43228091
+- android 如何监听自身应用被卸载
+  - https://blog.csdn.net/xinzhou201/article/details/78632154
+- Android 如何实现应用卸载反馈，卸载监控
+  - https://blog.csdn.net/wangbaochu/article/details/50697125
+- JNI基础（九）android如何监控到应用被卸载？
+  - https://www.csdndoc.com/article/9352234
+
+- Android系统应用隐藏和应用禁止卸载
+  - https://blog.csdn.net/yao891203/article/details/84809257
+- Android系统预制APK(不可卸载)
+  - https://blog.csdn.net/u010218230/article/details/79153986
+- 如何防止android app被kill
+  - https://blog.csdn.net/csh86277516/article/details/79929595
+- 防止APK被反编译
+  - https://blog.csdn.net/qq_35414752/article/details/79823069
+- 浅谈安卓apk加固原理和实现
+  - https://my.oschina.net/u/3920392/blog/2967330
+

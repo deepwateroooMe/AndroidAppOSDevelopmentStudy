@@ -1,0 +1,4 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+ \PYG{n}{Intent} \PYG{n}{intent}\PYG{o}{=}\PYG{k}{new} \PYG{n}{Intent}\PYG{o}{(}\PYG{k}{this}\PYG{o}{,}\PYG{n}{BindService}\PYG{o}{.}\PYG{n+na}{class}\PYG{o}{);}
+ \PYG{n}{bindService}\PYG{o}{(}\PYG{n}{intent}\PYG{o}{,} \PYG{n}{ServiceConnection} \PYG{n}{conn}\PYG{o}{,} \PYG{k+kt}{int} \PYG{n}{flags}\PYG{o}{)}
+\end{Verbatim}

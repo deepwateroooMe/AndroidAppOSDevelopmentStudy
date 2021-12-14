@@ -1,0 +1,4 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+  \PYG{n}{Intent} \PYG{n}{intent} \PYG{o}{=} \PYG{k}{new} \PYG{n}{Intent}\PYG{o}{(}\PYG{k}{this}\PYG{o}{,} \PYG{n}{MyService}\PYG{o}{.}\PYG{n+na}{class}\PYG{o}{);}
+  \PYG{n}{startService}\PYG{o}{(}\PYG{n}{intent}\PYG{o}{);}
+\end{Verbatim}

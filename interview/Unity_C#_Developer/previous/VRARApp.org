@@ -1,0 +1,15 @@
+#+latex_class: cn-article
+#+title: VR AR App
+#+author: deepwaterooo
+ 
+* references
+- Voforia 账户： https://developer.vuforia.com/targetmanager/licenseManager/licenseListingDetails
+** 非常有用的： 
+- Vuforia开发环境的搭建—VR及AR开发高级教程(3) http://www.51testing.com/html/30/n-3716530.html
+- 图文并茂开发AR小游戏全教程(一) https://www.jianshu.com/p/887ba4fb5f96
+- 《AR与VR开发实战》导读 https://yq.aliyun.com/articles/90302
+- 视频 高通Vuforia+Unity——图像识别视屏叠加 http://www.07net01.com/2017/04/1840794.html https://my.oschina.net/CoderBleak/blog/872276
+- webview unity-webview https://github.com/gree/unity-webview
+- 
+** 还没有看的
+- 带你开发类似Pokemon Go的AR游戏 https://www.imooc.com/learn/844

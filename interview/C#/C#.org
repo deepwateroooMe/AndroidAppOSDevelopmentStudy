@@ -1,0 +1,735 @@
+#+latex_class: cn-article
+#+title: C# Interview Questions
+#+author: Jenny Huang
+
+* C# Interview Questions - Part I
+** 100道C#面试题
+*** .NET和C#有什么区别
+- .NET一般指 .NET FrameWork框架，它是一种平台，一种技术。
+- C#是一种编程语言，可以基于.NET平台的应用。
+*** 一列数的规则如下: 1、1、2、3、5、8、13、21、34...... 求第30位数是多少，用递归算法实现。
+  #+BEGIN_SRC csharp
+public class MainClass  { 
+    public static void Main()  { 
+        Console.WriteLine(Foo(30)); 
+    } 
+    public static int Foo(int i)  { 
+        if (i <= 0) 
+            return 0; 
+        else if (i > 0 && i <= 2) 
+            return 1; 
+        else
+            return Foo(i -1) + Foo(i - 2); 
+    } 
+}
+  #+END_SRC
+*** C#中的委托是什么？事件是不是一种委托？
+- 委托可以把一个方法作为参数代入另一个方法。
+- 委托可以理解为指向一个函数的引用。
+- 是，是一种特殊的委托
+*** 简述 private、 protected、 public、internal 修饰符的访问权限。
+- private : 私有成员, 在类的内部才可以访问。
+- protected: 保护成员，该类内部和继承类中可以访问。
+- public: 公共成员，完全公开，没有访问限制。
+- internal:在同一命名空间内可以访问。
+*** override与重载的区别
+- override 与重载的区别。重载是方法的名称相同。参数或参数类型不同，进行多次重载以适应不同的需要
+- Override是进行基类中函数的重写。为了适应需要。
+*** 如果在一个B/S结构的系统中需要传递变量值，但是又不能使用Session、Cookie、Application，您有几种方法进行处理？
+- this.Server.Transfer
+*** 请编程遍历页面上所有TextBox控件并给它赋值为string.Empty？
+  #+BEGIN_SRC csharp
+foreach (System.Windows.Forms.Control control in this.Controls) {
+    if (control is System.Windows.Forms.TextBox) {
+        System.Windows.Forms.TextBox tb = (System.Windows.Forms.TextBox)control ; 
+        tb.Text = String.Empty ;
+    }
+}
+  #+END_SRC
+*** 请编程实现一个选择排序算法？
+  #+BEGIN_SRC csharp
+public static int min;
+public static void SelectionSort(int[] arr) { // 选择排序， 从左往右依次增大
+    for (int i = 0; i < arr.Length - 1; i++) {
+        min = i;
+        for (int j = i + 1; j < arr.Length; j++) {
+            if (arr[j] < arr[min])
+                min = j;
+        }
+        int tmp = arr[i];
+        arr[i] = arr[min];
+        arr[min] = tmp;
+    }
+}
+  #+END_SRC
+*** 请编程实现一个冒泡排序算法？
+  #+BEGIN_SRC csharp
+// int [] array = new int [*] ; // 为什么需要这样一行 ？
+public static int tmp;
+public static void BubbleSort(int [] A) {
+    for (int j = 0; j < A.Length - 1; j++) {
+        for (int i = j + 1; i < A.Length; i++) {
+            if (A[i] < A[j]) {
+                tmp = A[i];
+                A[i] = A[j];
+                A[j] = tmp;
+            }
+        }
+    }
+}
+  #+END_SRC
+
+*** 描述一下C#中索引器的实现过程，是否只能根据数字进行索引？
+- 不是。可以用任意类型。
+*** 求以下表达式的值，写出您想到的一种或几种实现方法：1-2+3-4+……+m
+  #+BEGIN_SRC csharp
+int Num = this.TextBox1.Text.ToString() ;
+int Sum = 0 ;
+for (int i = 0 ; i < Num + 1 ; i++) {
+    if (i % 2 == 0) {
+        Sum += i ;
+    } else { // i % 2 == 1
+        Sum = Sum - i ;
+    }
+}
+System.Console.WriteLine(Sum.ToString());
+System.Console.ReadLine() ;
+  #+END_SRC
+*** 在下面的例子里
+  #+BEGIN_SRC csharp
+using System;
+class A {
+    public A() {
+        //System.Console.WriteLine("A constructor: ");
+        PrintFields();
+    }
+    public virtual void PrintFields() {
+        //System.Console.WriteLine("A PrintFields: ");
+    }
+}
+class B: A {
+    int x = 1;
+    int y;
+    public B() {
+        //System.Console.WriteLine("B constructor: ");
+        y = -1;
+        PrintFields(); // 需要这一行， 要不然结果不一样
+    }
+    public override void PrintFields() {
+        //System.Console.WriteLine("B: PrintFields");
+        Console.WriteLine("x = {0}, y = {1}", x, y);
+    }
+}
+  #+END_SRC
+- 当使用new B()创建B的实例时，产生什么输出？
+- X = 1, Y = 0; x =  1, y = -1
+- 代码执行顺序如下：
+
+  #+BEGIN_SRC csharp
+A constructor: 
+B: PrintFields
+x = 1, y = 0
+B constructor: 
+B: PrintFields
+x = 1, y = -1
+  #+END_SRC
+*** 下面这段代码的执行结果是什么1
+  #+BEGIN_SRC csharp
+public class A {
+    public virtual void Fun1(int i) {
+        //Console.WriteLine("A Fun1: ");
+        Console.WriteLine(i);
+    }
+    public void Fun2(A a) {
+        //Console.WriteLine("A Fun2: ");
+        a.Fun1(1);
+        Fun1(5);
+    }
+}
+public class B : A {
+    public override void Fun1(int i) {
+        //Console.WriteLine("B Fun1: ");
+        base.Fun1(i + 1);
+    }
+    public static void Main() {
+        A a = new A(); 
+        B b = new B();
+        a.Fun2(b);
+        b.Fun2(a);
+        Console.Read();
+    }
+}
+  #+END_SRC
+- 2， 5， 1， 6
+  #+BEGIN_SRC csharp
+A Fun2: 
+B Fun1: 
+A Fun1: 
+2
+A Fun1: 
+5
+A Fun2: 
+A Fun1: 
+1
+B Fun1: 
+A Fun1: 
+6
+  #+END_SRC
+*** 下面这段代码的执行结果是什么2 
+  #+BEGIN_SRC csharp
+class Class1  {
+    private string str = "Class1.str";
+    private int i = 0;
+    static void StringConvert(string str)  {
+        str = "string being converted.";
+    }
+    static void StringConvert(Class1 c)  {
+        c.str = "string being converted.";
+    }
+    static void Add(int i)  {
+        i++;
+    }
+    static void AddWithRef(ref int i)  {
+        i++;
+    }
+    static void Main()  {
+        int i1 = 10;
+        int i2 = 20;
+        string str = "str";
+        Class1 c = new Class1();
+        Add(i1);
+        //Console.WriteLine("i1: " + i1);
+        AddWithRef(ref i2);
+        //Console.WriteLine("i2: " + i2);
+        Add(c.i); // c.i = 1
+        //Console.WriteLine("c.i: " + c.i);
+        StringConvert(str);
+        //Console.WriteLine("str: " + str);
+        StringConvert(c);
+        //Console.WriteLine("c.str: " + c.str);
+        Console.WriteLine(i1); 
+        Console.WriteLine(i2);
+        Console.WriteLine(c.i);
+        Console.WriteLine(str);
+        Console.WriteLine(c.str);
+    }  
+}    
+  #+END_SRC
+- 10，21，0，str，string being converted.
+  #+BEGIN_SRC csharp
+i1: 10
+i2: 21
+c.i: 0
+str: str
+c.str: string being converted.
+10
+21
+0
+str
+string being converted.
+  #+END_SRC
+
+*** CTS、CLS、CLR分别作何解释？
+- CTS：Common Type System, 通用语言系统。
+- CLS：Common Language Specification, 通用语言规范。
+- CLR：Common Language Runtime, 公共语言运行库。
+*** 什么是装箱和拆箱？
+- 从值类型接口转换到引用类型装箱。从引用类型转换到值类型拆箱。
+*** 什么是受管制的代码？
+- unsafe：非托管代码。不经过CLR运行。
+*** 什么是强类型系统？
+- RTTI：类型识别系统。
+*** NET中读写数据库需要用到那些类？他们的作用？
+- DataSet:数据存储器。
+- DataCommand:执行语句命令。
+- DataAdapter:数据的集合，用语填充。
+*** 列举ASP.Net页面之间传递值的几种方式。 
+- 1).使用QueryString, 如....?id=1; response. Redirect().... 
+- 2).使用Session变量 
+- 3).使用Server.Transfer
+*** 什么是Code-Behind技术？
+- 代码后植。
+*** 在.net中，配件的意思是？
+- 程序集。（中间语言，源数据，资源，装配清单）
+*** 常用的调用WebService的方法有哪些？
+- 1.使用WSDL.exe命令行工具。
+- 2.使用VS.NET中的Add Web Reference菜单选项
+*** .NET Remoting 的工作原理是什么？
+- 服务器端向客户端发送一个进程编号，一个程序域编号，以确定对象的位置。
+*** 在C＃中，string str = null 与 string str = “” 请尽量使用文字或图象说明其中的区别。
+- string str = null 是不给他分配内存空间,
+- string str = "" 给它分配长度为空字符串的内存空间。
+*** 请详述在.NET中类(class)与结构(struct)的异同？
+- Class可以被实例化,属于引用类型,是分配在内存的堆上的
+- Struct属于值类型,是分配在内存的栈上的
+*** 分析以下代码，完成填空
+  #+BEGIN_SRC csharp
+string strTmp = "abcdefg某某某";
+int i = System.Text.Encoding.Default.GetBytes(strTmp).Length;
+int j = strTmp.Length;
+  #+END_SRC
+- 以上代码执行完后，i= j=
+  #+BEGIN_SRC csharp
+i: 16 // 我的运行结果 
+j: 10
+// i = 13, j = 10 // 为什么会是这样呢？
+  #+END_SRC
+*** SQLSERVER服务器中，给定表table1 中有两个字段 ID、LastUpdateDate，ID表示更新的事务号，LastUpdateDate表示更新时的服务器时间，请使用一句SQL语句获得最后更新的事务号
+  #+BEGIN_SRC sql
+Select ID FROM table1 
+Where LastUpdateDate = (Select MAX(LastUpdateDate) FROM table1)
+  #+END_SRC
+*** 简要谈一下您对微软.NET构架下remoting和webservice两项技术的理解以及实际中的应用。
+- WS主要是可利用HTTP，穿透防火墙。
+- 而Remoting可以利用TCP/IP，二进制传送提高效率。
+*** 公司要求开发一个继承System.Windows.Forms.ListView类的组件，要求达到以下的特殊功能：点击ListView各列列头时，能按照点击列的每行值进行重排视图中的所有行 (排序的方式如DataGrid相似)。根据您的知识，请简要谈一下您的思路
+- 根据点击的列头,包该列的ID取出,按照该ID排序后, 再给绑定到ListView中。
+*** 写出一条Sql语句：取出表A中第31到第40记录（SQLServer,以自动增长的ID作为主键,注意：ID可能不是连续的。
+  #+BEGIN_SRC sql
+select top 10 * from A 
+where id not in (select top 30 id from A)
+  #+END_SRC
+  #+BEGIN_SRC sql
+select top 10 * from A 
+where id > (select max(id) from (select top 30 id from A ) as A)
+  #+END_SRC
+*** 面向对象的语言具有___封装_____性、___继承______性、___多态_____性
+- 封装、继承、多态。
+*** 能用foreach遍历访问的对象需要实现 __IEnumerable__接口或声明__GetEnumerator__方法的类型。
+- IEnumerable 、 GetEnumerator。
+*** GC是什么? 为什么要有GC?
+- GC是垃圾收集器。程序员不用担心内存管理，因为垃圾收集器会自动进行管理。要请求垃圾收集，可以调用下面的方法之一：
+  - System.gc()
+  - Runtime.getRuntime().gc()
+*** Strings = new String("xyz");创建了几个String Object?
+- 两个对象，一个是“xyx”,一个是指向“xyx”的引用对象s。
+*** 启动一个线程是用run()还是start()?
+- 启动一个线程是调用start()方法，使线程所代表的虚拟处理机处于可运行状态，这意味着它可以由JVM调度并执行。这并不意味着线程就会立即运行。run()方法可以产生必须退出的标志来停止一个线程。
+*** 接口是否可继承接口? 抽象类是否可实现(implements)接口? 抽象类是否可继承实体类(concrete class)?
+- 接口可以继承接口。
+- 抽象类可以实现(implements)接口，
+- 抽象类是可以继承实体类，但前提是实体类必须有明确的构造函数。
+*** 构造器Constructor是否可被override?
+- 构造器Constructor不能被继承，因此不能重写Overriding，但可以被重载Overloading。
+*** 是否可以继承String类?
+- String类是final类故不可以继承。
+*** try{}里有一个return语句，那么紧跟在这个try后的finally {}里的code会不会被执行，什么时候被执行，在return前还是后?
+- 会执行，在return前执行。
+*** 两个对象值相同(x.equals(y)== true)，但却可有不同的hash code，这句话对不对?
+- 不对，有相同的hash code。
+*** swtich是否能作用在byte上，是否能作用在long上，是否能作用在String上?
+- switch（expr1）中，expr1是一个整数表达式。因此传递给 switch 和 case语句的参数应该是 int、 short、 char 或者 byte。
+- long, string 都不能作用于swtich。
+*** 当一个线程进入一个对象的一个synchronized方法后，其它线程是否可进入此对象的其它方法?
+- 不能，一个对象的一个synchronized方法只能由一个线程访问。
+*** abstract的method是否可同时是static,是否可同时是native，是否可同时是synchronized?
+- 都不能。
+*** List,Set, Map是否继承自Collection接口?
+- List 和 Set 是, Map 不是
+*** Set里的元素是不能重复的，那么用什么方法来区分重复与否呢? 是用==还是equals()?它们有何区别?
+- Set里的元素是不能重复的，那么用iterator()方法来区分重复与否。
+- equals()是判读两个Set是否相等。
+- equals()和==方法决定引用值是否指向同一对象
+- equals()在类中被覆盖，为的是当两个分离的对象的内容和类型相配的话，返回真值。
+*** 数组有没有length()这个方法? String有没有length()这个方法？
+- 数组没有length()这个方法，有 Length 的属性。
+- String有有length()这个方法。
+*** sleep()和 wait() 有什么区别?
+- sleep()方法是使线程停止一段时间的方法。在sleep 时间间隔期满后，线程不一定立即恢复执行。这是因为在那个时刻，其它线程可能正在运行而且没有被调度为放弃执行，除非
+  - (a) “醒来”的线程具有更高的优先级
+  - (b) 正在运行的线程因为其它原因而阻塞。
+- wait()是线程交互时，如果线程对一个同步对象x 发出一个wait()调用，该线程会暂停执行，被调对象进入等待状态，直到被唤醒或等待时间到。
+*** short s1 = 1; s1 = s1 + 1;有什么错? short s1 = 1; s1 += 1; 有什么错?
+- 有错，s1是short型，s1+1是int型, 不能显式转化为short型。
+  #+BEGIN_SRC csharp
+short s1 = 1; s1 = s1 + 1; 
+  #+END_SRC
+  #+BEGIN_SRC csharp
+short s1 = 1;
+// Cannot implicitly convert type 'int' to 'short'.
+// An explicit conversion exists (are you missing a cast?)
+// s1 = s1 + 1;
+s1 = (short)(s1 + 1); 
+System.Console.WriteLine("s1: " + s1);
+short s2 = 1;
+s2 += 1;
+System.Console.WriteLine("s2: " + s2);
+  #+END_SRC
+- 可修改为
+  #+BEGIN_SRC csharp
+s1 =(short)(s1 + 1) 
+
+short s1 = 1; 
+s1 += 1 // 正确。
+  #+END_SRC  
+*** 谈谈final,finally, finalize的区别。
+- final — 修饰符（关键字）如果一个类被声明为final，意味着它不能再派生出新的子类，不能作为父类被继承。因此一个类不能既被声明为 abstract的，又被声明为final的。将变量或方法声明为final，可以保证它们在使用中 不被改变。被声明为final的变量必须在声明时给定初值，而在以后的引用中只能读取，不可修改。被声明为 final的方法也同样只能使用，不能重载
+- finally — 在异常处理时提供finally 块来执行任何清除操作。如果抛出一个异常，那么相匹配的 catch 子句就会 执行，然后控制就会进入 finally 块（如果有的话）。
+- finalize — 方法名。Java 技术允许使用 finalize() 方法在垃圾收集器将对象从内存中清除出去之前做必要的清理工作。这个方法是由垃圾收集器在确定这个对象没有被引用时对这个对象调用的。它是在 Object 类中定义的 ，因此所有的类都继承了它。子类覆盖 finalize() 方法以整理系统资源或者执行其他清理工作。finalize() 方法是在垃圾收集器删除对象之前对这个对象调用的。
+*** 如何处理几十万条并发数据？
+- 用存储过程或事务。取得最大标识的时候同时更新..注意主键不是自增量方式这种方法并发的时候是不会有重复主键的..取得最大标识要有一个存储过程来获取.
+*** Session有什么重大BUG，微软提出了什么方法加以解决？
+- 是iis中由于有进程回收机制，系统繁忙的话Session会丢失，可以用Sate server或SQL Server数据库的方式存储Session不过这种方式比较慢，而且无法捕获Session的END事件。
+*** 进程和线程的区别？
+- 进程是系统进行资源分配和调度的单位；
+- 线程是CPU调度和分派的单位，
+- 一个进程可以有多个线程，这些线程共享这个进程的资源。
+*** 堆和栈的区别？
+- 栈：由编译器自动分配、释放。在函数体中定义的变量通常在栈上。
+- 堆：一般由程序员分配释放。用new、malloc等分配内存函数分配得到的就是在堆上。
+*** 成员变量和成员函数前加static的作用？
+- 它们被称为常成员变量和常成员函数，又称为类成员变量和类成员函数。分别用来反映类的状态。比如类成员变量可以用来统计类实例的数量，类成员函数负责这种统计的动作。
+*** ASP。NET与ASP相比，主要有哪些进步？
+- asp解释形，aspx编译型，性能提高，有利于保护源码。
+*** 请说明在.net中常用的几种页面间传递参数的方法，并说出他们的优缺点。
+- session(viewstate) 简单，但易丢失
+- application全局
+- cookie简单，但可能不支持，可能被伪造
+- inputtype = "hidden" 简单，可能被伪造
+- url参数 简单，显示于地址栏，长度有限
+- 数据库 稳定，安全，但性能相对弱
+*** 请指出GAC的含义？
+- GAC: Global Assembly Cache
+- 全局程序集缓存。
+*** 向服务器发送请求有几种方式？
+- get, post。get一般为链接方式，post一般为按钮方式。
+*** DataReader与Dataset有什么区别？
+- 一个是只能向前的只读游标，一个是内存中虚拟的数据库。
+*** 软件开发过程一般有几个阶段？每个阶段的作用？
+- 需求分析，架构设计，代码编写，QA，部署
+*** 在c#中using和new这两个关键字有什么意义，请写出你所知道的意义？using指令 和语句 new 创建实例 new 隐藏基类中方法。
+- using 引入名称空间或者使用非托管资源
+- new新建实例或者隐藏父类方法
+*** 需要实现对一个字符串的处理,首先将该字符串首尾的空格去掉,如果字符串中间还有连续空格的话,仅保留一个空格,即允许字符串中间有多个空格,但连续的空格数不可超过一个.
+  #+BEGIN_SRC csharp
+using System.Text.RegularExpressions;
+string inputStr = "  xx    xx  ";
+inputStr = Regex.Replace(inputStr.Trim(),"\\s+", " ");
+// System.Console.WriteLine("inputStr: A" + inputStr + "A;");
+// inputStr: Axx xxA;
+
+string input = "This is   text with   far  too   much   " + "whitespace.";
+string pattern = "\\s+";
+string replacement = " ";
+Regex rgx = new Regex(pattern);
+string result = rgx.Replace(input, replacement);
+Console.WriteLine("Original String: {0}", input);
+Console.WriteLine("Replacement String: {0}", result);                             
+// The example displays the following output:
+// Original String:    This is   text with   far  too   much   whitespace.
+// Replacement String: This is text with far too much whitespace.
+  #+END_SRC
+- 正则表达式符号描述： http://www.jb51.net/article/73929.htm
+  - \S	匹配任何非空白字符
+  - \t	匹配一个制表符
+  - \v	匹配一个垂直制表符。等价于\x0b和\cK
+  - \w	匹配包括下划线的任何单词字符。等价于 '[A-Za-z0-9_]'
+  - \W	匹配任何非单词字符。等价于 '[^A-Za-z0-9_]'
+*** 什么叫做SQL注入，如何防止？请举例说明。
+- 利用sql关键字对网站进行攻击。过滤关键字等
+- 利用sql语言漏洞获得合法身份登陆系统。如身份验证的程序设计成：
+
+  #+BEGIN_SRC csharp
+SqlCommand com = new SqlCommand("Select * from users where username = ‘"+t_name.text+"‘ and pwd=‘"+t_pwd.text+"‘");
+object obj=com.ExcuteScale();
+if (obj!=null) {
+    // 通过验证
+}
+  #+END_SRC
+- 这段代码容易被sql注入。如用户在t_name中随便输入，在t_pwd中输入1‘ and 1=‘1 就可以进入系统了。
+*** 什么是反射？
+- 动态获取程序集信息
+*** 用Singleton如何写设计模式
+- static属性里面new ,构造函数private
+*** 什么是Application Pool？
+- Web应用，类似Thread Pool，提高并发性能。
+*** 什么是虚函数？什么是抽象函数？
+- 虚函数：没有实现的，可由子类继承并重写的函数。
+- 抽象函数：规定其非虚子类必须实现的函数，必须被重写。
+*** 什么是XML？
+- XML即可扩展标记语言。eXtensible Markup Language.
+- 标记是指计算机所能理解的信息符号，通过此种标记，计算机之间可以处理包含各种信息的文章等。
+- 如何定义这些标记，即可以选择国际通用的标记语言，比如HTML，也可以使用象XML这样由相关人士自由决定的标记语言，这就是语言的可扩展性。
+- XML是从SGML中简化修改出来的。它主要用到的有XML、XSL和XPath等。
+*** 什么是WebService？UDDI？
+- Web Service便是基于网络的、分布式的模块化组件，它执行特定的任务，遵守具体的技术规范，这些规范使得Web Service能与其他兼容的组件进行互操作。
+- UDDI的目的是为电子商务建立标准；UDDI是一套基于Web的、分布式的、为WebService提供的、信息注册中心的实现标准规范，同时也包含一组使企业能将自身提供的Web Service注册，以使别的企业能够发现的访问协议的实现标准。
+*** 什么是ASP.net中的用户控件？
+- 用户控件一般用在内容多为静态,或者少许会改变的情况下..用的比较大..类似ASP中的include..但是功能要强大的多。
+*** 列举一下你所了解的XML技术及其应用
+- xml用于配置,用于保存静态数据类型.接触XML最多的是web Services..和config
+*** ADO.net中常用的对象有哪些？分别描述一下。
+- Connection 数据库连接对象
+- Command数据库命令
+- DataReader数据读取器
+- DataSet数据集
+*** 什么是code-Behind技术。
+- ASPX, RESX 和 CS 三个后缀的文件，这个就是代码分离.实现了HTML代码和服务器代码分离.方便代码编写和整理.
+*** 什么是SOAP,有哪些应用。
+- simple object access protocal,简单对象接受协议.以xml为基本编码结构,建立在已有通信协议上(如http,不过据说ms在搞最底层的架构在tcp/ip上的soap)的一种规范WebService使用的协议..
+- SOAP（Simple Object Access Protocol ）简单对象访问协议是在分散或分布式的环境中交换信息并执行远程过程调用的协议，是一个基于XML的协议。使用SOAP，不用考虑任何特定的传输协议（最常用的还是HTTP协议），可以允许任何类型的对象或代码，在任何平台上，以任何一直语言相互通信。这种相互通信采用的是XML格式的消息。
+- SOAP也被称作XMLP，为两个程序交换信息提供了一种标准的工作机制。在各类机构之间通过电子方式相互协作的情况下完全有必要为此制定相应的标准。
+- SOAP描述了把消息捆绑为XML的工作方式。它还说明了发送消息的发送方、消息的内容和地址以及发送消息的时间。SOAP是Web Service的基本通信协议。SOAP规范还定义了怎样用XML来描述程序数据（Program Data）,怎样执行RPC（Remote Procedure Call）。大多数SOAP解决方案都支持RPC-style应用程序。SOAP还支持 Document-style应用程序（SOAP消息只包含XML文本信息）。
+- 最后SOAP规范还定义了HTTP消息是怎样传输SOAP消息的。MSMQ、SMTP、TCP/IP都可以做SOAP的传输协议。
+- SOAP 是一种轻量级协议，用于在分散型、分布式环境中交换结构化信息。 SOAP 利用 XML 技术定义一种可扩展的消息处理框架，它提供了一种可通过多种底层协议进行交换的消息结构。 这种框架的设计思想是要独立于任何一种特定的编程模型和其他特定实现的语义。
+- SOAP 定义了一种方法以便将 XML 消息从 A 点传送到 B 点。 为此，它提供了一种基于 XML 且具有以下特性的消息处理框架： 1) 可扩展， 2) 可通过多种底层网络协议使用， 3) 独立于编程模型。
+
+*** C#中 property 与 attribute的区别，他们各有什么用处，这种机制的好处在哪里？
+- 一个是属性，用于存取类的字段，一个是特性，用来标识类，方法等的附加性质
+*** XML与 HTML 的主要区别
+- 1. XML是区分大小写字母的，HTML不区分。
+- 2.在HTML中，如果上下文清楚地显示出段落或者列表键在何处结尾，那么你可以省略</p>或者</li>之类的结束标记。在XML中，绝对不能省略掉结束标记。
+- 3.在XML中，拥有单个标记而没有匹配的结束标记的元素必须用一个 / 字符作为结尾。这样分析器就知道不用查找结束标记了。
+- 4.在XML中，属性值必须分装在引号中。在HTML中，引号是可用可不用的。
+- 5.在HTML中，可以拥有不带值的属性名。在XML中，所有的属性都必须带有相应的值。
+*** c#中的三元运算符是？
+- ？：
+*** 当整数a赋值给一个object对象时，整数a将会被？
+- 装箱。
+*** 类成员有_____种可访问形式？
+- this.;new Class().Method;
+*** public static const int A = 1; 这段代码有错误么？是什么？
+- const不能用static修饰。
+*** float f = -123.567F; int i = (int)f; i的值现在是_____?
+- -123。
+*** 委托声明的关键字是__delegate__?
+- delegate.
+*** 用sealed修饰的类有什么特点？
+- 密封，不能继承。
+*** 在Asp.net中所有的自定义用户控件都必须继承自__Control__?
+- Control。
+*** 在.Net中所有可序列化的类都被标记为__[serializable]__?
+- [serializable]
+*** 在.Net托管代码中我们不用担心内存漏洞，这是因为有了__GC__?
+- GC。
+*** 当类T只声明了私有实例构造函数时，则在T的程序文本外部，___不可以___（可以 or 不可以）从T派生出新的类，__不可以__（可以 or 不可以）直接创建T的任何实例。
+- 不可以，不可以。
+*** 下面这段代码有错误么？
+  #+BEGIN_SRC csharp
+switch(i){
+case(): // case()条件不能为空
+    CaseZero();
+    break;
+case1:
+    CaseOne();
+    break;
+case2:
+default:
+    //dufault; //wrong，格式不正确
+    CaseTwo();
+    break;
+}
+  #+END_SRC
+*** 在.Net中，类System.Web.UI.Page 可以被继承么？
+- 可以。
+*** .net的错误处理机制是什么？
+- net错误处理机制采用 try -> catch -> finally 结构，发生错误时，层层上抛，直到找到匹配的Catch为止。
+*** 利用operator声明且仅声明了==，有什么错误么?
+- 要同时修改Equale和GetHash() ? 
+- 重载了 "==" 就必须重载 "!="
+*** 在.net（C# or vb.net）中如何取消一个窗体的关闭。
+  #+BEGIN_SRC csharp
+private void Form1_Closing(object sender,
+                           System.ComponentModel.CancelEventArgse) {
+    e.Cancel = true;
+}
+  #+END_SRC
+*** 在.net（C# or vb.net）中，Appplication.Exit 还是 Form.Close有什么不同？
+- 一个是退出整个应用程序，一个是关闭其中一个form。
+*** 某一密码仅使用K、L、M、N、O共5个字母，密码中的单词从左向右排列，密码单词必须遵循如下规则：
+- （1） 密码单词的最小长度是两个字母，可以相同，也可以不同
+- （2） K不可能是单词的第一个字母
+- （3） 如果L出现，则出现次数不止一次
+- （4） M不能是最后一个,也不能是倒数第二个字母
+- （5） K出现，则N就一定出现
+- （6） O如果是最后一个字母，则L一定出现
+- 问题一：下列哪一个字母可以放在LO中的O后面，形成一个3个字母的密码单词？
+  - A)K B)L C) M D) N
+  - 答案:B
+- 问题二：如果能得到的字母是K、L、M，那么能够形成的两个字母长的密码单词的总数是多少？
+  - A)1个 B)3个 C)6个 D）9个
+  - 答案:A
+- 问题三：下列哪一个是单词密码？
+  - A)KLLN B) LOML C) MLLO D)NMKO
+  - 答案:C
+*** 62-63=1 等式不成立，请移动一个数字（不可以移动减号和等于号），使得等式成立，如何移动？
+- 62移动成2的6次方 2^6 - 63 = 1
+*** C#中 property 与 attribute的区别，他们各有什么用处，这种机制的好处在哪里？
+- attribute: 自定义属性的基类;
+- property: 类中的属性
+*** 在C＃中，string str = null 与 string str = "" 请尽量使用文字或图象说明其中的区别。
+- null是没有空间引用的；
+- "" 是空间为0的字符串；
+*** abstract class和interface有什么区别?
+- 声明方法的存在而不去实现它的类被叫做抽像类（abstract class），它用于要创建一个体现某些基本行为的类，并为该类声明方法，但不能在该类中实现该类的情况。
+  - 不能创建abstract 类的实例。然而可以创建一个变量，其类型是一个抽像类，并让它指向具体子类的一个实例。
+  - 不能有抽像构造函数或抽像静态方法。
+  - Abstract 类的子类为它们父类中的所有抽像方法提供实现，否则它们也是抽像类。取而代之，在子类中实现该方法。知道其行为的其它类可以在类中实现这些方法。
+- 接口（interface）是抽像类的变体。
+  - 在接口中，所有方法都是抽像的。多继承性可通过实现这样的接口而获得。接口中的所有方法都是抽像的，没有一个有程序体。
+  - 接口只可以定义static final成员变量。
+  - 接口的实现与子类相似，除了该实现类不能从接口定义中继承行为。当类实现特殊接口时，它定义（即将程序体给予）所有这种接口的方法。然后，它可以在实现了该接口的类的任何对像上调用接口的方法。
+  - 由于有抽像类，它允许使用接口名作为引用变量的类型。通常的动态联编将生效。引用可以转换到接口类型或从接口类型转换，instanceof 运算符可以用来决定某对象的类是否实现了接口。
+*** <%# %> 和 <% %> 有什么区别？
+- <%# %>表示绑定的数据源
+- <%%>是服务器端代码块
+*** 重载 overloading 与 覆盖 overriding 的区别？
+- 1、方法的覆盖是子类和父类之间的关系，是垂直关系；方法的重载是同一个类中方法之间的关系，是水平关系
+- 2、覆盖只能由一个方法，或只能由一对方法产生关系；方法的重载是多个方法之间的关系。
+*** Overloaded的方法是否可以改变返回值的类型?
+- Overloaded的方法是可以改变返回值的类型。
+*** C#可否对内存进行直接的操作？
+- 在.net下，.net引用了垃圾回收（GC）功能，它替代了程序员.
+- 不过在C#中，不能直接实现Finalize方法，而是在析构函数中调用基类的Finalize()方法
+*** 根据线程安全的相关知识，分析以下代码，当调用test方法时i>10时是否会引起死锁?并简要说明理由。
+  #+BEGIN_SRC csharp
+    public void test(int i) {
+        lock (this) {
+            if (i > 10) {
+                i--;
+                test(i);
+            }
+        }
+    }
+  #+END_SRC
+- 不会发生死锁，（但有一点int是按值传递的，所以每次改变的都只是一个副本，因此不会出现死锁。但如果把int换做一个object，那么死锁就会发生）
+*** 给定以下XML文件，完成算法流程图。 < DriverC > 请画出遍历所有文件名（FileName）的流程图(请使用递归算法)。
+  #+BEGIN_SRC csharp
+void FindFile (Directory d) {
+    FileOrFolders = d.GetFileOrFolders();
+    foreach (FileOrFolder fof in FileOrFolders) {
+        if( fof is File )
+            You Found a file;
+        else if (fof is Directory )
+            FindFile (fof);
+    }
+}
+  #+END_SRC
+*** 产生一个int数组，长度为100，并向其中随机插入1-100，并且不能重复。
+  #+BEGIN_SRC csharp
+using System.Collections;
+int[] intArr = new int[100];
+ArrayList myList = new ArrayList();
+Random rnd = new Random();
+while (myList.Count < 100) {
+    int num = rnd.Next(1,101);
+    if (!myList.Contains(num))
+        myList.Add(num);
+}
+for (int i = 0; i < 100; i++) {
+    intArr[i] = (int)myList[i];
+    System.Console.WriteLine("intArr[i]: " + intArr[i]);
+}
+  #+END_SRC
+*** 下面的代码中有什么错误吗？_______
+  #+BEGIN_SRC csharp
+using System;
+class A {
+    public virtual void F(){
+        Console.WriteLine("A.F");
+    }
+}
+abstract class B: A {
+    public abstract override void F(); // abstract override 是不可以一起修饰.
+} // new public abstract void F(); 什么意思
+  #+END_SRC
+*** 对于这样的一个枚举类型：
+  #+BEGIN_SRC csharp
+enum Color: byte {
+    Red,
+    Green,
+    Blue,
+    orange
+}
+  #+END_SRC
+#+BEGIN_SRC csharp
+string[] ss = Enum.GetNames(typeof(Color));
+byte[] bb = Enum.GetValues(typeof(Color));
+#+END_SRC
+*** 写一个HTML页面，实现以下功能，左键点击页面时显示“您好”，右键点击时显示“禁止右键”。并在2分钟后自动关闭页面。
+  #+BEGIN_SRC csharp
+setTimeout(‘window.close();‘, 3000);
+function show() {
+    if (window.event.button == 1) {
+        alert("左");
+    } else if (window.event.button == 2) {
+        alert("右");
+    }
+}
+  #+END_SRC
+*** 大概描述一下ASP。NET服务器控件的生命周期
+- 初始化 加载视图状态 处理回发数据 加载 发送回发更改通知 处理回发事件 预呈现 保存状态 呈现 处置 卸载
+*** Anonymous Inner Class (匿名内部类) 是否可以extends(继承)其它类，是否可以implements(实现)interface(接口)?
+- 不能，可以实现接口
+*** Static Nested Class 和 Inner Class的不同，说得越多越好
+- Static Nested Class是被声明为静态（static）的内部类，它可以不依赖于外部类实例被实例化。
+- 而通常的内部类需要在外部类实例化后才能实例化。
+*** &和&&的区别。
+- &是位运算符，表示按位与运算，
+- &&是逻辑运算符，表示逻辑与（and）.
+*** HashMap和Hashtable的区别。
+- HashMap是Hashtable的轻量级实现（非线程安全的实现），他们都完成了Map接口，
+- 主要区别在于HashMap允许空（null）键值（key）,由于非线程安全，效率上可能高于Hashtable.
+*** error和exception有什么区别?
+- error 表示恢复不是不可能但很困难的情况下的一种严重问题。比如说内存溢出。不可能指望程序能处理这样的情况。
+- exception 表示一种设计或实现问题。也就是说，它表示如果程序运行正常，从不会发生的情况。
+*** 你觉得ASP.NET 2.0（VS2005）和你以前使用的开发工具（.Net 1.0或其他）有什么最大的区别？你在以前的平台上使用的哪些开发思想（pattern / architecture）可以移植到ASP.NET 2.0上 (或者已经内嵌在ASP.NET 2.0中)
+- 1 ASP.NET 2.0 把一些代码进行了封装打包,所以相比1.0相同功能减少了很多代码.
+- 2 同时支持代码分离和页面嵌入服务器端代码两种模式,以前1.0版本,.NET提示帮助只有在分离的代码文件,无 法 在页面嵌入服务器端代码获得帮助提示,
+- 3 代码和设计界面切换的时候,2.0支持光标定位.这个我比较喜欢
+- 4 在绑定数据,做表的分页.Update,Delete,等操作都可以可视化操作,方便了初学者
+- 5 在ASP.NET中增加了40多个新的控件,减少了工作量
+*** 描述一下C#中索引器的实现过程，是否只能根据数字进行索引？
+- 不是。可以用任意类型。
+*** 分析以下代码。
+  #+BEGIN_SRC csharp
+public static void test(string ConnectString) {
+    System.Data.OleDb.OleDbConnection conn = new System.Data.OleDb.OleDbConnection();
+    conn.ConnectionString = ConnectString;
+    try {
+        conn.Open();
+        //…….
+    } catch(Exception Ex) {
+        MessageBox.Show(Ex.ToString());
+    } finally {
+        if (!conn.State.Equals(ConnectionState.Closed))
+            conn.Close();
+    }
+}
+  #+END_SRC
+- 请问1)以上代码可以正确使用连接池吗？
+- 回如果传入的connectionString是一模一样的话，可以正确使用连接池。不过一模一样的意思是，连字符的空格数，顺序完全一致。
+*** 什么是WSE？目前最新的版本是多少？
+- WSE (Web Service Extension) 包来提供最新的WEB服务安全保证，目前最新版本2.0。
+*** 下面的例子中
+#+BEGIN_SRC csharp
+class A {
+    public static int X;
+    static A() {
+        //System.Console.WriteLine("A constructor: ");
+        X = B.Y + 1;
+        //System.Console.WriteLine("X: " + X);
+    }
+}
+class B {
+    public static int Y = A.X + 1;
+    static B() {
+        //System.Console.WriteLine("B constructor: ");
+        //System.Console.WriteLine("Y: " + Y);
+
+    }
+    static void Main() {
+        Console.WriteLine("X = {0}, Y = {1}", A.X, B.Y);
+    }
+}
+#+END_SRC
+- 产生的输出结果是什么？
+- x = 1,y = 2
+
+  #+BEGIN_SRC csharp
+A constructor: 
+X: 1
+B constructor: 
+Y: 2
+X = 1, Y = 2
+  #+END_SRC

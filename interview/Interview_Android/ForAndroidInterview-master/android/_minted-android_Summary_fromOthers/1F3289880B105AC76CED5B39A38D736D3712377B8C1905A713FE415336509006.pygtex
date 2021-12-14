@@ -1,0 +1,12 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{n}{Notification} \PYG{n}{notification} \PYG{o}{=} \PYG{k}{new} \PYG{n}{Notification}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{drawable}\PYG{o}{.}\PYG{n+na}{icon}\PYG{o}{,}
+                                             \PYG{n}{getText}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{string}\PYG{o}{.}\PYG{n+na}{ticker\PYGZus{}text}\PYG{o}{),}
+                                             \PYG{n}{System}\PYG{o}{.}\PYG{n+na}{currentTimeMillis}\PYG{o}{());}
+\PYG{n}{Intent} \PYG{n}{notificationIntent} \PYG{o}{=} \PYG{k}{new} \PYG{n}{Intent}\PYG{o}{(}\PYG{k}{this}\PYG{o}{,}\PYG{n}{ExampleActivity}\PYG{o}{.}\PYG{n+na}{class}\PYG{o}{);}
+\PYG{n}{PendingIntent} \PYG{n}{pendingIntent} \PYG{o}{=} \PYG{n}{PendingIntent}\PYG{o}{.}\PYG{n+na}{getActivity}\PYG{o}{(}\PYG{k}{this}\PYG{o}{,} \PYG{l+m+mi}{0}\PYG{o}{,}
+                                                        \PYG{n}{notificationIntent}\PYG{o}{,} \PYG{l+m+mi}{0}\PYG{o}{);}
+\PYG{n}{notification}\PYG{o}{.}\PYG{n+na}{setLatestEventInfo}\PYG{o}{(}\PYG{k}{this}\PYG{o}{,} \PYG{n}{getText}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{string}\PYG{o}{.}\PYG{n+na}{notification\PYGZus{}title}\PYG{o}{),}
+                                \PYG{n}{getText}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{string}\PYG{o}{.}\PYG{n+na}{notification\PYGZus{}message}\PYG{o}{),}
+                                \PYG{n}{pendingIntent}\PYG{o}{);}
+\PYG{n}{startForeground}\PYG{o}{(}\PYG{n}{ONGOING\PYGZus{}NOTIFICATION}\PYG{o}{,} \PYG{n}{notification}\PYG{o}{);}
+\end{Verbatim}

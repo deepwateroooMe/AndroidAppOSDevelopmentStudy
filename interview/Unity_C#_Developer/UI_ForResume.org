@@ -1,0 +1,32 @@
+#+latex_class: cn-article
+#+title: Unity GUI 设计与实现
+#+author: 黄和燕 
+ 
+* Python -- GUI设计和实现
+- 2013年刚结束计算机专业一年级两个学期学习，在还完全没有学习过python语言的前题下，在三星实习时，用python语言实现的一个小的应用界面
+#+caption: 2013.08 python 实习生GUI设计
+  [[./pic/ui/python1.jpg]]
+#+caption: 2013.08 python 实习生GUI设计
+  [[./pic/ui/python2.jpg]]
+
+* C++ -- Qt Creator GUI界面的设计
+#+caption: 2014.08 midi实时操作系统课项目
+  [[./pic/ui/midi.png]]
+#+caption: 2014.08 设计课项目界面设计
+  [[./pic/ui/seniordesign.png]]
+
+* Java -- Android DrawingFun画板安卓应用
+#+caption: 2013.04 Connect 4 游戏界面（人工智能课）
+  [[./pic/ui/connect4.png]]
+#+caption: 2014.08 安卓DrawingFun画板应用界面
+  [[./pic/ui/drawingfun.png]]
+
+* C# -- Unity GUI和增强现实应用界面设计
+#+caption: 2018.05 第一个增强现实应用界面
+  [[./pic/ui/ar.png]]
+#+caption: 2018.04 Buffalo老虎机游戏界面 -- 使用Unity StringIoC框架
+  [[./pic/ui/buffalo.png]]
+
+* 备注
+- 还有一个国际科技大学的安卓应用界面，但比较简单就没有列上来，但应该基本上也就是这些了。
+- 我个人觉为，就自己发展方向而言，一开始以UI界面入职是没有问题的，但毕竟这次回来的真正目的是希望有机会能够锻炼自己，那么希望在工作中自己也能够有机会比较系统深入地学习Unity3d. 

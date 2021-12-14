@@ -1,0 +1,11 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k+kd}{private} \PYG{k+kt}{boolean} \PYG{n+nf}{isServiceRunning}\PYG{o}{()} \PYG{o}{\PYGZob{}}
+    \PYG{n}{ActivityManager} \PYG{n}{manager} \PYG{o}{=} \PYG{o}{(}\PYG{n}{ActivityManager}\PYG{o}{)} \PYG{n}{getSystemService}\PYG{o}{(}\PYG{n}{ACTIVITY\PYGZus{}SERVICE}\PYG{o}{);}
+    \PYG{o}{\PYGZob{}}
+        \PYG{k}{if} \PYG{o}{(}\PYG{l+s}{\PYGZdq{}com.example.demo.BindService\PYGZdq{}}\PYG{o}{.}\PYG{n+na}{equals}\PYG{o}{(}\PYG{n}{service}\PYG{o}{.}\PYG{n+na}{service}\PYG{o}{.}\PYG{n+na}{getClassName}\PYG{o}{()))} \PYG{o}{\PYGZob{}}
+            \PYG{k}{return} \PYG{k+kc}{true}\PYG{o}{;}
+        \PYG{o}{\PYGZcb{}}
+    \PYG{o}{\PYGZcb{}}
+    \PYG{k}{return} \PYG{k+kc}{false}\PYG{o}{;}
+\PYG{o}{\PYGZcb{}}
+\end{Verbatim}
