@@ -290,6 +290,7 @@ textView.setText(msgString);
     #+END_SRC
 - 利用剪切板传递复杂的数据，如对象，略
 
+
 * Fragment生命周期探讨
    #+caption: Fragment生命周期探讨
 
@@ -416,7 +417,117 @@ View v = inflater.inflate(R.layout.hello_world, container, false);
 - 在使用Fragment时，我发现了一个金矿，那就是setRetainInstance()方法,此方法可以有效地提高系统的运行效率，对流畅性要求较高的应用可以适当采用此方法进行设置。
 - Fragment有一个非常强大的功能--就是可以在Activity重新创建时可以不完全销毁Fragment，以便Fragment可以恢复。在onCreate()方法中调用setRetainInstance(true/false)方法是最佳位置。当Fragment恢复时的生命周期如上图所示，注意图中的红色箭头。当在onCreate()方法中调用了setRetainInstance(true)后，Fragment恢复时会跳过onCreate()和onDestroy()方法，因此不能在onCreate()中放置一些初始化逻辑.
 
-* Android Fragment 生命周期图
+** 回退栈
+*** 相关操作下生命周期函数调用顺序
+**** 首先点击“ADD”按钮，将SecondFragment和ThirdFragment动态添加到相应容器
+#+BEGIN_SRC java
+Second onAttach()
+Second onCreate()
+Trd onAttach()
+Trd onCreate()
+Second onCreateView()
+Second onActivityCreated()
+Second onStart()
+Second onResume()
+Trd onCreateView()
+Trd onActivityCreated()
+Trd onStart()
+Trd onResume()
+#+END_SRC
+**** 然后点击“REMOVE”将SecondFragment移除，再点击“REPLACE”按钮将本来加载了ThirdFragment的第二个容器替换为SecondFragment。打开Logcat日志可以看到：
+#+BEGIN_SRC java
+Second onAttach()
+Second onCreate()
+Trd onPause()
+Trd onStop()
+Trd onDestroyView()
+Trd onDestroy()
+Trd onDetach()
+Second onCreateView()
+Second onActivityCreated()
+Second onStart()
+Second onResume()
+#+END_SRC
+*** 基础原理: 这里是否会涉及两套fragment的不同？（应该不会，可以证实一下）
+- 如果没有加入回退栈，则用户点击返回按钮会直接将Activity出栈；如果加入了回退栈，则用户点击返回按钮会回滚Fragment事务。
+- 默认情况下，Fragment事务是不会加入回退栈的，如果想将Fragment加入回退栈并实现事物回滚，首先需要在commit()方法之前调用事务的以下方法将其添加到回退栈中：
+#+BEGIN_SRC java
+addToBackStack(String tag) // 标记本次的回滚操作
+#+END_SRC
+- 在Fragment回退时，默认调用FragmentManager的 popBackStack() 方法将最上层的操作弹出回退栈。当栈中有多层时，我们可以根据id或TAG标识来指定弹出到的操作所在层。
+#+BEGIN_SRC java
+popBackStack(int id, int flags)      // 其中id表示提交变更时commit()的返回值。
+popBackStack(String name, int flags) // 其中name是addToBackStack(String tag)中的tag值。
+#+END_SRC
+- 在上面2个方法里面，都用到了flags，其实flags有两个取值：0或FragmentManager.POP\_BACK\_STACK\_INCLUSIVE。
+  - 当取值0时，表示除了参数指定这一层之上的所有层都退出栈，指定的这一层为栈顶层；
+  - 当取值 POP_BACK_STACK_INCLUSIVE 时，表示连着参数指定的这一层一起退出栈
+- 根据之前fragment界面的tag，返回到那个fragment界面并关闭当前Fragment和要返回fragment界面之间的fragment，包括关闭当前的fragment
+#+BEGIN_SRC java
+    /***
+     * 返回到指定已经打开的fragment,并关闭当前及当前与指定Fragment间的所有Fragment
+     * @param tag 需要返回到指定Fragment的tag
+     *            若你需要返回到FragmentOne,且FragmentOne的tag为“one”,则此处tag参数填“one”
+     * @param context
+     */
+    public void goBackToFragmentByTag(String tag,Context context)
+#+END_SRC
+- 关闭所有Fragment
+#+BEGIN_SRC java
+public void finishAllFragments(Context context)
+#+END_SRC
+- 获取回退栈中fragment个数
+#+BEGIN_SRC java
+public int getFragmentSize(Context context)
+#+END_SRC
+- 获取回退栈中所有Fragment对应的tag的集合
+#+BEGIN_SRC java
+public List<String> getFragmentTags(Context context)
+#+END_SRC
+- 如果想要了解回退栈中Fragment的情况，可以通过以下2个方法来实现：
+#+BEGIN_SRC java
+getBackStackEntryCount()       // 获取回退栈中Fragment的个数。
+getBackStackEntryAt(int index) // 获取回退栈中该索引值下的Fragment。
+#+END_SRC
+- 使用popBackStack()来弹出栈内容的话，调用该方法后会将事物操作插入到FragmentManager的操作队列，只有当轮询到该事物时才能执行。如果想立即执行事物的话，可以使用下面这几个方法：
+#+BEGIN_SRC java
+popBackStackImmediate()
+popBackStackImmediate(String tag)
+popBackStackImmediate(String tag, int flag)
+popBackStackImmediate(int id, int flag)
+#+END_SRC
+  - 这里对popBackStackImmediate方法参数做一个解释：方法中第二个参数 flag 只能是 0 或者 1(POP_BACK_STACK_INCLUSIVE)
+    - 当第一个参数为 null，第二个参数为 0 时，会弹出栈顶的一个fragment
+    - 当第一个参数为 null，第二个参数为 1 (POP_BACK_STACK_INCLUSIVE)时，会清空回退栈中所有fragment
+    - 当第一个参数为fragment的tag，第二个参数为1(POP_BACK_STACK_INCLUSIVE)时，会弹出该状态（包括该状态）以上的所有状态
+- 出栈时只是将栈顶的Fragment移出了数组，并没有将其销毁。所以当它再次入栈时，便能恢复之前的数据。
+  #+BEGIN_SRC java
+显示新页面时 hide 旧页面
+A 到 B
+    A生命周期无变化
+ B(  onAttach()  --> onViewStateRestored( )--> onResume() )
+B 返回 A
+    A生命周期无变化
+    B(  onPause()  --> onDetach() )
+A 再到 B
+    A生命周期无变化
+    B(  onAttach()  --> onViewStateRestored( )--> onResume() )
+如果在B页面输入了数据，B返回A再到B，B中数据会恢复
+
+显示新页面时 remove 旧页面
+A 到 B
+    A(  onPause()  --> onDestroyView() )
+    B(  onAttach()  --> onViewStateRestored( )--> onResume() )
+B 返回 A
+    A(  onCreateView()  --> onViewStateRestored( )--> onResume() )
+     B(  onPause()  --> onDetach() )
+A 再到 B
+    A(  onPause()  --> onDestroyView() )
+    B(  onAttach()  --> onViewStateRestored( )--> onResume() )
+如果在B页面输入了数据，B返回A再到B，B中数据也会恢复
+  #+END_SRC
+
+* Android Fragment 生命周期图： 这个应该可以合并
 - http://www.cnblogs.com/purediy/p/3276545.html
 - Fragment与Activity生命周期对比图：
 
@@ -453,6 +564,351 @@ View v = inflater.inflate(R.layout.hello_world, container, false);
   - 因此，只有当activity在resumed状态时，fragment的生命周期才能独立的运转，其它时候是依赖于activity的生命周期变化的。
 
 
+* 启动模式与任务栈
+- 安卓有四种启动模式：standard、singleTop、singleTask和singleInstance，想要更改模式可以在AndroidManifest.xml中activity标签下添加launchMode标签。下面是各种模式的详细介绍(下文中所有的栈，均指任务栈)：
+  - Activity所需的任务栈？
+    - 这要从一个参数说起：TaskAffinity(任务相关性)。这个参数标识了一个activity所需的任务栈的名字，默认情况下，所有activity所需的任务栈的名字为应用的包名。
+    - TaskAffinity 参数标识着Activity所需要的任务栈的名称，默认情况下，一个应用中所有Activity所需要的任务栈名称都为该应用的包名。
+    - TaskAffinity 属性一般跟singleTask模式或者跟allowTaskReparenting属性结合使用，在其他情况下没有实际意义。
+ 
+** standard：标准模式
+- 这也是系统的默认模式。每次启动一个Activity都会重新创建一个新的实例，不管实例是否已经存在。被创建的实例的生命周期符合典型的Activity的生命周期。在这种模式下，谁启动了这个Activity，那么这个Activity就运行在启动它的那个Activity所在的栈中。比如ActivityA 启动了ActivityB（B也是standard模式），那么B就会进入到A所在的栈中。
+    - 如果我们用ApplicationContext去启动standard模式的时候Activity的时候会报错，错误的原因是因为standard模式的Activity默认会进入启动它的Activity所属的任务栈中，但是由于非Activity类型的Context（如ApplicationContext）并没有所谓的任务栈，所有这就有问题了。解决这个问题的方法是为待启动Activity指定FLAG_ACTIVITY_NEW_TASK标记位，这样启动的时候就会为它创建一个新的任务栈，这时候待启动Activity实际上是一singleTask模式启动的。后文会再次强调一下
+
+** singleTop：栈顶复用模式
+- 在这种模式下，如果新Activity已经位于任务栈的栈顶（处于完全可见状态），那么此Activity不会被重新创建。但是如果新的Activity不是位于栈顶（处于不完全可见状态），那么新Activity仍然会重新创建。在singleTop（栈顶复用模式）下，如果Activity位于栈顶，我们再次启动该方法，那么该方法会回调onNewIntent()方法(不会创建新的instance)，而onCreate、onStart方法不会被调用。
+- 也允许出现重复的活动实例，分为两种情况，页面不在栈顶和页面已经在栈顶的情况。
+  - （1）页面不在栈顶。此时还是和standard一样重新生成一个新的activity实例。
+  - （2）页面在栈顶。此时直接使用栈顶的这个活动实例，不会重新生成新的。
+
+** singleTask：栈内复用模式
+- 这是一种单实例模式，在这种模式下，一个Activity在一个栈中只能有一个实例，类似单例模式。详细讲解，当一个具有singleTask模式的Activity请求启动后，例如Activity A，系统首先会寻找是否存在A想要的任务栈，如果不存在，就重新创建一个新的任务栈，然后创建A的实例后把A 放到栈中。如果存在A所需要的任务栈，再看Activity A 是否在栈中有实例存在，如果有实例存在，那么系统就会把A调到栈顶并调用onNewIntent方法，如果实例不存在，就创建A的实例并把A压入栈中。 
+    - 小例子：活动启动的顺序是A→B→C→D→B，第一次启动B的时候栈内没有实例，系统会创建新的B的实例，但第二次启动B的时候，系统查询任务栈，发现有实例，系统就会把活动B移到栈顶，并且把B之上的所有活动出栈。
+- 不会出现重复的活动实例，这种模式下至于两种情形，栈内有这个活动的实例的情形和栈内没有这个实例的情形。
+  - （1）假设站内原来有A、B两个实例，此时跳转到A页面，不管A页面位不位于栈顶，只要栈内存在A活动的实例，那么就把A以上的实例全部销毁出栈，总之让A位于栈顶得到用户观看。
+  - （2）假设栈内没有C，此时跳转到C页面，会创建新的C活动实例。
+
+** singleInstance：单实例模式
+- 这是一种加强的singleTask模式，它除了具有singleTask模式所具有的所有特性外，还加强一点，那就是具有此种模式的Activity只能单独的位于一个任务栈中(具有独占性：独占一个任务栈)。简单而言，如果一个活动是singleInstance的启动模式，那么该活动就只能单独位于一个栈中。
+    - 小例子：如果一个活动是singleInstance模式，那么活动C会单独创建一个新的任务栈，而返回栈（这里返回栈没有读懂，是什么意思呢？？？）中，活动C处于的任务栈会先压入返回栈的栈低，再把另外一个活动栈放入返回栈中。
+- 不会出现重复的活动实例，此时比较特殊，持有这种模式的活动实例单独有一个栈来存储它，栈内只有它一个实例，如果多个应用启动这个活动，那么他们共同享用这个栈内的唯一实例，不会生成新的。这个模式的应用比如说手机的锁屏页面。
+  
+[[./pic/singleInstance.jpg]]
+  - 这种模式的返回模式，出栈顺序是C-B-A,入栈顺序是A-B-C,最先出现，最后死亡
+
+** 综合比较与汇总
+
+[[./pic/launchmode.png]]
+
+** 设定方法
+- 怎么设定这四种模式，有两种方法，
+*** manifest.xml文件中设置。
+  #+BEGIN_SRC xml
+<activity android:name=".Activity1" 
+          android:launchMode="standard" 
+          android:label="@string/app_name"> 
+  <intent-filter> 
+    <action android:name="android.intent.action.MAIN" /> 
+    <category android:name="android.intent.category.LAUNCHER" /> 
+  </intent-filter> 
+</activity>
+  #+END_SRC
+*** Intent设置标记位
+- Intent设置标记位方式的优先级高于manifest中指定launchMode的方式.
+**** FLAG_ACTIVITY_NEW_TASK：
+- 效果和在manifest中设置launchMode为singleTask相同。
+- 该标志位表示使用一个新的Task来启动一个Activity，相当于在清单文件中给Activity指定“singleTask”启动模式。通常我们在Service启动Activity时，由于Service中并没有Activity任务栈，所以必须使用该Flag来创建一个新的Task。
+**** FLAG_ACTIVITY_SINGLE_TOP：
+  - 这个FLAG就相当于加载模式中的singletop，比如说原来栈中情况是A,B,C,D在D中启动D，栈中的情况还是A,B,C,D
+**** FLAG_ACTIVITY_CLEAR_TOP：
+- 具有此标记的activity启动时，在同一任务栈中所有位于它上面的activity都要出栈。一般和FLAG_ACTIVITY_NEW_TASK配合使用。这种情况下，被启动的activity的实例如果已经存在，那么会调用它的onNewIntent方法。
+- 这个FLAG就相当于加载模式中的SingleTask，这种FLAG启动的Activity会把要启动的Activity之上的Activity全部弹出栈空间。类如：原来栈中的情况是A,B,C,D这个时候从D中跳转到B，这个时候栈中的情况就是A,B了.
+**** FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS：
+- 具有此标记的activity不会出现在历史activity列表中。
+- 使用该标识位启动的Activity不添加到最近应用列表，也即我们从最近应用里面查看不到我们启动的这个activity。
+- 等同于在manifest中设置activity属性
+#+BEGIN_SRC xml
+android:excludeFromRecents="true"
+#+END_SRC
+**** Intent.FLAG_ACTIVITY_NO_HISTORY
+- 使用该模式来启动Activity，当该Activity启动其他Activity后，该Activity就被销毁了，不会保留在任务栈中。如A-B,B中以这种模式启动C，C再启动D，则任务栈只有ABD。
+**** FLAG_ACTIVITY_CLEAR_TASK
+- 如果在传递给Context.startActivity()的意图中设置了该标志，则会导致在启动activity 之前清除与该activity关联的任何现有任务。也就是说，activity成为一个空任务的新根，任何旧activity都finish了。
+- 这只能与FLAG_ACTIVITY_NEW_TASK一起使用。
+
+**** 注意事项： 
+- 当通过非activity的context来启动一个activity时，需要增加intent flag FLAG_ACTIVITY_NEW_TASK
+#+BEGIN_SRC java
+Intent i = new Intent(this, Wakeup.class);
+i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+#+END_SRC
+** 启动模式与startActivityForResult
+   #+BEGIN_SRC java
+if (sourceRecord == null) {
+    // This activity is not being started from another...  in this
+    // case we -always- start a new task.
+    if ((launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {
+        Slog.w(TAG, "startActivity called from non-Activity context; forcing Intent.FLAG_ACTIVITY_NEW_TASK for: "
+              + intent);
+        launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;
+    }
+} else if (sourceRecord.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE) {
+    // The original activity who is starting us is running as a single
+    // instance...  this new activity it is starting must go on its
+    // own task.
+    launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;
+} else if (r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE
+        || r.launchMode == ActivityInfo.LAUNCH_SINGLE_TASK) {
+    // The activity being started is a single instance...  it always
+    // gets launched into its own task.
+    launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;
+}
+if (r.resultTo != null && (launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+    // For whatever reason this activity is being launched into a new
+    // task...  yet the caller has requested a result back.  Well, that
+    // is pretty messed up, so instead immediately send back a cancel
+    // and let the new task continue launched as normal without a
+    // dependency on its originator.
+    Slog.w(TAG, "Activity is launching as a new task, so cancelling activity result.");
+    sendActivityResultLocked(-1,
+            r.resultTo, r.resultWho, r.requestCode,
+        Activity.RESULT_CANCELED, null);
+    r.resultTo = null;
+}
+   #+END_SRC
+- 也就是说startActivityForResult启动的activity有FLAG_ACTIVITY_NEW_TASK，那么就不能返回结果。
+** onNewIntent
+- 当通过singleTop/singleTask启动activity时，如果满足复用条件，则不会创建新的activity实例，生命周期就变为onNewIntent()---->onResart()------>onStart()----->onResume()。
+  - Activity第一启动的时候执行onCreate()---->onStart()---->onResume()等后续生命周期函数，也就时说第一次启动Activity并不会执行到onNewIntent().；
+  - 而后面如果再有想启动Activity的时候，那就是执行onNewIntent()---->onResart()------>onStart()----->onResume()；
+  - 如果android系统由于内存不足把已存在Activity释放掉了，那么再次调用的时候会重新启动Activity即执行onCreate()---->onStart()---->onResume()等。
+- 注意：当调用到onNewIntent(intent)的时候，需要在onNewIntent() 中使用setIntent(intent)赋值给Activity的Intent.否则，后续的getIntent()都是得到老的Intent。
+
+** Activity所需的任务栈与TaskAffinity
+- 这要从一个参数说起：TaskAffinity(任务相关性)。这个参数标识了一个activity所需的任务栈的名字，默认情况下，所有activity所需的任务栈的名字为应用的包名。
+- TaskAffinity 参数标识着Activity所需要的任务栈的名称，默认情况下，一个应用中所有Activity所需要的任务栈名称都为该应用的包名。
+- TaskAffinity 属性一般跟singleTask模式或者跟allowTaskReparenting属性结合使用，在其他情况下没有实际意义。
+*** TaskAffinity和singleTask启动模式结合使用
+- 当TaskAffinity和singleTask启动模式结合使用时，当前Activity的任务栈名称将与TaskAffinity属性指定的值相同，下面我们通过代码来验证,我们同过MainActivity来启动ActivityA，其中MainActivity启动模式为默认模式，ActivityA启动模式为singleTask，而TaskAffinity属性值为android:taskAffinity="com.zejian.singleTask.affinity"
+#+BEGIN_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="comzejian.myapplication">
+  <application
+      android:allowBackup="true"
+      android:icon="@mipmap/ic_launcher"
+      android:label="@string/app_name"
+      android:supportsRtl="true"
+      android:theme="@style/AppTheme">
+
+    <activity android:name=".MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+
+    <activity android:name=".ActivityA"
+              android:launchMode="singleTask"
+              android:taskAffinity="com.zejian.singleTask.affinity"
+              />
+    
+  </application>
+</manifest>
+#+END_SRC
+- 可以通过singleTask与android:taskAffinity属性相结合的方式来指定我们Activity所需要的栈名称，使相应的Activity存在于不同的栈中
+*** 当TaskAffinity和allowTaskReparenting结合使用
+**** allowTaskReparenting属性
+- 它的主要作用是activity的迁移，即从一个task迁移到另一个task，这个迁移跟activity的taskAffinity有关。
+  - 当allowTaskReparenting的值为“true”时，则表示Activity能从启动的Task移动到有着affinity的Task（当这个Task进入到前台时），
+  - 当allowTaskReparenting的值为“false”，表示它必须呆在启动时呆在的那个Task里。如果这个特性没有被设定，元素(当然也可以作用在每次activity元素上)上的allowTaskReparenting属性的值会应用到Activity上。默认值为“false”。
+    
+[[./pic/reparenting.png]]
+
+  - 举个例子，比如现在有两个应用A和B，A启动了B的一个ActivityC，然后按Home键回到桌面，再单击B应用时，如果此时，allowTaskReparenting的值为“true”，那么这个时候并不会启动B的主Activity，而是直接显示已被应用A启动的ActivityC，我们也可以认为ActivityC从A的任务栈转移到了B的任务栈中。
+***** 用代码来码证一下
+- ActivityA
+#+BEGIN_SRC java
+public class ActivityA extends Activity {
+    private Button btnC;
+    @Override
+        protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_a);
+        btnC = (Button) findViewById(R.id.mainC);
+        btnC.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    Intent intent = new Intent(Intent.ACTION_MAIN);
+                    intent.addCategory(Intent.CATEGORY_LAUNCHER); // 去打开B应用中的activity 
+                    ComponentName cn = new ComponentName("com.cmcm.activitytask2", "com.cmcm.activitytask2.ActivityC");
+                    intent.setComponent(cn);
+                    startActivity(intent);
+                }
+            });
+    }
+}
+#+END_SRC
+- A 应用的 manifest.xml
+#+BEGIN_SRC xml
+<activity android:name=".ActivityA">
+     <intent-filter>
+           <action android:name="android.intent.action.MAIN" />
+           <category android:name="android.intent.category.LAUNCHER" />
+     </intent-filter>
+</activity>
+#+END_SRC
+- B应用中的启动模式以及标志位的设置
+#+BEGIN_SRC java
+public class ActivityC extends Activity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_c);
+    }
+}
+#+END_SRC
+- B应用的manifest.xml
+#+BEGIN_SRC xml
+<activity android:name=".ActivityC" android:exported="true"    
+      android:allowTaskReparenting="true">
+</activity>
+#+END_SRC
+***** 查看Activity的返回栈
+- adb shell dumpsys activity // 找
+- ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+- ACTIVITY MANAGER ACTIVITIES (dumpsys activity activities)
+**** 注意点
+- 有点需要说明的是allowTaskReparenting仅限于singleTop和standard模式，这是因为一个activity的affinity属性由它的taskAffinity属性定义（代表栈名），而一个task的affinity由它的root activity定义。所以，一个task的root activity总是拥有和它所在task相同的affinity。
+- 由于以singleTask和singleInstance启动的activity只能是一个task的root activity，因此allowTaskReparenting仅限于以standard 和singleTop启动的activity
+**** taskAffinity在两种情况下起作用：
+***** 当启动Activity的Intent中带有FLAG_ACTIVITY_NEW_TASK标志时。
+- 在默认情况下，目标Activity将与startActivity的调用者处于同一task中。但如果用户特别指定了FLAG_ACTIVITY_NEW_TASK，表明它希望为Activity重新开设一个Task。这时就有两种情况：
+  - 假如当前已经有一个Task，它的affinity与新Activity是一样的，那么系统会直接用此Task来完成操作，而不是另外创建一个Task；
+  - 否则系统需要创建一个Task。
+***** 当Activity中的allowTaskReparenting属性设置为true时。
+- 在这种情况下，Activity具有"动态转移"的能力。举个前面的"短信"例子，在默认情况下，该应用程序中的所有Activity具有相同的affinity。
+- 当另一个程序启动了"短信编辑"时，一开始这个Activity和启动它的Activity处于同样的Task中。但如果"短信编辑"Activity指定了allowTaskReparenting，且后期"短信"程序的Task转为前台，此时"短信编辑"这一Activity会被"挪"到与它更亲近的"短信"Task中。
+
+*** 清空任务栈
+- Android系统除了给我提供了TaskAffinity来指定任务栈名称外，还给我提供了清空任务栈的方法，在一般情况下我们只需要在<activity>标签中指明相应的属性值即可。
+**** clearTaskOnLaunch
+#+BEGIN_SRC xml
+android:clearTaskOnLaunch
+#+END_SRC
+- 这个属性用来标记是否从task清除除根Activity之外的所有的Activity，“true”表示清除，“false”表示不清除，默认为“false”。这里有点我们必须要注意的，这个属性只对任务栈内的root Activity起作用，任务栈内其他的Activity都会被忽略。如果android:clearTaskOnLaunch属性为“true”，每次我们重新进入这个应用时，我们只会看到根Activity，任务栈中的其他Activity都会被清除出栈。
+- 比如一个应用的Activity A,B,C，其中clearTaskOnLaunch设置为true，C为默认值，我们依次启动A,B,C，点击HOME,再在桌面点击图标。启动的是A，而B，C将都被移除当前任务栈。也就是说，当Activity的属性clearTaskOnLaunch为true时将被优先启动，其余的Activity(B、C)都被移除任务栈并销毁，除非前面A已经finish销毁，后面的已注册clearTaskOnLaunch为true的activity(B)才会生效。
+- 特别地，如果我们的应用中引用到了其他应用的Activity，这些Activity设置了android:allowTaskReparenting属性为“true”，则它们会被重新宿主到有共同affinity的task中。
+**** android:finishOnTaskLaunch
+- finishOnTaskLaunch属性与clearTaskOnLaunch 有些类似，它们的区别是finishOnTaskLaunch是作用在自己身上(把自己移除任务栈，不影响别的Activity)，而clearTaskOnLaunch则是作用在别人身上(把别的Activity移除任务栈)，如果我们把Activity的android:finishOnTaskLaunch属性值设置为true时，离开这个Activity所依赖的任务栈后，当我们重新返回时，该Activity将会被finish掉，而且其他Activity不会受到影响。
+**** android:alwaysRetainTaskState
+- alwaysRetainTaskState实际上是给了当前Activity所在的任务栈一个“免死金牌”，如果当前Activity的android:alwaysRetainTaskState设置为true时，那么该Activity所在的任务栈将不会受到任何清理命令的影响，一直保持当前任务栈的状态。
+
+** 启动模式的应用场景
+*** SingleTask模式的运用场景
+- 最常见的应用场景就是保持我们应用开启后仅仅有一个Activity的实例。最典型的样例就是应用中展示的主页(Home页)。
+- 假设用户在主页跳转到其他页面，运行多次操作后想返回到主页，假设不使用SingleTask模式，在点击返回的过程中会多次看到主页，这明显就是设计不合理了。
+*** SingleTop模式的运用场景
+- 假设你在当前的Activity中又要启动同类型的Activity，此时建议将此类型Activity的启动模式指定为SingleTop，能够降低Activity的创建，节省内存!
+*** SingleInstance模式的运用场景
+- SingleInstance是activity启动的一种模式，一般做应用层开发很少用到，我一般用到的app定时提醒会用到这个模式吧。这个模式使用起来有很多坑，假设有activityA，activityB，activityC这三个activity，我们将activityB设置为SingleInstance
+**** 第一种情况
+- A开启B，B开启C，如果finish activityC，那么activityA会显示而不是我们想要的activityB，这是因为activityB和activityA、activityC所处的栈不同，C关闭了，就要显示C所处栈的下一个activity，解决这个问题办法很多，我自己用的方法是通过记录开启activity，在被关闭的activity的finish方法中重新开启activityB。
+**** 第二种情况
+A开启B，然后按home键，再从左面点开应用，显示的是A，这是因为launch启动我们应用的时候 会从默认的栈找到栈顶的activity显示，这个解决办法的思路跟第一种差不多，也就不献丑了
+**** 第三种情况
+- A开启C，C开启B，B开启A，结果显示的是C，这还是两个栈造成的，B开启A的时候，其实是到达A所处的栈，栈顶是C，所以就显示C了，解决办法是用flag把默认栈activity清理了，重新开启A，或者回退到C时再开启A。
+**** 总结
+- 三种情况的解决方法都是基于页面少的情况，如果页面多了会产生更多的问题
+- 为了必避免这个问题，最好不用在中间层使用SingleInstance
+- TIPS:  
+  - (1)如果想让C和B同一个栈，那就使用taskinfinity，给他俩设置同样的栈名
+  - (2)onActivityResult不能与SingleInstance不能一起使用，因为不同栈
+*** standard 运用场景
+- Activity 的启动默认就是这种模式。在 standard 模式下，每次启动一个 Activity 都会创建一个新的实例;
+- 在正常应用中正常打开和关闭页面就可以了，退出整个app就关闭所有的页面
+** Activity时的生命周期不同
+-  由于当一个Activity设置了SingleTop或者SingleTask模式或者SingleInstance模式后，跳转此Activity出现复用原有Activity的情况时，此Activity的onCreate方法将不会再次运行。onCreate方法仅仅会在第一次创建Activity时被运行。
+- 而一般onCreate方法中会进行该页面的数据初始化、UI初始化，假设页面的展示数据无关页面跳转传递的參数，则不必操心此问题，若页面展示的数据就是通过getInten() 方法来获取，那么问题就会出现：getInten()获取的一直都是老数据，根本无法接收跳转时传送的新数据!
+- 这时我们须要另外一个回调 onNewIntent(Intent intent)方法。此方法会传入最新的intent，这样我们就能够解决上述问题。这里建议的方法是又一次去setIntent。然后又一次去初始化数据和UI
+#+BEGIN_SRC java
+/** 复用Activity时的生命周期回调*/
+@Override     
+protected void onNewIntent(Intent intent) {         
+    super.onNewIntent(intent);         
+    setIntent(intent);         
+    initData();         
+    initView();     
+} 
+#+END_SRC
+** 实际中的栈管理类
+- 管理Activity的类，一般在BaseActivity会调用这个类，然后所有的Activity继承BaseActivity，这样管理好整个项目的Activity
+#+BEGIN_SRC java
+public class ActivityStackManager { // activity堆栈管理 
+    private static ActivityStackManager mInstance; 
+    private static Stack<Activity> mActivityStack; 
+    public static ActivityStackManager getInstance() { 
+        if (null == mInstance) 
+            mInstance = new ActivityStackManager(); 
+        return mInstance; 
+    } 
+    private ActivityStackManager() { 
+        mActivityStack = new Stack<Activity>(); 
+    } 
+    public void addActivity(Activity activity) {  // 入栈 
+        mActivityStack.push(activity); 
+    } 
+    public void removeActivity(Activity activity) {  // 出栈 
+        mActivityStack.remove(activity); 
+    } 
+    public void finishAllActivity() {  // 彻底退出 
+        Activity activity; 
+        while (!mActivityStack.empty()) { 
+            activity = mActivityStack.pop(); 
+            if (activity != null) 
+                activity.finish(); 
+        } 
+    } 
+    public void finishActivity(Class<?> cls) {  // 结束指定类名的Activity 
+        for (Activity activity : mActivityStack) { 
+            if (activity.getClass().equals(cls)) { 
+                finishActivity(activity); 
+            } 
+        } 
+    } 
+    public boolean checkActivity(Class<?> cls) {  // 查找栈中是否存在指定的activity 
+        for (Activity activity : mActivityStack) { 
+            if (activity.getClass().equals(cls)) { 
+                return true; 
+            } 
+        } 
+        return false; 
+    } 
+    public void finishActivity(Activity activity) {  // 结束指定的Activity 
+        if (activity != null) { 
+            mActivityStack.remove(activity); 
+            activity.finish(); 
+            activity = null; 
+        } 
+    } 
+    public boolean finishToActivity(Class<? extends Activity> actCls, boolean isIncludeSelf) { // finish指定的activity之上所有的activity 
+        List<Activity> buf = new ArrayList<Activity>(); 
+        int size = mActivityStack.size(); 
+        Activity activity = null; 
+        for (int i = size - 1; i >= 0; i--) { 
+            activity = mActivityStack.get(i); 
+            if (activity.getClass().isAssignableFrom(actCls)) { 
+                for (Activity a : buf) 
+                    a.finish(); 
+                return true; 
+            } else if (i == size - 1 && isIncludeSelf) 
+                buf.add(activity); 
+            else if (i != size - 1) 
+                buf.add(activity); 
+        } 
+        return false; 
+    }
+} 
+#+END_SRC
 * activity lifecycle
 *** Activity横竖屏切换生命周期变化
 **** 新建一个Activity，并把各个生命周期打印出来
@@ -576,12 +1032,12 @@ public class DetailFragment extends Fragment {
 *** What is the chief purpose of line five in this code snippet?
 #+BEGIN_SRC java
 override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState) setContentView(R.layout.activity_post_create)
-	if (savedInstanceState != null) return
-	val fragment = CreatePostFragment()
-		supportFragmentManager
-		.beginTransaction()
-		.add(R.id. fragment_container, fragment)
-		.commit()
+    if (savedInstanceState != null) return
+    val fragment = CreatePostFragment()
+        supportFragmentManager
+        .beginTransaction()
+        .add(R.id. fragment_container, fragment)
+        .commit()
 }
 #+END_SRC
 - to make sure that the activity creates a new fragment each time it is restored from a previous state
@@ -663,7 +1119,6 @@ ActivityManager.isLowRamDevice() ;
   getDefaultSharedPreferances(this).getString(EMAIL,"")
    #+END_SRC
 -  In Method "getDefaultSharedPrefarances(this).getString()" Second parameter is passed so that it can be returned, in case key doesn't exist. So we need to pass an empty string to be returned in case key doesn't exist.
-   
 
 * xml resource files
 ** layout
@@ -687,14 +1142,14 @@ android:shape="oval">
 #+BEGIN_SRC xml
   <LinearLayout
       android:layout_width="match_parent"
-	  android:layout_height="match_parent"
-	  android:orientation="horizontal"
-	  android:gravity="center">
-	<Button
+      android:layout_height="match_parent"
+      android:orientation="horizontal"
+      android:gravity="center">
+    <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Button" />
-	<Button
+    <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Button" />
@@ -705,19 +1160,19 @@ android:shape="oval">
 *** Which code snippet would achieve the layout displayed below?
    #+BEGIN_SRC java
 <androidx.constraintlayout.widget.ConstraintLayout
-	...>
+    ...>
 
-	<TextView
-		android:id="@+id/text_dashboard"
-		android:layout_width="match_parent"
-		android:layout_height="wrap_content"
-		android:layout_marginStart="8dp"
-		android:layout_marginEnd="8dp"
-		android:textAlignment="center"
-		android:text="Dashboard"
-		app:layout_constraintEnd_toEndOf="parent"
-		app:layout_constraintStart_toStartOf="parent"
-		app:layout_constraintTop_toTopOf="parent" />
+    <TextView
+        android:id="@+id/text_dashboard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:textAlignment="center"
+        android:text="Dashboard"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
    #+END_SRC
@@ -728,10 +1183,10 @@ android:shape="oval">
   <shape xmlns:android-"http://schemas.android.com/apk/res/android"
   android:shape-"rectangle">
   <gradient
-	  android:startColor-"@android:color/white"
-	  android:endColor-"@android:color/black"
-	  android:angle-"135"/>
-	</shape>
+      android:startColor-"@android:color/white"
+      android:endColor-"@android:color/black"
+      android:angle-"135"/>
+    </shape>
 #+END_SRC
 *** Given the following dimens.xml file, how would you define an ImageView with medium spacing at the bottom?
 #+BEGIN_SRC xml
@@ -793,12 +1248,12 @@ android.permission.ACCESS_NETWORK_STATE
 *** You would like to enable analytics tracking only in release builds. How can you create a new field in the generated BuildConfig class to store that value?
 #+BEGIN_SRC java
 buildTypes {
-	debug {
-		buildConfigField 'boolean', 'ENABLE_ANALYTICS', 'false'
-	}
-	release {
-		buildConfigField 'boolean', 'ENABLE_ANALYTICS', 'true'
-	}
+    debug {
+        buildConfigField 'boolean', 'ENABLE_ANALYTICS', 'false'
+    }
+    release {
+        buildConfigField 'boolean', 'ENABLE_ANALYTICS', 'true'
+    }
 }
 #+END_SRC   
 ***  To optimize your APK size, what image codec should you use?
