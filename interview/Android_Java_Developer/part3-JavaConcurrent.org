@@ -1,5 +1,0 @@
-#+latex_class: book
-#+title: Android 开发工程师面试指南 - JavaConcurrent(Java并发）
-#+author: deepwaterooo
-
-[[file:e:/Android_Java_Developer/part2.org][JavaConcurrent(Java并发)]]
