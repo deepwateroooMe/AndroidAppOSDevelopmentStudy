@@ -1,6 +1,6 @@
 #+latex_class: cn-article
 #+title: C# Interview Questions
-#+author: Jenny Huang
+#+author: deepwaterooo
 
 * C# Interview Questions
 ** 100道C#面试题
