@@ -8,7 +8,7 @@
 - api levle 30 androidx basic project environment can be configured, but dynamic fragment add not done yet, switched back to api 28 temporatorily
 - wsl 1 ubuntu 18 adb logcat is so slow. after 9pm yesterday, 150K lines of log, I could only adb logcat previous project samplefragments, can can not grab any FirstFragment nor Second Fragment Log.i info. may switch laptop back to Mac, but it has only 8GB memory, and internet too slow for that laptop
 - today will review major components, as well small details, notes summaries to move on
-- *恶鬼们昨天晚上今天早上又疯狂作案一晚，一个故意晚回来，用洗手间，用厨房，半夜一两点钟还在故意厨房里开厨导柜吵别人；一个今天早上五点钟便受恶房东指挥，故意开车库噪音极大的声响，早上 五点钟便故意吵醒别人休息，实在是无恶不作*
+- *恶鬼们昨天晚上今天早上又疯狂作案一晚，一个故意晚回来，用洗手间，用厨房，半夜一两点钟还在故意厨房里开厨导柜吵别人；一个今天早上五点钟便受恶房东暗示指使，故意开车库噪音极大的声响，早上 五点钟便故意吵醒别人休息，实在是无恶不作（它有昨天晚上下班后到休息前一晚上的时间他不提前装车，非要等到早上五点钟故意把别人吵醒，另一个贱畜牲的做法是在别人晚上入睡前故意吵别人，贱蓄牲们的做法还不够猖狂吗）*
 - BroadcastReceiver sample project runs though easily. Will look into ContentProvider projects too today, all of them are not complicated.
 * 系统服务篇
 :clock1: DONE: Android 如何启动？

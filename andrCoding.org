@@ -1184,9 +1184,57 @@ public class PersonObserver extends ContentObserver{
   - 采用 Sharedpreferences 共享数据，需要使用sharedpreferences API读写数据,这使得访问数据变得复杂 & 难度大。
   - 而采用ContentProvider方式，其 解耦了 底层数据的存储方式，使得无论底层数据存储采用何种方式，外界对数据的访问方式都是统一的，这使得访问简单 & 高效
   - 如一开始数据存储方式 采用 SQLite 数据库，后来把数据库换成 MongoDB，也不会对上层数据ContentProvider使用代码产生影响
+** IPC interprocess ContentProvider 实例关键点纪录
+*** app 1: function as server
+- AndroidManifest.xml
+#+BEGIN_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="scut.carson_ho.contentprovider">
+  <permission
+      android:name="scut.carson_ho.PROVIDER"
+      android:label="provider permission"
+      android:protectionLevel="normal" />
+  <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        
+        android:supportsRtl="true"
+        android:grantUriPermissions="true"
+        android:theme="@style/AppTheme">
+        <activity android:name=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <provider android:name="MyProvider"
+                  android:authorities="cn.scu.myprovider"
+                  android:enabled="true"
+                  android:exported="true"
+                  android:permission="scut.carson_ho.PROVIDER"/>
+    </application>
+</manifest>
+#+END_SRC
+- the <permissions> section, <provider> section, and authorities, permissions
+*** app 2: functions as client
+- AndroidManifest
+#+BEGIN_SRC xml
+    <uses-permission android:name="scut.carson_ho.Read"/>
+    <uses-permission android:name="scut.carson_ho.Write"/>
+    <uses-permission android:name="scut.carson_ho.PROVIDER"/>
+#+END_SRC
+  - 客户端的许可要与服务器端的相对应，可细分为读写许可
+- MainActivity.java
+  #+BEGIN_SRC java
+// 设置URI
+Uri uri_user = Uri.parse("content://cn.scu.myprovider/user");
+  #+END_SRC
+  - 这里设置uri的“content://AUTHORITY/tablename”需要与服务器端manifest中的<provider>android:authorities相契合
 
 * Services:文件夹里有一个文件总结，但是太杂乱，需要删改和总结
-* 
+
 * activity lifecycle
 *** Activity横竖屏切换生命周期变化
 **** 新建一个Activity，并把各个生命周期打印出来
