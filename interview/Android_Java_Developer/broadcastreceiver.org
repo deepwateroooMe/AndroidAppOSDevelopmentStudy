@@ -1,0 +1,6 @@
+#+latex_class: cn-article
+#+title: Android BroadcastReceiver
+#+author: deepwaterooo
+#+options: ^:nil
+
+* 
