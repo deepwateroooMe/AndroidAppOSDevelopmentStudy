@@ -922,6 +922,8 @@ public class ActivityStackManager { // activity堆栈管理
     - 此处主要讲解 自定义URI
       
 [[./pic/uri.png]]
+
+- 授权信息（Authority）：ContentProvider的唯一标识符。所以这个一定得match对了
 #+BEGIN_SRC java
 Uri uri = Uri.parse("content://com.carson.provider/User/1") // 设置URI
 // 上述URI指向的资源是：名为 `com.carson.provider`的`ContentProvider` 中表名 为`User` 中的 `id`为1的数据

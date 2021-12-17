@@ -8,8 +8,14 @@
 - api levle 30 androidx basic project environment can be configured, but dynamic fragment add not done yet, switched back to api 28 temporatorily
 - wsl 1 ubuntu 18 adb logcat is so slow. after 9pm yesterday, 150K lines of log, I could only adb logcat previous project samplefragments, can can not grab any FirstFragment nor Second Fragment Log.i info. may switch laptop back to Mac, but it has only 8GB memory, and internet too slow for that laptop
 - today will review major components, as well small details, notes summaries to move on
-- *恶鬼们昨天晚上今天早上又疯狂作案一晚，一个故意晚回来，用洗手间，用厨房，半夜一两点钟还在故意厨房里开厨导柜吵别人；一个今天早上五点钟便受恶房东暗示指使，故意开车库噪音极大的声响，早上 五点钟便故意吵醒别人休息，实在是无恶不作（它有昨天晚上下班后到休息前一晚上的时间他不提前装车，非要等到早上五点钟故意把别人吵醒，另一个贱畜牲的做法是在别人晚上入睡前故意吵别人，贱蓄牲们的做法还不够猖狂吗）*
+- *恶鬼们昨天晚上今天早上又疯狂作案一晚，一个故意晚回来，用洗手间，用厨房，半夜一两点钟还在故意厨房里开厨导柜吵别人；一个今天早上五点钟便受恶房东暗示指使，故意开车库噪音极大的声响，早上五点钟便故意吵醒别人休息，实在是无恶不作（它有昨天晚上下班后到休息前一晚上的时间他不提前装车，非要等到早上五点钟故意把别人吵醒，另一个贱畜牲的做法是在别人晚上入睡前故意吵别人，贱蓄牲们的做法还不够猖狂吗?）*
 - BroadcastReceiver sample project runs though easily. Will look into ContentProvider projects too today, all of them are not complicated.
+- ContentProvider Interprocess communication projects are connected well too. One functions as server, the other as client, not complicated at all.
+ 
+* Adidev Technology, Inc 围堵封杀职场女性职业生涯细节记
+- 对一个职场女性的围堵与封杀，何时为了？
+- 围堵？ 故意下套碰碰？这个等今天下午的时候，或傍晚的时候再回来写
+
 * 系统服务篇
 :clock1: DONE: Android 如何启动？
 [x] DONE: Android 应用进程启动流程
@@ -99,3 +105,18 @@ import com.google.android.material.snackbar.Snackbar;
         android:layout_height="wrap_content"/>
     <include layout="@layout/custom_title"/>
 
+* Good morning Robin, 
+
+Among all my previous interviews and coding tests, I have always been sharing my screen with interviewer so that interviewee (like me) can coding at his/their most confortable working/coding environment. 
+
+This may sound different from your intuition, as we all understand that staffing company tries their best to decrease salaries of their employee so that they the company can benefit more from the client company pay rate difference to the employee. And this could be the most significant reason you guys -- staffing companies try all your best to limit the candidates from performing their best. 
+
+I stated above only because I am an Emacs geek, and I started using command line based editor emacs ever since the first day of my programming career (my github account: https://github.com/deepwaterooo?tab=repositories . It even has the emacs repository). 
+
+I REFUSE such unreasonable test (I had never have any such wired requirments, and this is the reason I am writing to you to negociate possible better solutions). But if you consider sharing screen so that Adidev can monitor my coding process through sharing screen, through my emacs editor (you can monitor my coding process through my emacs editor and I would paste final result into your coding link too, so that you can still score or evaluate using your test system framework.)
+
+Please do help consider sharing screen instead of limiting the candidate's performance at your best effort. If you don't consider such options, I refuse such unreasonable tests, only because I am a emacs geek, and I am not interested in such wired coding test. 
+
+Please let me know if you have any question, or opinions. 
+
+thanks, and regards 
