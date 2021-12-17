@@ -11,6 +11,7 @@
 - *恶鬼们昨天晚上今天早上又疯狂作案一晚，一个故意晚回来，用洗手间，用厨房，半夜一两点钟还在故意厨房里开厨导柜吵别人；一个今天早上五点钟便受恶房东暗示指使，故意开车库噪音极大的声响，早上五点钟便故意吵醒别人休息，实在是无恶不作（它有昨天晚上下班后到休息前一晚上的时间他不提前装车，非要等到早上五点钟故意把别人吵醒，另一个贱畜牲的做法是在别人晚上入睡前故意吵别人，贱蓄牲们的做法还不够猖狂吗?）*
 - BroadcastReceiver sample project runs though easily. Will look into ContentProvider projects too today, all of them are not complicated.
 - ContentProvider Interprocess communication projects are connected well too. One functions as server, the other as client, not complicated at all.
+- The coding interview is done (due to the interface reasons, the 120 minutes test was submitted in about 60 minutes by mistake, the coding test interface does not false-positive submit proof), expecting the final round of interview, while at the same time, I am returning back to algorithms, and tomorrow there is a weekly contest too.
  
 * Adidev Technology, Inc 围堵封杀职场女性职业生涯细节记
 - 对一个职场女性的围堵与封杀，何时为了？
@@ -108,7 +109,7 @@ import com.google.android.material.snackbar.Snackbar;
         android:layout_height="wrap_content"/>
     <include layout="@layout/custom_title"/>
 
-* Good morning Robin, 
+j* Good morning Robin, 
 
 Among all my previous interviews and coding tests, I have always been sharing my screen with interviewer so that interviewee (like me) can coding at his/their most confortable working/coding environment. 
 
