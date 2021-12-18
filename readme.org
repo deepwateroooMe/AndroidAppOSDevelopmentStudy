@@ -13,12 +13,19 @@
 - ContentProvider Interprocess communication projects are connected well too. One functions as server, the other as client, not complicated at all.
 - The coding interview is done (due to the interface reasons, the 120 minutes test was submitted in about 60 minutes by mistake, the coding test interface does not false-positive submit proof), expecting the final round of interview, while at the same time, I am returning back to algorithms, and tomorrow there is a weekly contest too.
  
-* Adidev Technology, Inc 围堵封杀职场女性职业生涯细节记
-- 对一个职场女性的围堵与封杀，何时为了？
+* 职场弱弱的奔溃瞬间（+1）
+- 联系我安排面试相关的按照名字来看，应该是一个美国人吧，关于文化、语言等，这样的hr写邮件与candidate沟通应该会相对比较顺利一点
   
 [[./pic/buddy.png]]
-
-- 围堵？ 故意下套碰磁？这个等今天下午的时候，或傍晚的时候再回来写
+  - 偶这个职场弱弱，瞬间被这五个字母吓傻了，怎么也不敢跟他们联系，直到下午约定的时候中介打电话进来。
+- 记得上次与另一个公司的第一轮面试快结束时问及第二轮的coding test是怎么样的，会是像leetcode之类的刷题界面一样吗？我是一个emacs依赖症重症患者，离开command line based editor emacs，我不会写代码。记得当时与面试官沟通这个问题的时候，他说到会sharing screen, 这个我们面试者就可以在自己最熟悉与舒适的工作环境中尽可能高效地答题、写出理想的代码。
+- 今天早上，当我第一时间读及收件箱邮件里的reminder, 
+  
+  [[./pic/req.png]]
+  - 作为一个久经沙场、久经面试的弱弱，当读到这样的coding test reminder要求，弱弱的内心瞬间奔溃、溃不成军（像山顶瀑布里的水哗啦啦地流不下停）。。。。。。这究竟是要干什么？？？
+  - 好在，作为一个久经沙场，久经面试的弱弱，死猪不怕开水烫，大不了就是不是command line based editor的界面会写得慢、会写得不顺，会无数次敲错字符，会写出来的代码不成型，bug多，极度降低效率，但它好歹也还是一个test不是？这种test的机会也不是很多呀，大不了我敲不好这样的代码，得个0分，又如何？
+  - 于是，崩溃了的弱弱还是硬着头皮明知山有虎地爬去把coding test给做了。。。
+- 回想2012年9月还是10月继自己装linux系统把电脑弄坏之后，被自己作业c++代码里的一个bug吓得魂飞魄散，急忙给代课教师写邮件求救。。。。。。木有想到，原来这么多年过去了，内心里，偶们还是这么一个表哥眼中永远长不大的弱弱。。。。。。 
 
 * 系统服务篇
 :clock1: DONE: Android 如何启动？
@@ -108,19 +115,3 @@ import com.google.android.material.snackbar.Snackbar;
         android:layout_width="match_parent"
         android:layout_height="wrap_content"/>
     <include layout="@layout/custom_title"/>
-
-j* Good morning Robin, 
-
-Among all my previous interviews and coding tests, I have always been sharing my screen with interviewer so that interviewee (like me) can coding at his/their most confortable working/coding environment. 
-
-This may sound different from your intuition, as we all understand that staffing company tries their best to decrease salaries of their employee so that they the company can benefit more from the client company pay rate difference to the employee. And this could be the most significant reason you guys -- staffing companies try all your best to limit the candidates from performing their best. 
-
-I stated above only because I am an Emacs geek, and I started using command line based editor emacs ever since the first day of my programming career (my github account: https://github.com/deepwaterooo?tab=repositories . It even has the emacs repository). 
-
-I REFUSE such unreasonable test (I had never have any such wired requirments, and this is the reason I am writing to you to negociate possible better solutions). But if you consider sharing screen so that Adidev can monitor my coding process through sharing screen, through my emacs editor (you can monitor my coding process through my emacs editor and I would paste final result into your coding link too, so that you can still score or evaluate using your test system framework.)
-
-Please do help consider sharing screen instead of limiting the candidate's performance at your best effort. If you don't consider such options, I refuse such unreasonable tests, only because I am a emacs geek, and I am not interested in such wired coding test. 
-
-Please let me know if you have any question, or opinions. 
-
-thanks, and regards 
