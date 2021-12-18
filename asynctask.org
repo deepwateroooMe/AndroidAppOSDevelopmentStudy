@@ -3,6 +3,7 @@
 #+author: deepwaterooo
 
 * Java 创建线程的三种方式总结
+- https://blog.csdn.net/u011578734/article/details/110523825
 ** 继承 Thread 类
    #+BEGIN_SRC java
 class MyThread extends Thread {
@@ -63,6 +64,7 @@ public static void main(String[] args) throws ExecutionException, InterruptedExc
   - 类可能只要求可执行就行，继承整个 Thread 类开销过大。
   - 另外，如果需要有返回值时，使用 Callable 接口是适合的。
 
+
 * Handler的使用
 - Android中，不允许应用程序在子线程中更新UI，UI的处理必须在UI线程中进行，这样Android定制了一套完善的线程间通信机制——Handler通信机制。Handler作为Android线程通信方式，高频率的出现在我们的日常开发工作中，我们常用的场景包括：使用异步线程进行网络通信、后台任务处理等，Handler则负责异步线程与UI线程（主线程）之间的交互。
 - Android为了确保UI操作的线程安全，规定所有的UI操作都必须在主线程（UI线程）中执行，决定了UI线程中不能进行耗时任务，在开发过程中，需要将网络，IO等耗时任务放在工作线程中执行，工作线程中执行完成后需要在UI线程中进行刷新，因此就有了Handler进程内线程通信机制，当然Handler并不是只能用在UI线程与工作线程间的切换，Android中任何线程间通信都可以使用Handler机制。
@@ -83,8 +85,46 @@ public static void main(String[] args) throws ExecutionException, InterruptedExc
     }
 #+END_SRC
 - 这种方式会导致 _内存泄露_ 。
+- Handler 内存泄漏的两个原因: 
+  - Java 中非静态内部类和匿名内部类会持有外部类的引用
+#+BEGIN_SRC java
+// 这是一个外部类 Handler 不会持有外部类引用
+// 显然 handleMessage 没地方写了
+Handler handler = new Handler();
+
+// 重写 handleMessage 后将得到一个内部类 Handler，以内 handleMessage 是在外部类中实现的
+// 它持有外部类引用，可能会引起内存泄漏
+Handler handler = new Handler() { // 这是重写了handleMessage后的内部类Handler
+  @Override public void handleMessage(Message msg) {
+        super.handleMessage(msg);
+        switch (msg.what) {
+            case 0:
+              MLog.i(msg.obj);
+              break;
+            case 1:
+              break;
+            default:
+
+        }
+    }
+};
+
+// 这里 Handler 是一个匿名类，但不是内部类
+// Runnable 是一个匿名内部类，持有外部类引用，可能会引起内存泄漏
+new Handler().post(new Runnable() {
+    @Override public void run() {
+      // ...
+    }
+});
+#+END_SRC 
+  - Handler 的生命周期比外部类长
   - 我们通过Handler发送消息，在Message对象中会持有当前Handler对象的引用，在Java中非静态成员类、内部类、匿名类会持有外部对象的引用（这里在源码中有提到），而Looper是线程局部变量，其生命周期与UI线程相同，Looper持有MessageQueue的引用，MessageQueue持有Message的引用，当通过Handler发送一个延时消息未处理之前用户已经离开当前Activity，会导致Activity不能及时释放而内存泄漏。
+- 分析
+  - 非静态的内部 Handler 子类、匿名 Handler 子类会持有外部类的引用(Activity)，而 Handler 可能会因为要等待处理耗时操作导致存活时间超过 Activity，或者消息队列中存在未被 Looper 处理的 Message ，而 Message 会持有 Handler 的引用。于是，在 Activity 退出时，其引用还是被 Handler 持有，导致 Activity 无法被及时回收，造成内存泄露。
+  - 非静态的内部 Runnable 子类、匿名 Runnable 子类 post 到任意 Handler 上时，Runnable 其实是 Massage中的 Callback，持有 Message 引用，如果这个 Massage 在消息队列还没有被处理，那么就会造成 Runnable 一直持有外部类的引用而造成内存泄露。
 *** 解决思路
+- 通过静态内部类或者外部类来声明 Handler 和 Runnable，然后使用弱引用来拿到外部类的变量。
+- 在 Activity/Fragment 销毁的时候请空 MessageQueue 中的消息。
 **** 官方推荐的一种
     #+BEGIN_SRC java
 private Handler handler = new Handler(new Handler.Callback() {
@@ -308,3 +348,135 @@ Handler handler = new Handler(Looper.getMainLooper()); // 此时,子线程的han
   - 方法2：将Handler声明为静态类
     - 静态类不持有外部类的对象，这样即使Handler在运行，Activity也可以被回收。
     - 由于静态类的Handler不再持有外部类对象，如果要操作Activity需要增加一个Activity的弱引用。
+- 优点：
+  - 操作简单，无学习成本。
+- 缺点：
+  - 代码规范性较差，不易维护。
+  - 每次操作都会开启一个匿名线程，系统开销较大。
+
+* AsyncTask
+- 较为轻量级的异步类，封装了 FutureTask 的线程池、ArrayDeque 和 Handler 进行调度。AsyncTask 主要用于 _后台与界面持续交互_
+- 我们来看看 AsyncTask 这个抽象类的定义，当我们定义一个类来继承 AsyncTask 这个类的时候，我们需要为其指定3个泛型参数：
+#+BEGIN_SRC java
+AsyncTask　<Params, Progress, Result>
+#+END_SRC
+  - Params: 这个泛型指定的是我们传递给异步任务执行时的参数的类型。
+  - Progress: 这个泛型指定的是我们的异步任务在执行的时候将执行的进度返回给UI线程的参数的类型。
+  - Result: 这个泛型指定的异步任务执行完后返回给UI线程的结果的类型。
+- 我们在定义一个类继承 AsyncTask 类的时候，必须要指定好这三个泛型的类型，如果都不指定的话，则都将其写成 void。
+- 我们来看一个官方给的例子：
+#+BEGIN_SRC java
+private class DownloadFilesTask extends AsyncTask<URL, Integer, Long> {
+     protected Long doInBackground(URL... urls) {
+         int count = urls.length;
+         long totalSize = 0;
+         for (int i = 0; i < count; i++) {
+             totalSize += Downloader.downloadFile(urls[i]);
+             publishProgress((int) ((i / (float) count) * 100));
+             // Escape early if cancel() is called
+             if (isCancelled()) break;
+         }
+         return totalSize;
+     }
+     protected void onProgressUpdate(Integer... progress) {
+         setProgressPercent(progress[0]);
+     }
+     protected void onPostExecute(Long result) {
+         showDialog("Downloaded " + result + " bytes");
+     }
+}
+#+END_SRC
+- 使用时只需要集成 AsyncTask，创建对象并调用 execute 执行即可：
+#+BEGIN_SRC java
+new DownloadFilesTask().execute(url1, url2, url3);
+#+END_SRC
+- doInBackground(Params…) 方法里执行耗时逻辑，然后在 onPostExecute(Result) 中将结果更新回UI组件
+- AsyncTask 的几个主要方法中，doInBackground 方法运行在子线程，execute、onPreExecute、onProgressUpdate、onPostExecute 这几个方法都是在 UI 线程运行的。
+** 使用 AsyncTask 的注意事项
+- AsyncTask 的实例必须在 UI Thread 中创建。
+- 只能在 UI 线程中调用 AsyncTask 的 execute 方法。
+- AsyncTask 被重写的四个方法是系统自动调用的,不应手动调用。
+- 每个AsyncTask 只能被执行一次，多次执行会引发异常。
+- AsyncTask 的四个方法，只有 doInBackground 方法是运行在其他线程中,其他三个方法都运行在 UI 线程中，也就说其他三个方法都可以进行 UI 的更新操作。
+- AsyncTask 默认是串行执行，如果需要并行执行，使用接口 executeOnExecutor 方法。
+** 优点：
+- 结构清晰，使用简单，适合后台任务的交互。
+- 异步线程的优先级已经被默认设置成了：THREAD_PRIORITY_BACKGROUND，不会与 UI 线程抢占资源。
+** 缺点：
+- 结构略复杂，代码较多。
+- 每个 AsyncTask 只能被执行一次，多次调用会发生异常。
+- AsyncTask 在整个 Android 系统中维护一个线程池，有可能被其他进程的任务抢占而降低效率。
+
+* HandlerThread
+- HandlerThread 是一个自带 Looper 消息循环的线程类。处理异步任务的方式和 Thread + Looper + Handler 方式相同。
+** 优点：
+- 简单，内部实现了普通线程的 Looper 消息循环。
+- 可以串行执行多个任务。
+- 内部拥有自己的消息队列，不会阻塞 UI 线程。
+** 缺点：
+- 没有结果返回接口，需要自行处理。
+- 消息过多时，容易造成阻塞。
+- 只有一个线程处理，效率较低。
+- 线程优先级默认优先级为 THREAD_PRIORITY_DEFAULT，容易和 UI 线程抢占资源。
+
+*  IntentService
+- IntentService 继承自 Service 类，用于启动一个异步服务任务，它的内部是通过 HandlerThread 来实现异步处理任务的。
+- 我们来看下 IntentService 的主要方法：
+#+BEGIN_SRC java
+// mServiceLooper;
+// mServiceHandler;
+@Override
+public void onCreate() {
+    // TODO: It would be nice to have an option to hold a partial wakelock during processing,
+    // and to have a static startService(Context, Intent) method that would launch the service & hand off a wakelock.
+    super.onCreate();
+    HandlerThread thread = new HandlerThread("IntentService [" + mName + "]");
+    thread.start();
+    mServiceLooper = thread.getLooper();
+    mServiceHandler = new ServiceHandler(mServiceLooper);
+}
+@Override
+public void onStart(@Nullable Intent intent, int startId) {
+    Message msg = mServiceHandler.obtainMessage();
+    msg.arg1 = startId;
+    msg.obj = intent;
+    mServiceHandler.sendMessage(msg);
+}
+private final class ServiceHandler extends Handler {
+    public ServiceHandler(Looper looper) {
+        super(looper);
+    }
+    @Override
+        public void handleMessage(Message msg) {
+        onHandleIntent((Intent)msg.obj);
+        stopSelf(msg.arg1);
+    }
+}
+#+END_SRC
+** 优点：
+- 只需要继承 IntentService，就可以在 onHandlerIntent 方法中异步处理 Intent 类型任务了。
+- 任务结束后 IntentService 会自行停止，无需手动调用 stopService。
+- 可以执行处理多个 Intent 请求，顺序执行多任务。
+- IntentService 是继承自 Service，具有后台 Service 的优先级。
+** 缺点：
+- 需要启动服务来执行异步任务，不适合简单任务处理。
+- 异步任务是由 HandlerThread 实现的，只能单线程、顺序处理任务。
+- 没有返回 UI 线程的接口。
+
+* 使用线程池来处理异步任务
+- 利用 Executors 的静态方法 newCachedThreadPool()、newFixedThreadPool()、newSingleThreadExecutor() 及重载形式实例化 ExecutorService 接口即得到线程池对象。
+- 动态线程池 newCachedThreadPool()：根据需求创建新线程的，需求多时，创建的就多，需求少时，JVM 自己会慢慢的释放掉多余的线程。
+- 固定数量的线程池 newFixedThreadPool()：内部有个任务阻塞队列，假设线程池里有2个线程，提交了4个任务，那么后两个任务就放在任务阻塞队列了，即使前2个任务 sleep 或者堵塞了，也不会执行后两个任务，除非前2个任务有执行完的。
+- 单线程 newSingleThreadExecutor()：单线程的线程池，这个线程池可以在线程死后（或发生异常时）重新启动一个线程来替代原来的线程继续执行下去。
+** 优点：
+- 线程的创建和销毁由线程池来维护，实现了线程的复用，从而减少了线程创建和销毁的开销。
+- 适合执行大量异步任务，提高性能。
+- 灵活性高，可以自由控制线程数量。
+- 扩展性好，可以根据实际需要进行扩展。
+** 缺点：
+- 代码略显复杂。
+- 线程池本身对系统资源有一定消耗。
+- 当线程数过多时，线程之间的切换成本会有很大开销，从而使性能严重下降。
+- 每个线程都会耗费至少 1040KB 内存，线程池的线程数量需要控制在一定范围内。
+- 线程的优先级具有继承性，如果在 UI 线程中创建线程池，线程的默认优先级会和 UI 线程相同，从而对 UI 线程使用资源进行抢占。
+
