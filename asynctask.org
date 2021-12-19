@@ -206,12 +206,12 @@ public class SixActivity extends AppCompatActivity {
                     public void onClick(View v) {
                     Message message=Message.obtain();
                     message.what=1;
-                    message.obj="我是主线程的消息发送给子线程";
+                    message.obj = "我是主线程的消息发送给子线程";
                     handler.sendMessage(message); // 封装完数据发送给子线程
                 }
             });
     }
-    class MyOneThread extends Thread{
+    class MyOneThread extends Thread {
         @Override public void run() {
             // 在子线程中处理消息,子线程中处理消息，没有默认的Loop
             // 由于只有主线程成才默认的Looper.prepare(), Looper.loop();
