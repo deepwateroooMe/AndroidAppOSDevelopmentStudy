@@ -1,4 +1,4 @@
-% Created 2021-12-16 Thu 14:11
+% Created 2021-12-18 Sat 22:04
 \documentclass[9pt, b5paaper]{book}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -148,7 +148,7 @@ public void onRestoreInstanceState(Bundle savedInstanceState) {
 \item 第一种情况我们无法保证什么时候发生，系统根据资源紧张程度去调度；
 \item 第二种是屏幕翻转方向时，系统先销毁当前的Activity，然后再重建一个新的，调用此方法时，我们可以保存一些临时数据；
 \item 第三种情况系统调用此方法是为了保存当前窗口各个View组件的状态。
-\item onSaveInstanceState的调用顺序是在onstop之前。（android3.0之前：在onPause之前调用，在3.0之后，在onPause之后调用）
+\item onSaveInstanceStat()e的调用顺序是在onStop()之前。（android3.0之前：在onPause之前调用，在3.0之后，在onPause之后调用）
 \end{itemize}
 \subsection{onRestoreInstanceState()}
 \label{sec-1-3-3}
@@ -165,10 +165,10 @@ public void onRestoreInstanceState(Bundle savedInstanceState) {
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 onCreate()
 onStart()
-onSaveInstanceState()
+onRestoreInstanceState() // onStart() 之后恢复数据
 onResume()
 onPause()
-onRestoreInstanceState()
+onSaveInstanceState()    // onStop() 之前保存数据
 onStop()
 onDestory()
 \end{minted}
@@ -177,13 +177,45 @@ onDestory()
 \begin{itemize}
 \item 当Activity被系统撤销后重新建立时，保存以及恢复数据的函数调用顺序是：
 \begin{itemize}
-\item onSaveInstanceState(保存数据) ----> onCreate(恢复数据allstate) ----> onRestoryInstanceState(恢复数据HierarchyState)
+\item onSaveInstanceState(保存数据) ----> onStop() 
+----> onCreate(恢复数据allstate) ----> onStart() ----> onRestoryInstanceState(恢复数据HierarchyState) ---> onResume()
 \end{itemize}
 \item 如果要取消切换屏幕方法重建activity，可以配置configChanges属性：当支持的最小sdk版本大于android4.0需要设置这个属性）
+\begin{itemize}
+\item 其中Bundle数据会传到onCreate()（不一定有数据）和onRestoreInstanceState()（一定有数据）。
+\item Activity在manifest.xml文件中可以指定参数android：ConfigChanges，用于捕获手机状态的改变
+\item 在Activity中添加了android:configChanges属性，在当所指定属性(Configuration Changes)发生改变时，通知程序调用onConfigurationChanged()函数。
+\end{itemize}
+\item 设置方法：将下列字段用“|”符号分隔开，例如：“locale|navigation|orientation” 
+\begin{itemize}
+\item “mcc“ 移动国家号码，由三位数字组成，每个国家都有自己独立的MCC，可以识别手机用户所属国家。
+\item “mnc“ 移动网号，在一个国家或者地区中，用于区分手机用户的服务商。
+\item “locale“ 所在地区发生变化。
+\item “touchscreen“ 触摸屏已经改变。（这不应该常发生。）
+\item “keyboard“ 键盘模式发生变化，例如：用户接入外部键盘输入。
+\item “keyboardHidden“ 用户打开手机硬件键盘
+\item “navigation“ 导航型发生了变化。（这不应该常发生。）
+\item “orientation“ 设备旋转，横向显示和竖向显示模式切换。
+\item “fontScale“ 全局字体大小缩放发生改变
+\end{itemize}
+\item 对android:configChanges属性，一般认为有以下几点：（这里面的次数是怎么数的，还没有搞懂）
+\begin{itemize}
+\item 1、不设置Activity的android:configChanges时，切屏会重新调用各个生命周期，切横屏时会执行一次，切竖屏时会执行两次
+\item 2、设置Activity的android:configChanges="orientation"时，切屏还是会重新调用各个生命周期，切横、竖屏时只会执行一次
+\item 3、设置Activity的android:configChanges="orientation|keyboardHidden"时，切屏不会重新调用各个生命周期，只会执行onConfigurationChanged方法
+\end{itemize}
+\item 自从Android 3.2（API 13），在设置Activity的android:configChanges="orientation|keyboardHidden"后，还是一样会重新调用各个生命周期的。因为screen size也开始跟着设备的横竖切换而改变。所以，在AndroidManifest.xml里设置的MiniSdkVersion和 TargetSdkVersion属性大于等于13的情况下，如果你想阻止程序在运行时重新加载Activity，除了设置"orientation"，你还必须设置"ScreenSize"。
+\begin{itemize}
+\item 解决方法：AndroidManifest.xml中设置
+\end{itemize}
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
+android:configChanges="orientation|screenSize“
+\end{minted}
+
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 android:configChanges="keyboardHidden|orientation|screenSize（当支持的最小sdk版本大于android4.0需要设置这个属性）"
 \end{minted}
-\end{itemize}
 
 \section{他人总结}
 \label{sec-1-5}
@@ -740,17 +772,43 @@ A 再到 B
 \end{minted}
 \end{itemize}
 
-\chapter{Android Fragment 生命周期图： 这个应该可以合并}
+\chapter{Android Fragment 之间数据传递}
 \label{sec-3}
+\section{获得对方的引用强转}
+\label{sec-3-1}
+\begin{itemize}
+\item 通过findFragmentByTag或者getActivity获得对方的引用（强转）之后，再相互调用对方的public方法，但是这样做一是引入了“强转”的丑陋代码，另外两个类之间各自持有对方的强引用，耦合较大，容易造成内存泄漏。
+\end{itemize}
+\section{通过Bundle的方法进行传值，例如以下代码：}
+\label{sec-3-2}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+// Activity中对fragment设置一些参数 
+fragment.setArguments(bundle); 
+// fragment中通过getArguments获得Activity中的方法 
+Bundle arguments = getArguments();
+\end{minted}
+\section{利用eventbus进行通信，这种方法实时性高，而且Activity与Fragment之间可以完全解耦。}
+\label{sec-3-3}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+// Activity中的代码 
+EventBus.getDefault().post("消息");  
+// Fragment中的代码 
+EventBus.getDefault().register(this); 
+@Subscribe 
+public void test(String text) { 
+    tv_test.setText(text); 
+}
+\end{minted}
+
 \begin{itemize}
 \item \url{http://www.cnblogs.com/purediy/p/3276545.html}
 \item Fragment与Activity生命周期对比图：
 \end{itemize}
 
 \section{生命周期分析}
-\label{sec-3-1}
+\label{sec-3-4}
 \subsection{当一个fragment被创建的时候(它会经历以下状态)}
-\label{sec-3-1-1}
+\label{sec-3-4-1}
 \begin{itemize}
 \item onAttach()
 \item onCreate()
@@ -758,19 +816,19 @@ A 再到 B
 \item onActivityCreated()
 \end{itemize}
 \subsection{当这个fragment对用户可见的时候}
-\label{sec-3-1-2}
+\label{sec-3-4-2}
 \begin{itemize}
 \item onStart()
 \item onResume()
 \end{itemize}
 \subsection{当这个fragment进入“后台模式”的时候}
-\label{sec-3-1-3}
+\label{sec-3-4-3}
 \begin{itemize}
 \item onPause()
 \item onStop()
 \end{itemize}
 \subsection{当这个fragment被销毁了（或者持有它的activity被销毁了）}
-\label{sec-3-1-4}
+\label{sec-3-4-4}
 \begin{itemize}
 \item onPause()
 \item onStop()
@@ -779,14 +837,14 @@ A 再到 B
 \item onDetach()
 \end{itemize}
 \subsection{就像activity一样，在以下的状态中，可以使用Bundle对象保存一个fragment的对象。}
-\label{sec-3-1-5}
+\label{sec-3-4-5}
 \begin{itemize}
 \item onCreate()
 \item onCreateView()
 \item onActivityCreated()
 \end{itemize}
 \subsection{fragments的大部分状态都和activity很相似，但fragment有一些新的状态。}
-\label{sec-3-1-6}
+\label{sec-3-4-6}
 \begin{itemize}
 \item onAttached() -- 当fragment被加入到activity时调用（在这个方法中可以获得所在的activity）。
 \item onCreateView() -- 当activity要得到fragment的layout时，调用此方法，fragment在其中创建自己的layout(界面)。
@@ -938,14 +996,122 @@ android:excludeFromRecents="true"
 Intent i = new Intent(this, Wakeup.class);
 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 \end{minted}
+\begin{enumerate}
+\item 对 Intent.FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK}}$ 这个属性，是不是一定新开一个栈？
+\label{sec-4-6-2-7-1}
+\begin{itemize}
+\item 这个问题的答案是 ：不一定
+\item 假设现在有一个栈1，里面是A,B,C。此时，在C中启动D的时候，设置FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK标记，此时会有两种情况：}}$
+\begin{itemize}
+\item 1.如果D这个Activity在Manifest.xml中的声明中添加了Task Affinity，系统首先会查找有没有和D的Task Affinity相同的Task栈存在，如果有存在，将D压入那个栈
+\item 2.如果D这个Activity在Manifest.xml中的Task Affinity默认没有设置，则会把其压入栈1，变成：A B C D，这样就和标准模式效果是一样的了。
+\end{itemize}
+\item \uline{我想，这篇里的部分结论，很大一部分结论，还是需要小项目代码再验证一下其正确性的} 不敢轻信、没有确信！！！
+\begin{itemize}
+\item 也就是说，设置了这个标志后，新启动的Activity并非就一定在新的Task中创建，如果A和B在属于同一个package，而且都是使用默认的Task Affinity，那B还是会在A的task中被创建。 所以，只有A和B的Task Affinity不同时，设置了这个标志才会使B被创建到新的Task。
+\item ！注意如果试图从非Activity的非正常途径启动一个Activity，比如从一个Receiver中启动一个Activity，则Intent必须要添加FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK标记。}}$
+\item 我们这里之所以会新建一个栈，因为我们的APP和系统Activity的Task Affinity不同
+\end{itemize}
+\end{itemize}
 \end{enumerate}
+\end{enumerate}
+
+\subsection{Intent flag标记位进阶: （这个难度比较高一点儿，改天脑袋清醒的时候再好好理解消化一下)}
+\label{sec-4-6-3}
+\begin{itemize}
+\item \url{https://blog.csdn.net/vshuang/article/details/66472338?spm=1001.2101.3001.6661.1&utm_medium=distribute.pc_relevant_t0.none-task-blog-2\%7Edefault\%7ECTRLIST\%7Edefault-1.no_search_link&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-2\%7Edefault\%7ECTRLIST\%7Edefault-1.no_search_link}
+\end{itemize}
+\begin{enumerate}
+\item FLAG$_{\text{ACTIVITY}}$$_{\text{CLEAR}}$$_{\text{TOP}}$
+\label{sec-4-6-3-1}
+　　如果设置，并且这个Activity已经在当前的Task中运行，因此，不再是重新启动一个这个Activity的实例，而是在这个Activity上方的所有Activity都将关闭，然后这个Intent会作为一个新的Intent投递到老的Activity（现在位于顶端）中。      例如，假设一个Task中包含这些Activity：A，B，C，D。如果D调用了startActivity()，并且包含一个指向Activity B的Intent，那么，C和D都将结束，然后B接收到这个Intent，因此，目前stack的状况是：A，B。      上例中正在运行的Activity B既可以在onNewIntent()中接收到这个新的Intent，也可以把自己关闭然后重新启动来接收这个Intent。如果它的启动模式声明为“multiple”(默认值)，并且你没有在这个Intent中设置FLAG$_{\text{ACTIVITY}}$$_{\text{SINGLE}}$$_{\text{TOP标志，那么它将关闭然后重新创建；对于其它的启动模式，或者在这个Intent中设置FLAG}}$$_{\text{ACTIVITY}}$$_{\text{SINGLE}}$$_{\text{TOP标志，都将把这个Intent投递到当前这个实例的onNewIntent}}$()中。      这个启动模式还可以与FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK结合起来使用：用于启动一个Task中的根Activity，它会把那个Task中任何运行的实例带入前台，然后清除它直到根Activity。这非常有用，例如，当从Notification}}$ Manager处启动一个Activity
+\item FLAG$_{\text{ACTIVITY}}$$_{\text{CLEAR}}$$_{\text{WHEN}}$$_{\text{TASK}}$$_{\text{RESET}}$
+\label{sec-4-6-3-2}
+　　如果设置，这将在Task的Activity stack中设置一个还原点，当Task恢复时，需要清理Activity。也就是说，下一次Task带着FLAG$_{\text{ACTIVITY}}$$_{\text{RESET}}$$_{\text{TASK}}$$_{\text{IF}}$$_{\text{NEEDED标记进入前台时（典型的操作是用户在主画面重启它），这个Activity和它之上的都将关闭，以至于用户不能再返回到它们，但是可以回到之前的Activity。}}$      这在你的程序有分割点的时候很有用。例如，一个e-mail应用程序可能有一个操作是查看一个附件，需要启动图片浏览Activity来显示。这个Activity应该作为e-mail应用程序Task的一部分，因为这是用户在这个Task中触发的操作。然而，当用户离开这个Task，然后从主画面选择e-mail app，我们可能希望回到查看的会话中，但不是查看图片附件，因为这让人困惑。通过在启动图片浏览时设定这个标志，浏览及其它启动的Activity在下次用户返回到mail程序时都将全部清除。
+\item FLAG$_{\text{ACTIVITY}}$$_{\text{RESET}}$$_{\text{TASK}}$$_{\text{IF}}$$_{\text{NEEDED}}$
+\label{sec-4-6-3-3}
+　　If set, and this activity is either being started in a new task or bringing to the top an existing task, then it will be launched as the front door of the task. This will result in the application of any affinities needed to have that task in the proper state (either moving activities to or from it), or simply resetting that task to its initial state if needed.
+\item FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK}}$
+\label{sec-4-6-3-4}
+　　 如果设置，这个Activity会成为历史stack中一个新Task的开始。一个Task（从启动它的Activity到下一个Task中的Activity）定义了用户可以迁移的Activity原子组。Task可以移动到前台和后台；在某个特定Task中的所有Activity总是保持相同的次序。      这个标志一般用于呈现“启动”类型的行为：它们提供用户一系列可以单独完成的事情，与启动它们的Activity完全无关。      使用这个标志，如果正在启动的Activity的Task已经在运行的话，那么，新的Activity将不会启动；代替的，当前Task会简单的移入前台。参考FLAG$_{\text{ACTIVITY}}$$_{\text{MULTIPLE}}$$_{\text{TASK标志，可以禁用这一行为。}}$      这个标志不能用于调用方对已经启动的Activity请求结果。
+\item FLAG$_{\text{ACTIVITY}}$$_{\text{EXCLUDE}}$$_{\text{FROM}}$$_{\text{RECENTS}}$
+\label{sec-4-6-3-5}
+\begin{itemize}
+\item 如果设置，新的Activity不会在最近启动的Activity的列表中保存。
+\item 参考一个stackoverflow的问答 \url{https://stackoverflow.com/questions/7759556/flag-activity-exclude-from-recents-excludes-whole-application-not-only-the-acti}
+\item I have a Notification which starts an Activity. After a long press on home button and selecting my app, I want to start my main Activity again, and not this Activity started by the Notification. I tried with FLAG$_{\text{ACTIVITY}}$$_{\text{EXCLUDE}}$$_{\text{FROM}}$$_{\text{RECENTS}}$, but this removed my whole application from the recents, and that's not what I want to achieve. How can I have my app in the recents, but have the main Activity started?
+\item Okay, I found the solution to my problem. I started an Activity from a Notification with FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK}}$. But it seems to me that this Activity only gets started in an own task if affinity is different from the default affinity. So I had to add a different affinity in the manifest.
+\item And it seems that FLAG$_{\text{ACTIVITY}}$$_{\text{EXCLUDE}}$$_{\text{FROM}}$$_{\text{RECENTS}}$ does not (as documented) exlucde the Activity from the recents, rather it excludes the whole task (not the whole application) in which the Activity gets started from the recents. And as I hadn't set a different affinity the Activity which I wanted to exclude was started in the same task (although I had set FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK}}$) and so my whole application (as it was running in only one task) was excluded from the recents.
+\item Now I've set a different affinity for the Activity that gets started from the Notification and I start it with FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK}}$ | FLAG$_{\text{ACTIVITY}}$$_{\text{EXCLUDE}}$$_{\text{FROM}}$$_{\text{RECENTS}}$. When I leave this Activity and long-press the HOME button I can choose my app and the default task is started or brought to the front.
+\end{itemize}
+\item FLAG$_{\text{ACTIVITY}}$$_{\text{FORWARD}}$$_{\text{RESULT}}$
+\label{sec-4-6-3-6}
+\begin{itemize}
+\item 如果设置，并且这个Intent用于从一个存在的Activity启动一个新的Activity，那么，这个作为答复目标的Activity将会传到这个新的Activity中。这种方式下，新的Activity可以调用setResult(int)，并且这个结果值将发送给那个作为答复目标的Activity。
+\end{itemize}
+\end{enumerate}
+
 \section{启动模式与startActivityForResult}
 \label{sec-4-7}
+\subsection{LaunchMode与StartActivityForResult}
+\label{sec-4-7-1}
+\begin{itemize}
+\item 我们在开发过程中经常会用到StartActivityForResult方法启动一个Activity，然后在onActivityResult()方法中可以接收到上个页面的回传值，但你有可能遇到过拿不到返回值的情况，那有可能是因为Activity的LaunchMode设置为了singleTask。5.0之后，android的LaunchMode与StartActivityForResult的关系发生了一些改变。两个Activity，A和B，现在由A页面跳转到B页面，看一下LaunchMode与StartActivityForResult之间的关系：
+\item 这是为什么呢？
+\item 这是因为ActivityStackSupervisor类中的startActivityUncheckedLocked方法在5.0中进行了修改。
+\item 在5.0之前，当启动一个Activity时，系统将首先检查Activity的launchMode，如果为A页面设置为SingleInstance或者B页面设置为singleTask或者singleInstance,则会在LaunchFlags中加入FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK标志，而如果含有FLAG}}$$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK标志的话，onActivityResult将会立即接收到一个cancle的信息。}}$
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+final boolean launchSingleTop = r.launchMode == ActivityInfo.LAUNCH_SINGLE_TOP;
+final boolean launchSingleInstance = r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE;
+final boolean launchSingleTask = r.launchMode == ActivityInfo.LAUNCH_SINGLE_TASK;
+int launchFlags = intent.getFlags();
+if ((launchFlags & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0 &&
+        (launchSingleInstance || launchSingleTask)) {
+    // We have a conflict between the Intent and the Activity manifest, manifest wins.
+    Slog.i(TAG, "Ignoring FLAG_ACTIVITY_NEW_DOCUMENT, launchMode is " +
+            "\"singleInstance\" or \"singleTask\"");
+    launchFlags &=
+            ~(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+} else {
+    switch (r.info.documentLaunchMode) {
+        case ActivityInfo.DOCUMENT_LAUNCH_NONE:
+            break;
+        case ActivityInfo.DOCUMENT_LAUNCH_INTO_EXISTING:
+            launchFlags |= Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+            break;
+        case ActivityInfo.DOCUMENT_LAUNCH_ALWAYS:
+            launchFlags |= Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+            break;
+        case ActivityInfo.DOCUMENT_LAUNCH_NEVER:
+            launchFlags &= ~Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
+            break;
+    }
+}
+final boolean launchTaskBehind = r.mLaunchTaskBehind
+        && !launchSingleTask && !launchSingleInstance
+        && (launchFlags & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0;
+if (r.resultTo != null && (launchFlags & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+    // For whatever reason this activity is being launched into a new
+    // task...  yet the caller has requested a result back.  Well, that
+    // is pretty messed up, so instead immediately send back a cancel
+    // and let the new task continue launched as normal without a
+    // dependency on its originator.
+    Slog.w(TAG, "Activity is launching as a new task, so cancelling activity result.");
+    r.resultTo.task.stack.sendActivityResultLocked(-1,
+            r.resultTo, r.resultWho, r.requestCode,
+            Activity.RESULT_CANCELED, null);
+    r.resultTo = null;
+}
+\end{minted}
+\begin{itemize}
+\item 而5.0之后这个方法做了修改，修改之后即便启动的页面设置launchMode为singleTask或singleInstance，onActivityResult依旧可以正常工作，也就是说无论设置哪种启动方式，StartActivityForResult和onActivityResult()这一组合都是有效的。所以如果你目前正好基于5.0做相关开发，不要忘了向下兼容，这里有个坑请注意避让。
+\item \uline{所以下面的结论可能不对，需要改天代码再好好验证一下}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 if (sourceRecord == null) {
-    // This activity is not being started from another...  in this
-    // case we -always- start a new task.
-    if ((launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {
+    // This activity is not being started from another...  
+    // in this case we -ALWAYS- start a new task.
+    if ((launchFlags & Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {
         Slog.w(TAG, "startActivity called from non-Activity context; forcing Intent.FLAG_ACTIVITY_NEW_TASK for: "
               + intent);
         launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;
@@ -974,9 +1140,23 @@ if (r.resultTo != null && (launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
     r.resultTo = null;
 }
 \end{minted}
-\begin{itemize}
-\item 也就是说startActivityForResult启动的activity有FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK，那么就不能返回结果。}}$
+\item 也就是说startActivityForResult启动的activity有FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK，那么就不能返回结果。}}$( \uline{这个结论可能太古老了吧？！！！} )
 \end{itemize}
+\subsection{启动任务（Task）： 这里要再消化一下！}
+\label{sec-4-7-2}
+\begin{itemize}
+\item Intent filter中有”android.intent.action.MAIN ” action和”android.intent.category.LAUNCHER ” category的activity将被标记为task的入口。带有这两个标记的activity将会显示在应用程序启动器（application launcher）中。
+\item 第二个比较重要的点是， \uline{用户必须能够离开task并在之后返回} 。因为这个原因，singleTask和singleInstance这两种运行模式只能应用于含有MAIN和LAUNCHER过滤器的 activity 。打个比方，如果不包含带MAIN和LAUNCHER过滤器，某个activity运行了一个singleTask模式的 activity，初始化了一个新的task，当用户按下HOME键时，那个activity就被主屏幕“挡住”了，用户再也无法返回到那个 activity。 (这里读得昏昏乎乎！！！)
+\item 类似的情况在FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK标记上也会出现。如果这个标记会新建一个task，当用户按下HOME键时，必须有一种}}$ 方式能够让用户返回到那个activity。有些东西（比如notification manager）总是要求在外部task中启动activity，在传递给startActivity的intent中总是包含 FLAG$_{\text{ACTIVITY}}$$_{\text{NEW}}$$_{\text{TASK标记。}}$
+\item 对于那种不希望用户离开之后再返回activity的情况，可将finishOnTaskLaunch属性设置为true。
+\end{itemize}
+\subsection{Activity Stack}
+\label{sec-4-7-3}
+\begin{itemize}
+\item 可以通过 adb shell dumpsys | grep ActivityRecord 来查看 TASKS的ActivityStacks
+\item 可以通过 adb shell dumpsys activity activities | grep packageName| grep Run 来查看某个packageName的ActivityStatcks
+\end{itemize}
+
 \section{onNewIntent}
 \label{sec-4-8}
 \begin{itemize}
@@ -1118,6 +1298,15 @@ public class ActivityC extends Activity {
 \begin{itemize}
 \item 有点需要说明的是allowTaskReparenting仅限于singleTop和standard模式，这是因为一个activity的affinity属性由它的taskAffinity属性定义（代表栈名），而一个task的affinity由它的root activity定义。所以，一个task的root activity总是拥有和它所在task相同的affinity。
 \item 由于以singleTask和singleInstance启动的activity只能是一个task的root activity，因此allowTaskReparenting仅限于以standard 和singleTop启动的activity
+\item 列一下清单文件中 <activity>元素的几个关键属性
+\begin{itemize}
+\item launchMode
+\item taskAffinity
+\item allowTaskReparenting
+\item clearTaskOnLaunch
+\item alwaysRetainTaskState
+\item finishOnTaskLaunch
+\end{itemize}
 \end{itemize}
 \item taskAffinity在两种情况下起作用：
 \label{sec-4-9-2-3}
@@ -1304,6 +1493,7 @@ public class ActivityStackManager { // activity堆栈管理
 }
 \end{minted}
 
+
 \chapter{Content Provider 内存承载器}
 \label{sec-5}
 \begin{itemize}
@@ -1328,6 +1518,10 @@ public class ActivityStackManager { // activity堆栈管理
 \end{itemize}
 
 \includegraphics[width=.9\linewidth]{./pic/uri.png}
+
+\begin{itemize}
+\item 授权信息（Authority）：ContentProvider的唯一标识符。所以这个一定得match对了
+\end{itemize}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 Uri uri = Uri.parse("content://com.carson.provider/User/1") // 设置URI
 // 上述URI指向的资源是：名为 `com.carson.provider`的`ContentProvider` 中表名 为`User` 中的 `id`为1的数据
@@ -1722,6 +1916,23 @@ Uri uri_user = Uri.parse("content://cn.scu.myprovider/user");
 
 \chapter{Services:文件夹里有一个文件总结，但是太杂乱，需要删改和总结}
 \label{sec-6}
+
+\begin{itemize}
+\item Service分为两种：
+\begin{itemize}
+\item 本地服务，属于同一个应用程序，通过startService来启动或者通过bindService来绑定并且获取代理对象。如果只是想开个服务在后台运行的话，直接startService即可，如果需要相互之间进行传 值或者操作的话，就应该通过bindService。
+\item 远程服务（不同应用程序之间），通过bindService来绑定并且获取代理对象。
+\end{itemize}
+\item 对应的生命周期如下： 
+\begin{itemize}
+\item context.startService() -> onCreate()-> onStartCommand()->Service running--调用context.stopService() ->onDestroy()
+\item context.bindService()->onCreate()->onBind()->Service running--调用>onUnbind() -> onDestroy
+\end{itemize}
+\item Service默认是运行在main线程的，因此Service中如果需要执行耗时操作（大文件的操作，数据库的拷贝，网络请求，文件下载等）的话应该在子线程中完成。
+\begin{itemize}
+\item ！特殊情况是：Service在清单文件中指定了在其他进程中运行。
+\end{itemize}
+\end{itemize}
 
 \chapter{activity lifecycle}
 \label{sec-7}
