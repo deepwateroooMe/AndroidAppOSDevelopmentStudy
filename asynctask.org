@@ -329,7 +329,14 @@ Handler handler = new Handler(Looper.getMainLooper()); // 此时,子线程的han
 - myLooper()内部使用ThreadLocal实现，因此能够获取各个线程自己的Looper
 *** MessageQueue(消息队列)
 - 消息队列被封装到Looper里面了，我们一般不会直接与MessageQueue打交道。我们只需要记住它是用来存放消息的单链表结构。队列的顺序由Message的next属性来维护。MessageQueue是整个Handler机制的核心，里面涉及很多特性我们这里都不展开讲述(比如消息屏障机制)。
+
 ** handler工作原理总结： Handler的工作原理
+- Handler机制整体流程；
+  - IdHandler(闲时机制）；
+  - postDelay()的具体实现；
+  - post()与sendMessage()区别；
+  - 使用Handler需要注意什么问题，怎么解决的?
+- 问题很细，能准备多详细就准备多详细。人家自己封装了一套 Handler 来避免内存泄漏问题
 - Handler的消息传递机制涉及到四个部分：
   - 1. Message：线程间传递的对象。
   - 2. MessageQueue： 消息队列，用来存放Handler发布的Message.
@@ -353,6 +360,163 @@ Handler handler = new Handler(Looper.getMainLooper()); // 此时,子线程的han
 - 缺点：
   - 代码规范性较差，不易维护。
   - 每次操作都会开启一个匿名线程，系统开销较大。
+*** Looper.loop()为什么不会阻塞主线程?
+- https://segmentfault.com/a/1190000037449196 这部分格式再整理一下
+主线程Looper从消息队列读取消息，当读完所有消息时，主线程阻塞。子线程往消息队列发送消息，并且往管道文件写数据，主线程即被唤醒，从管道文件读取数据，主线程被唤醒只是为了读取消息，当消息读取完毕，再次睡眠。因此loop的循环并不会对CPU性能有过多的消耗。
+
+主线程中如果没有looper进行循环，那么主线程一运行完毕就会退出。那么我们还能运行APP吗，显然，这是不可能的，Looper主要就是做消息循环，然后由Handler进行消息分发处理，一旦退出消息循环，那么你的应用也就退出了。
+
+总结：Looper的无限循环必不可少。
+
+补充说明：
+
+我看有一部分人理解”Looper.loop()的阻塞“和”UI线程上执行耗时操作卡死“的区别时还一脸懵逼的状况，简单回答一波：
+
+首先这两之间一点联系都没有，完全两码事。
+Looper上的阻塞，前提是没有输入事件，MsgQ为空，Looper空闲状态，线程进入阻塞，释放CPU执行权，等待唤醒。
+UI耗时导致卡死，前提是要有输入事件，MsgQ不为空，Looper正常轮询，线程并没有阻塞，但是该事件执行时间过长（5秒？），而且与此期间其他的事件（按键按下，屏幕点击..）都没办法处理（卡死），然后就ANR异常了。
+*** Android -- Looper.prepare()和Looper.loop() —深入版
+Android中的Looper类，是用来封装消息循环和消息队列的一个类，用于在android线程中进行消息处理。handler其实可以看做是一个工具类，用来向消息队列中插入消息的。
+
+​ (1) Looper类用来为一个线程开启一个消息循环。 默认情况下android中新诞生的线程是没有开启消息循环的。（主线程除外，主线程系统会自动为其创建Looper对象，开启消息循环。） Looper对象通过MessageQueue来存放消息和事件。一个线程只能有一个Looper，对应一个MessageQueue。
+
+(2) 通常是通过Handler对象来与Looper进行交互的。Handler可看做是Looper的一个接口，用来向指定的Looper发送消息及定义处理方法。 默认情况下Handler会与其被定义时所在线程的Looper绑定，比如，Handler在主线程中定义，那么它是与主线程的Looper绑定。 mainHandler = new Handler() 等价于new Handler（Looper.myLooper()）. Looper.myLooper()：获取当前进程的looper对象，类似的 Looper.getMainLooper() 用于获取主线程的Looper对象。
+
+(3) 在非主线程中直接new Handler() 会报如下的错误:
+
+E/AndroidRuntime( 6173): Uncaught handler: thread Thread-8 exiting due to uncaught exception E/AndroidRuntime( 6173): java.lang.RuntimeException: Can't create handler inside thread that has not called Looper.prepare()
+
+原因是非主线程中默认没有创建Looper对象，需要先调用Looper.prepare()启用Looper。
+
+(4) Looper.loop();
+
+让Looper开始工作，从消息队列里取消息，处理消息。
+
+注意：写在Looper.loop()之后的代码不会被执行，这个函数内部应该是一个循环，当调用mHandler.getLooper().quit()后，loop才会中止，其后的代码才能得以运行。
+(5) 基于以上知识，可实现主线程给子线程（非主线程）发送消息。
+
+*** 线程的切换又是怎么回事？
+那么线程的切换又是怎么回事呢？
+很多人搞不懂这个原理，但是其实非常简单，我们将所涉及的方法调用栈画出来，如下：
+
+Thread.foo(){
+    Looper.loop()
+     -> MessageQueue.next()
+      -> Message.target.dispatchMessage()
+       -> Handler.handleMessage()
+}
+显而易见，Handler.handleMessage() 所在的线程最终由调用 Looper.loop() 的线程所决定。
+
+平时我们用的时候从异步线程发送消息到 Handler，这个 Handler 的 handleMessage() 方法是在主线程调用的，所以消息就从异步线程切换到了主线程。
+*** Handler是如何实现线程之间的切换的
+Handler是如何实现线程之间的切换的呢？例如现在有A、B两个线程，在A线程中有创建了handler，然后在B线程中调用handler发送一个message。
+
+通过上面的分析我们可以知道，当在A线程中创建handler的时候，同时创建了MessageQueue与Looper，Looper在A线程中调用loop进入一个无限的for循环从MessageQueue中取消息，当B线程调用handler发送一个message的时候，会通过msg.target.dispatchMessage(msg);将message插入到handler对应的MessageQueue中，Looper发现有message插入到MessageQueue中，便取出message执行相应的逻辑，因为Looper.loop()是在A线程中启动的，所以则回到了A线程，达到了从B线程切换到A线程的目的。
+
+image
+
+小结：
+
+1.Handler初始化之前，Looper必须初始化完成。UI线程之所以不用初始化，因为在ActivityThread已经初始化，其他子线程初始化Handler时，必须先调用Looper.prepare()。
+
+2.通过Handler发送消息时，消息会回到Handler初始化的线程，而不一定是主线程。
+
+3.使用ThreadLocal时，需要注意内存泄漏的问题。
+
+通俗点的说法Handler机制其实就是借助共享变量来进行线程切换的.
+
+Handler是如何实现线程之间的切换的
+
+妙用 Looper 机制
+
+我们可以利用 Looper 的机制来帮助我们做一些事情：
+
+将 Runnable post 到主线程执行；
+利用 Looper 判断当前线程是否是主线程。
+完整示例代码如下：
+
+public final class MainThread {
+
+    private MainThread() {
+    }
+
+    private static final Handler HANDLER = new Handler(Looper.getMainLooper());
+
+    public static void run(@NonNull Runnable runnable) {
+        if (isMainThread()) {
+            runnable.run();
+        }else{
+            HANDLER.post(runnable);
+        }
+    }
+
+    public static boolean isMainThread() {
+        return Looper.myLooper() == Looper.getMainLooper();
+    }
+
+}
+能够省去不少样板代码。
+先明确我们的问题：
+
+Handler 是如何与线程关联的？
+Handler 发出去的消息是谁管理的？
+消息又是怎么回到 handleMessage() 方法的？
+线程的切换是怎么回事？
+回答：Handler 发送的消息由 MessageQueue 存储管理，并由 Loopler 负责回调消息到 handleMessage()。
+
+线程的转换由 Looper 完成，handleMessage() 所在线程由 Looper.loop() 调用者所在线程决定。
+*** 为什么在子线程中创建 Handler 会抛异常
+- Handler 的工作是依赖于 Looper 的，而 Looper(与消息队列)又是属于某一 个线程(ThreadLocal 是线程内部的数据存储类，通过它可以在指定线程中存储 数据，其他线程则无法获取到)，其他线程不能访问。因此 Handler 就是间接 跟线程是绑定在一起了。因此要使用 Handler 必须要保证 Handler 所创建的线 程中有 Looper 对象并且启动循环。因为子线程中默认是没有 Looper 的，所以 会报错。 正确的使用方法是：
+#+BEGIN_SRC java
+public class WorkThread extends Thread {
+    private Handler mHander;
+    public Handler getHander() {
+        return mHander;
+    }
+    public void quit() { // 这里是资源释放吗？
+        mHander.getLooper().quit();
+    }
+    @Override
+        public void run() {
+        super.run();
+
+        // 创建该线程对应的 Looper,
+        // 内部实现
+        //   1。new Looper()
+        //   2。将 1 步中的 lopper 放在 ThreadLocal 里，ThreadLocal 是保存数据的， 主要应用场景是:线程间数据互不影响的情况
+        //   3。在 1 步中的 Looper 的构造函数中 new MessageQueue();
+        // 对消息机制不懂得同学可以查阅资料，网上很多也讲的很不错。
+        Looper.myLooper(); // 一般是call Looper.prepare();吧，再查一下
+
+        mHander = new Handler(){
+            @SuppressLint("HandlerLeak")
+            @Override
+            public void handleMessage(Message msg) {
+                super.handleMessage(msg);
+                Log.d("WorkThread", (Looper.getMainLooper() == Looper.myLooper()) + "," + msg.what);
+            }
+        };
+        
+        // 注意这 3 个的顺序不能颠倒
+        Looper.loop();
+    }
+} 
+#+END_SRC
+*** Handler发送延时消息
+- handler发送延时消息是通过postDelayed()方法将Runnanle对象封装成Message，然后调用sendMessageAtTime()，设置的时间是当时的时间+延时的时间。
+- 发送延时消息实际上是往messageQueue中加入一条Message。
+- Message在MessageQueue中实际是以单链表来存储的，且是按照时间顺序来插入的。时间顺序是以Message中的when属性来排序的。
+- 重点：
+  - postDelay并不是等待delayMillis延时时常后再加入消息队列，而是加入消息队列后阻塞(消息队列会按照阻塞时间排序)等待delayMillis后唤醒消息队列再执行。
+  - sleep会阻塞线程
+  - postDelayed不会阻塞线程
+*** Handler线程间通信
+- 作用：线程之间的消息通信
+- 流程：主线程默认实现了Looper （调用loop.prepare方法 向sThreadLocal中set一个新的looper对象， looper构造方法中又创建了MsgQueue） 手动创建Handler ，调用 sendMessage 或者 post (runable) 发送Message 到 msgQueue ，如果没有Msg 这添加到表头，有数据则判断when时间 循环next 放到合适的 msg的next 后。Looper.loop不断轮训Msg，将msg取出 并分发到Handler 或者 post提交的 Runable 中处理，并重置Msg 状态位。回到主线程中 重写 Handler 的 handlerMessage 回调的msg 进行主线程绘制逻辑。
+- 问题：
+  - Handler 同步屏障机制：通过发送异步消息，在msg.next 中会优先处理异步消息，达到优先级的作用
+  - Looper.loop 为什么不会卡死：为了app不挂掉，就要保证主线程一直运行存在，使用死循环代码阻塞在msgQueue.next()中的nativePollOnce()方法里 ，主线程就会挂起休眠释放cpu，线程就不会退出。Looper死循环之前，在ActivityThread.main()中就会创建一个 Binder 线程（ApplicationThread），接收系统服务AMS发送来的事件。当系统有消息产生（其实系统每 16ms 会发送一个刷新 UI 消息唤醒）会通过epoll机制 向pipe管道写端写入数据 就会发送消息给 looper 接收到消息后处理事件，保证主线程的一直存活。只有在主线程中处理超时才会让app崩溃 也就是ANR。
+  - Messaage复用： 将使用完的Message清除附带的数据后, 添加到复用池中 ,当我们需要使用它时,直接在复用池中取出对象使用,而不需要重新new创建对象。复用池本质还是Message 为node 的单链表结构。所以推荐使用Message.obation获取 对象。
 
 * AsyncTask
 - 较为轻量级的异步类，封装了 FutureTask 的线程池、ArrayDeque 和 Handler 进行调度。AsyncTask 主要用于 _后台与界面持续交互_

@@ -1,0 +1,336 @@
+#+latex_class: cn-article
+#+title: Android Study Plan
+#+author: deepwaterooo
+
+* View相关
+  
+  [[./pic/viewas.png]]
+
+** View 工作流程
+- 通过 SetContentView()，调用 到PhoneWindow ，后实例DecorView ，通过 LoadXmlResourceParser() 进行IO操作 解析xml文件 通过反射 创建出View，并将View绘制在 DecorView上，这里的绘制则交给了ViewRootImpl 来完成，通过performTraversals() 触发绘制流程，performMeasure 方法获取View的尺寸，performLayout 方法获取View的位置 ，然后通过 performDraw 方法遍历View 进行绘制。
+** 事件分发
+- 一个 MotionEvent 产生后，按 Activity -> Window -> DecorView（ViewGroup） -> View 顺序传递，View 传递过程就是事件分发，因为开发过程中存在事件冲突，所以需要熟悉流程：
+  - dispatchTouchEvent：用于分发事件，只要接受到点击事件就会被调用，返回结果表示是否消耗了当前事件
+  - onInterceptTouchEvent：用于判断是否拦截事件（只有ViewGroup中存在），当 ViewGroup 确定要拦截事件后，该事件序列都不会再触发调用此 ViewGroup 的 onIntercept
+  - onTouchEvent：用于处理事件，返回结果表示是否处理了当前事件，未处理则传递给父容器处理。（事件顺序是：OnTouchListener -> OnTouchEvent -> OnClick）
+** 自定义View!!
+准备自定义View方面的面试最简单的方法：
+
+就是自己动手实现几个View（由简单到复杂）；
+分析一些热门App中的自定义View的效果是怎么实现的；
+阿里面试官： 自定义View跟绘制流程相关知识点？（标准参考解答，值得收藏）
+- https://www.cnblogs.com/Android-Alvin/p/12297933.html
+
+** 自定义View
+*** 一、View中关于四个构造函数参数
+- 自定义View中View的构造函数有四个
+#+BEGIN_SRC java
+// 主要是在java代码中生命一个View时所调用，没有任何参数，一个空的View对象
+public ChildrenView(Context context) {
+    super(context);
+}
+// 在布局文件中使用该自定义view的时候会调用到，一般会调用到该方法
+public ChildrenView(Context context, AttributeSet attrs) { // AttributeSet from .xml设置
+    this(context, attrs，0);
+}
+
+// 如果你不需要View随着主题变化而变化，则上面两个构造函数就可以了
+// 下面两个是与主题相关的构造函数
+public ChildrenView(Context context, AttributeSet attrs, int defStyleAttr) {
+    this(context, attrs, defStyleAttr, 0);
+}
+public ChildrenView(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+    super(context, attrs, defStyleAttr, defStyleRes);
+}
+#+END_SRC
+- 构造函数的传入参数说明
+  - context:上下文
+  - AttributeSet attrs：从xml中定义的参数
+  - intdefStyleAttr：主题中优先级最高的属性
+  - intdefStyleRes： 优先级次之的内置于View的style(这里就是自定义View设置样式的地方)
+- 多个地方定义属性，优先级排序 Xml直接定义 > xml中style引用 > defStyleAttr>defStyleRes > theme直接定义
+** 二、.xml中的自定义属性
+- 基本类型包括： integer, boolean, color, string, float, dimension, enum, flags, fraction, reference
+- 基本类型略过，其它相对重要一点儿的
+*** color ：引用颜色
+*** dimension: 引用字体大小
+- 定义
+    #+BEGIN_SRC xml
+<attr name = "text_size" format = "dimension" />
+    #+END_SRC
+- 使用：
+#+BEGIN_SRC xml
+<app:text_size = "28sp"  />
+<app:text_size = "@android:dimen/app_icon_size" />
+#+END_SRC
+*** enum：枚举值
+- 定义
+    #+BEGIN_SRC xml
+<attr name="orientation">
+  <enum name="horizontal" value="0" />
+  <enum name="vertical" value="1" />
+</attr>
+    #+END_SRC
+- 使用：
+    #+BEGIN_SRC xml
+<app:orientation = "vertical" />
+    #+END_SRC
+*** flags:标志 （位或运行） 主要作用=可以多个值
+- 定义
+    #+BEGIN_SRC xml
+<attr name="gravity">
+  <flag name="top" value="0x01" />
+  <flag name="bottom" value="0x02" />
+  <flag name="left" value="0x04" />
+  <flag name="right" value="0x08" />
+  <flag name="center_vertical" value="0x16" />
+</attr>
+    #+END_SRC
+-  使用
+    #+BEGIN_SRC xml
+<app:gravity = Top|left />
+    #+END_SRC
+*** fraction:百分数：
+- 定义：
+    #+BEGIN_SRC xml
+<attr name = "transparency" format = "fraction" />
+    #+END_SRC
+- 使用：
+    #+BEGIN_SRC xml
+<app:transparency = "80%"  />
+    #+END_SRC
+*** reference:参考/引用某一资源ID
+- 定义：
+    #+BEGIN_SRC xml
+<attr name="leftIcon" format="reference" />
+    #+END_SRC
+- 使用：
+    #+BEGIN_SRC xml
+<app:leftIcon = "@drawable/图片ID" />
+    #+END_SRC
+*** 混合类型：属性定义时指定多种类型值
+- 属性定义
+    #+BEGIN_SRC xml
+<attr name = "background" format = "reference|color" />
+    #+END_SRC
+- 使用
+    #+BEGIN_SRC xml
+<android:background = "@drawable/图片ID"  />
+<android:background = "#FFFFFF"  />
+    #+END_SRC
+** 三、自定义控件类型
+   
+   [[./pic/selfviews.png]]
+   
+*** 自定义组合控件步骤
+**** 1. 自定义属性
+- 在res/values目录下的attrs.xml文件中
+#+BEGIN_SRC xml
+<resources>
+  <declare-styleable name="CustomView">
+    <attr name="leftIcon" format="reference" />
+    <attr name="state" format="boolean"/>
+    <attr name="name" format="string"/>
+  </declare-styleable>
+</resources>
+#+END_SRC
+**** 2. 布局中使用自定义属性
+- 在布局中使用
+#+BEGIN_SRC xml
+<com.myapplication.view.CustomView
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    app:leftIcon="@mipmap/ic_temp"
+    app:name="温度"
+    app:state="false" />
+#+END_SRC
+**** 3. view的构造函数获取自定义属性
+     #+BEGIN_SRC java
+class DigitalCustomView : LinearLayout {
+    constructor(context: Context) : super(context)
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs) {
+    LayoutInflater.from(context).inflate(R.layout.view_custom, this)
+        var ta = context.obtainStyledAttributes(attrs, R.styleable.CustomView)
+        mIcon = ta.getResourceId(R.styleable.CustomView_leftIcon, -1) //左图像
+        mState = ta.getBoolean(R.styleable.DigitalCustomView_state, false)
+        mName = ta.getString(R.styleable.CustomView_name)
+        ta.recycle()
+        initView()
+        }
+}
+     #+END_SRC
+- 上面给出大致的代码 记得获取context.obtainStyledAttributes(attrs, R.styleable.CustomView)最后要调用ta.recycle()利用对象池回收ta加以复用
+*** 继承系统控件
+就是继承系统已经提供好给我们的控件例如TextView、LinearLayout等,分为View类型或者ViewGroup类型的两种。主要根据业务需求进行实现，实现重写的空间也很大 主要看需求。
+
+比如需求 ：在文字后面加个颜色背景
+
+根据需要一般这种情况下我们是希望可以复用系统的onMeaseur和onLayout流程.直接复写onDraw方法
+
+class Practice02BeforeOnDrawView : AppCompatTextView {
+    internal var paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    internal var bounds = RectF()
+
+    constructor(context: Context) : super(context) {}
+
+    constructor(context: Context, attrs: AttributeSet?) : super(context, attrs) {}
+
+    constructor(context: Context, attrs: AttributeSet?, defStyleAttr: Int) : super(context, attrs, defStyleAttr) {}
+
+    init {
+        paint.color = Color.parseColor("#FFC107")
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        // 把下面的绘制代码移到 super.onDraw() 的上面，就可以让原主体内容盖住你的绘制代码了
+        // （或者你也可以把 super.onDraw() 移到这段代码的下面）
+        val layout = layout
+        bounds.left = layout.getLineLeft(1)
+        bounds.right = layout.getLineRight(1)
+        bounds.top = layout.getLineTop(1).toFloat()
+        bounds.bottom = layout.getLineBottom(1).toFloat()
+       //绘制方形背景
+        canvas.drawRect(bounds, paint)
+        super.onDraw(canvas)
+    }
+}
+这里会涉及到画笔Paint()、画布canvas、路径Path、绘画顺序等的一些知识点，后面再详细说明
+
+*** 直接继承View
+这种就是类似TextView等，不需要去轮训子View只需要根据自己的需求重写onMeasure()、onLayout()、onDraw()等方法便可以，要注意点就是记得Padding等值要记得加入运算
+
+ private int getCalculateSize(int defaultSize, int measureSpec) {
+        int finallSize = defaultSize;
+
+        int mode = MeasureSpec.getMode(measureSpec);
+        int size = MeasureSpec.getSize(measureSpec);
+     //  根据模式对
+        switch (mode) {
+            case MeasureSpec.EXACTLY: {
+              ...
+                break;
+            }
+            case MeasureSpec.AT_MOST: {
+                ...
+                break;
+            }
+            case MeasureSpec.UNSPECIFIED: {
+               ...
+                break;
+            }
+        }
+        return finallSize;
+}
+
+@Override
+protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        int width = getCalculateSize(120, widthMeasureSpec);
+        int height = getCalculateSize(120, heightMeasureSpec);
+        setMeasuredDimension(width, height);
+}
+
+  //画一个圆
+    @Override
+    protected void onDraw(Canvas canvas) {
+        //调用父View的onDraw函数，因为View这个类帮我们实现了一些基本的而绘制功能，比如绘制背景颜色、背景图片等
+        super.onDraw(canvas);
+        int r = getMeasuredWidth() / 2;
+        //圆心的横坐标为当前的View的左边起始位置+半径
+        int centerX = getLeft() + r;
+        //圆心的纵坐标为当前的View的顶部起始位置+半径
+        int centerY = getTop() + r;
+
+        Paint paint = new Paint();
+        paint.setColor(Color.RED);
+        canvas.drawCircle(centerX, centerY, r, paint);
+    }
+*** 直接继承ViewGroup
+类似实现LinearLayout等，可以去看那一下LinearLayout的实现 基本的你可能要重写onMeasure()、onLayout()、onDraw()方法,这块很多问题要处理包括轮训childView的测量值以及模式进行大小逻辑计算等，这个篇幅过大后期加多个文章写详细的
+
+这里写个简单的需求，模仿LinearLayout的垂直布局
+
+class CustomViewGroup :ViewGroup{
+
+    constructor(context:Context):super(context)
+    constructor(context: Context,attrs:AttributeSet):super(context,attrs){
+            //可获取自定义的属性等
+    }
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        //将所有的子View进行测量，这会触发每个子View的onMeasure函数
+        measureChildren(widthMeasureSpec, heightMeasureSpec)
+        val widthMode = MeasureSpec.getMode(widthMeasureSpec)
+        val widthSize = MeasureSpec.getSize(widthMeasureSpec)
+        val heightMode = MeasureSpec.getMode(heightMeasureSpec)
+        val heightSize = MeasureSpec.getSize(heightMeasureSpec)
+        val childCount = childCount
+        if (childCount == 0) {
+            //没有子View的情况
+            setMeasuredDimension(0, 0)
+        } else {
+            //如果宽高都是包裹内容
+            if (widthMode == MeasureSpec.AT_MOST && heightMode == MeasureSpec.AT_MOST) {
+                //我们将高度设置为所有子View的高度相加，宽度设为子View中最大的宽度
+                val height = getTotalHeight()
+                val width = getMaxChildWidth()
+                setMeasuredDimension(width, height)
+            } else if (heightMode == MeasureSpec.AT_MOST) {
+                //如果只有高度是包裹内容
+                //宽度设置为ViewGroup自己的测量宽度，高度设置为所有子View的高度总和
+                setMeasuredDimension(widthSize, getTotalHeight())
+            } else if (widthMode == MeasureSpec.AT_MOST) {//如果只有宽度是包裹内容
+                //宽度设置为子View中宽度最大的值，高度设置为ViewGroup自己的测量值
+                setMeasuredDimension(getMaxChildWidth(), heightSize)
+
+            }
+        }
+    /***
+     * 获取子View中宽度最大的值
+     */
+    private fun getMaxChildWidth(): Int {
+        val childCount = childCount
+        var maxWidth = 0
+        for (i in 0 until childCount) {
+            val childView = getChildAt(i)
+            if (childView.measuredWidth > maxWidth)
+                maxWidth = childView.measuredWidth
+
+        }
+        return maxWidth
+    }
+
+    /***
+     * 将所有子View的高度相加
+     */
+    private fun getTotalHeight(): Int {
+        val childCount = childCount
+        var height = 0
+        for (i in 0 until childCount) {
+            val childView = getChildAt(i)
+            height += childView.measuredHeight
+
+        }
+
+        return height
+    }
+
+    }
+
+    override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+        val count = childCount
+        var currentHeight = t
+        for (i in 0 until count) {
+            val child = getChildAt(i)
+            val h = child.measuredHeight
+            val w = child.measuredWidth
+            //摆放子view
+            child.layout(l, currentHeight, l + w, currentHeight + h)
+            currentHeight += h
+        }
+    }
+}
+
+
+主要两点 先 measureChildren()轮训遍历子View获取宽高,并根据测量模式逻辑计算最后所有的控件的所需宽高，最后setMeasuredDimension()保存一下 ###四、 View的绘制流程相关 最基本的三个相关函数 measure() ->layout()->draw()
+

@@ -97,7 +97,7 @@ public void onRestoreInstanceState(Bundle savedInstanceState) {
 - (2)在用户改变屏幕方向时，重建的过程中，此方法会被调用。
 - 我们可以重写此方法，以便可以恢复一些临时数据。
 - onRestoreInstanceState的调用顺序是在onStart之后。
-- 在当前Activity跳转到其他Activity或者按Home键回到主屏，自身退居后台时：onRestoreInstanceState不会调用，但是onSaveInstanceState会调用，这点就是区别
+- 在当前Activity跳转到其他Activity或者按Home键回到主屏，自身退居后台时：onRestoreInstanceState不会调用，但是onSaveInstanceState会调用，这点就是区别(验证一下)
 *** 注意一下两个函数在生命周期中的调用顺序
 #+BEGIN_SRC java
 onCreate()
@@ -193,7 +193,7 @@ onResume()
     String str = intent.getStringExtra("data");
     tv.setText(str);
     #+END_SRC
-*** 使用Intention的Bundle传递
+*** 使用Intent的Bundle传递
 - 第一个Activity中
     #+BEGIN_SRC java
     Intent intent = new Intent(MainActivity.this,TwoActivity.class);
@@ -277,7 +277,7 @@ startActivity(intent);
 Intent intent = getIntent();
 //反序列化数据对象
 Serializable se = intent.getSerializableExtra("key");
-if(se instanceof DataBean){
+if (se instanceof DataBean){
     //获取到携带数据的DataBean对象db
     DataBean db = (DataBean) se;
     tv.setText(db.getName()+"==="+db.getSex());
@@ -297,7 +297,7 @@ protected static String name;
 protected static String str;
 tv.setText(str+name);
     #+END_SRC
-*** 剪切板，稍偏
+*** 剪切板，利用系统剪切板服务，稍偏
 - 第一个Activity中
     #+BEGIN_SRC java
 ClipboardManager clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -1387,6 +1387,61 @@ Uri uri_user = Uri.parse("content://cn.scu.myprovider/user");
   - context.bindService()->onCreate()->onBind()->Service running--调用>onUnbind() -> onDestroy
 - Service默认是运行在main线程的，因此Service中如果需要执行耗时操作（大文件的操作，数据库的拷贝，网络请求，文件下载等）的话应该在子线程中完成。
   - ！特殊情况是：Service在清单文件中指定了在其他进程中运行。
+
+
+* 性能优化
+** 内存优化
+*** 珍惜Service，尽量使得Service在使用的时候才处于运行状态。尽量使用IntentService
+      IntentService在内部其实是通过线程以及Handler实现的，当有新的Intent到来的时候，会创建线程并且处理这个Intent，处理完毕以后就自动销毁自身。因此使用IntentService能够节省系统资源。
+*** 内存紧张的时候释放资源（例如UI隐藏的时候释放资源等）。复写Activity的回调方法。
+@Override 
+ public void onLowMemory() { 
+ 
+     super.onLowMemory(); 
+ 
+ }  
+ 
+ @Override 
+ 
+ public void onTrimMemory(int level) { 
+ 
+     super.onTrimMemory(level);  
+ 
+ 
+     switch (level) { 
+ 
+         case TRIM_MEMORY_COMPLETE: 
+ 
+             //... 
+ 
+             break; 
+ 
+         case 其他: 
+ 
+     } 
+ 
+ } 
+*** 通过Manifest中对Application配置更大的内存，但是一般不推荐
+    #+BEGIN_SRC xml
+android:largeHeap="true" 
+    #+END_SRC
+*** 避免Bitmap的浪费，应该尽量去适配屏幕设备。尽量使用成熟的图片加载框架，Picasso，Fresco，Glide等。
+
+*** 使用优化的容器，SparseArray等
+
+*** 其他建议：尽量少用枚举变量，尽量少用抽象，尽量少增加类，避免使用依赖注入框架，谨慎使用library，使用代码混淆，时当场合考虑使用多进程等。
+
+*** 避免内存泄漏（本来应该被回收的对象没有被回收）
+- 一旦APP的内存短时间内快速增长或者GC非常频繁的时候，就应该考虑是否是内存泄漏导致的。
+
+ 分析方法
+
+ 1. 使用Android Studio提供的Android Monitors中Memory工具查看内存的使用以及没使用的情况。
+
+ 2. 使用DDMS提供的Heap工具查看内存使用情况，也可以手动触发GC。
+
+ 3. 使用性能分析的依赖库，例如Square的LeakCanary，这个库会在内存泄漏的前后通过Notification通知你。
+
 
 * activity lifecycle
 *** Activity横竖屏切换生命周期变化
