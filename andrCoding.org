@@ -179,8 +179,9 @@ onResume()
   - 同2的流程: onPause()
 - 8. 再从home返回到activity A
   - 同4的流程: onRestart ----> onStart() ----> onResume()
+
 ** activity之间的数据传递： 6种方式
-*** 使用Inten的putExtra传递
+*** 使用Intent的putExtra传递
 - 第一个Activity中
     #+BEGIN_SRC java
     Intent intent = new Intent(this,TwoActivity.class);
@@ -724,7 +725,8 @@ A 再到 B
     B(  onAttach()  --> onViewStateRestored( )--> onResume() )
 如果在B页面输入了数据，B返回A再到B，B中数据也会恢复
   #+END_SRC
-
+- androidX 一文读懂 Fragment 的方方面面
+  - https://juejin.cn/post/7006970844542926855 androidX很值得一读
 
 * Android Fragment 之间数据传递
 ** 获得对方的引用强转: 这种方式不推荐

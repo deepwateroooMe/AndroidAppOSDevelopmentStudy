@@ -1,4 +1,4 @@
-% Created 2021-12-19 Sun 17:17
+% Created 2021-12-19 Sun 17:37
 \documentclass[9pt, b5paper]{article}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -47,6 +47,7 @@
 \label{sec-1-1}
 
 \includegraphics[width=.9\linewidth]{./pic/heapmodel.png}
+
 \begin{itemize}
 \item 这就是Android开发童鞋需要了解的Generational Heap Memory模型，这里我们只关心当对象在Young Generation中存活了一段时间之后，如果没被干掉，那么会被移动到Old Generation中，同理，最后会移动到Permanent Generation中。
 \end{itemize}
@@ -539,35 +540,9 @@ animator.addListener(new AnimatorListenerAdapter() {
 \end{itemize}
 \item 不管发生什么，垃圾回收器都不会自动回收这些 Bitmap。当 Android 绘制系统在渲染这些图片，Android 的系统库就会把这些 Bitmap 从 Ashmem 堆中抽取出来，而当渲染结束后，这些 Bitmap 又会被放回到原来的位置。如果一个被抽取的图片需要再绘制一次，系统仅仅需要把它再解码一次，这个操作非常迅速。
 \end{itemize}
-\section{View相关}
-\label{sec-6}
-\subsection{View 工作流程}
-\label{sec-6-1}
-\begin{itemize}
-\item 通过 SetContentView()，调用 到PhoneWindow ，后实例DecorView ，通过 LoadXmlResourceParser() 进行IO操作 解析xml文件 通过反射 创建出View，并将View绘制在 DecorView上，这里的绘制则交给了ViewRootImpl 来完成，通过performTraversals() 触发绘制流程，performMeasure 方法获取View的尺寸，performLayout 方法获取View的位置 ，然后通过 performDraw 方法遍历View 进行绘制。
-\end{itemize}
-\subsection{事件分发}
-\label{sec-6-2}
-\begin{itemize}
-\item 一个 MotionEvent 产生后，按 Activity -> Window -> DecorView（ViewGroup） -> View 顺序传递，View 传递过程就是事件分发，因为开发过程中存在事件冲突，所以需要熟悉流程：
-\begin{itemize}
-\item dispatchTouchEvent：用于分发事件，只要接受到点击事件就会被调用，返回结果表示是否消耗了当前事件
-\item onInterceptTouchEvent：用于判断是否拦截事件（只有ViewGroup中存在），当 ViewGroup 确定要拦截事件后，该事件序列都不会再触发调用此 ViewGroup 的 onIntercept
-\item onTouchEvent：用于处理事件，返回结果表示是否处理了当前事件，未处理则传递给父容器处理。（事件顺序是：OnTouchListener -> OnTouchEvent -> OnClick）
-\end{itemize}
-\end{itemize}
-\subsection{自定义View!!}
-\label{sec-6-3}
-准备自定义View方面的面试最简单的方法：
-就是自己动手实现几个View（由简单到复杂）；
-分析一些热门App中的自定义View的效果是怎么实现的；
-阿里面试官： 自定义View跟绘制流程相关知识点？（标准参考解答，值得收藏）
-\begin{itemize}
-\item \url{https://www.cnblogs.com/Android-Alvin/p/12297933.html}
-\end{itemize}
 
 \section{Retrofit库的核心实现原理是什么?如果让你实现这个库的某些核心功能，你会考虑怎么去实现?}
-\label{sec-7}
+\label{sec-6}
 \begin{itemize}
 \item Retrofit主要是在create方法中采用动态代理模式(通过访问代理对象的方式来间接访问目标对象)实 现接口方法，这个过程构建了一个ServiceMethod对象，根据方法注解获取请求方式，参数类型和参数 注解拼接请求的链接，当一切都准备好之后会把数据添加到Retrofit的RequestBuilder中。然后当我们 主动发起网络请求的时候会调用okhttp发起网络请求，okhttp的配置包括请求方式，URL等在Retrofit 的RequestBuilder的build()方法中实现，并发起真正的网络请求。
 \item 你从这个库中学到什么有价值的或者说可借鉴的设计思想?
@@ -590,16 +565,17 @@ ParameterHanlder进行解析。
 \item 5、切换线程: 使用了适配器模式通过检测不同的Platform使用不同的回调执行器，然后使用回调执行器切换线程，这里同样是使用了装饰模式。
 \item 6、处理结果
 \end{itemize}
+
 \section{ARouter路由原理:}
-\label{sec-8}
+\label{sec-7}
 \begin{itemize}
 \item ARouter维护了一个路由表Warehouse，其中保存着全部的模块跳转关系，ARouter路由跳转实际上还 是调用了startActivity的跳转，使用了原生的Framework机制，只是通过apt注解的形式制造出跳转规 则，并人为地拦截跳转和设置跳转条件。
 \end{itemize}
 
 \section{第三方库源码总结}
-\label{sec-9}
+\label{sec-8}
 \subsection{LeakCanary 原理}
-\label{sec-9-1}
+\label{sec-8-1}
 参考博客: - \url{https://www.jianshu.com/go-wild?ac=2&url=https\%3A\%2F\%2Fwww.cnblogs.com\%2Fjymblog\%2Fp\%2F11656221.html}
 \begin{itemize}
 \item 通过 registerActivityLifecycleCallbacks 监听Activity或者Fragment 销毁时候的生命周期（如果不想那个对象被监控则通过 AndroidExcludedRefs 枚举，避免被检测）
@@ -637,7 +613,7 @@ void waitForIdle(final Retryable retryable, final int failedAttempts) {
 \item IdleHandler，就是当主线程空闲的时候，如果设置了这个东西，就会执行它的queueIdle()方法，所以这个方法就是在onDestory以后，一旦主线程空闲了，就会执行一个延时五秒的子线程任务，任务：检测到未被回收则主动 gc ，然后继续监控，如果还是没有回收掉，就证明是内存泄漏了。 通过抓取 dump文件，在使用 第三方 HAHA 库 分析文件，获取到到达泄露点最近的线路，通过 启动另一个进程的 DisplayLeakService 发送通知 进行消息的展示。
 \end{itemize}
 \subsection{OkHttp}
-\label{sec-9-2}
+\label{sec-8-2}
 \begin{itemize}
 \item 同步和异步 网络请求使用方法
 \end{itemize}
@@ -686,10 +662,11 @@ Dispatcher.executed() 中 通过添加realcall到runningSyncCalls队列中
 生成一个AsyncCall(responseCallback)实例(实现了Runnable)
 AsyncCall通过调用Dispatcher.enqueue()，并判断maxRequests （最大请求数）maxRequestsPerHost(最大host请求数)是否满足条件，如果满足就把AsyncCall添加到runningAsyncCalls中，并放入线程池中执行；如果条件不满足，就添加到等待就绪的异步队列，当那些满足的条件的执行时 ，在Dispatcher.finifshed(this)中的promoteCalls();方法中 对等待就绪的异步队列进行遍历，生成对应的AsyncCall实例，并添加到runningAsyncCalls中，最后放入到线程池中执行，一直到所有请求都结束。
 \subsubsection{责任链模式 和 拦截器}
-\label{sec-9-2-1}
+\label{sec-8-2-1}
 责任链
 源码跟进 execute() 进入到 getResponseWithInterceptorChain() 方法
-Response getResponseWithInterceptorChain() throws IOException \{
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+Response getResponseWithInterceptorChain() throws IOException {
     //责任链 模式
     List<Interceptor> interceptors = new ArrayList<>();
     interceptors.addAll(client.interceptors());
@@ -697,15 +674,15 @@ Response getResponseWithInterceptorChain() throws IOException \{
     interceptors.add(new BridgeInterceptor(client.cookieJar()));
     interceptors.add(new CacheInterceptor(client.internalCache()));
     interceptors.add(new ConnectInterceptor(client));
-    if (!forWebSocket) \{
+    if (!forWebSocket) {
       interceptors.addAll(client.networkInterceptors());
-    \}
+    }
     interceptors.add(new CallServerInterceptor(forWebSocket));
     Interceptor.Chain chain = new RealInterceptorChain(interceptors, null, null, null, 0,
         originalRequest, this, eventListener, client.connectTimeoutMillis(),
         client.readTimeoutMillis(), client.writeTimeoutMillis());
     return chain.proceed(originalRequest);
-  \}
+  }
 chain.proceed() 方法核心代码。每个拦截器 intercept()方法中的chain，都在上一个 chain实例的 chain.proceed()中被初始化，并传递了拦截器List与 index，调用interceptor.intercept(next)，直接最后一个 chain实例执行即停止。
 //递归循环下一个 拦截器
     RealInterceptorChain next = new RealInterceptorChain(interceptors, streamAllocation, httpCodec,
@@ -713,22 +690,25 @@ chain.proceed() 方法核心代码。每个拦截器 intercept()方法中的chai
         writeTimeout);
     Interceptor interceptor = interceptors.get(index);
     Response response = interceptor.intercept(next);
-@Override public Response intercept(Chain chain) throws IOException \{
+@Override public Response intercept(Chain chain) throws IOException {
     Request request = chain.request();
     RealInterceptorChain realChain = (RealInterceptorChain) chain;
     Call call = realChain.call();
     EventListener eventListener = realChain.eventListener();
     StreamAllocation streamAllocation = new StreamAllocation(client.connectionPool(),
         createAddress(request.url()), call, eventListener, callStackTrace);
-    while (true) \{
-        \ldots{}
+    while (true) {
+        ...
         // 循环中 再次调用了 chain 对象中的 proceed 方法，达到递归循环。
         response = realChain.proceed(request, streamAllocation, null, null);
         releaseConnection = false;
-        \ldots{}
-    \}
-\}
-拦截器
+        ...
+    }
+}
+\end{minted}
+\begin{itemize}
+\item 拦截器
+\end{itemize}
 RetryAndFollowUpInterceptor ：重连并跟踪 拦截器。
 BridgeInterceptor : 将用户请求构建为网络请求（hander cooker content-type 等） 并发起请求 。
 CacheInterceptor ： 缓存拦截器 负责从缓存中返回响应和把网络请求响应写入缓存。
@@ -737,28 +717,9 @@ OkHttp 流程
 采用责任链方式的拦截器,实现分成处理网络请求,可更好的扩展自定义拦截器（采用GZIP压缩，支持http缓存）
 采用线程池(thread pool)和连接池(Socket pool)解决多并发问题,同时连接池支持多路复用(http2才支持,可以让一个Socket同时发送多个网络请求,内部自动维持顺序.相比http只能一个一个发送,更能减少创建开销))
 底层采用socket和服务器进行连接.采用okio实现高效的io流读写
-\section{ArrayMap和HashMap的区别}
-\label{sec-10}
-HashMap和ArrayMap各自的优势
-1.查找效率:
-HashMap因为其根据hashcode的值直接算出index,所以其查找效率是随着数组长度增大而增加的。
-ArrayMap使用的是二分法查找,所以当数组长度每增加一倍时,就需要多进行一次判断,效率下降。
-所以对于Map数量比较大的情况下,推荐使用
-2.扩容数量:
-HashMap初始值16个长度,每次扩容的时候,直接申请双倍的数组空间。
-ArrayMap每次扩容的时候,如果size长度大于8时申请size*1.5个长度,大于4小于8时申请8个,小于4时申请4个。这样比较ArrayMap其实是申请了更少的内存空间,但是扩容的频率会更高。
-因此,如果当数据量比较大的时候,还是使用HashMap更合适,因为其扩容的次数要比ArrayMap少很多。
-3.扩容效率:
-HashMap每次扩容的时候时重新计算每个数组成员的位置,然后放到新的位置。
-ArrayMap则是直接使用System.arraycopy。
-所以效率上肯定是ArrayMap更占优势。这里需要说明一下,网上有一种传闻说因为ArrayMap使用System.arraycopy更省内存空间,这一点我真的没有看出来。arraycopy也是把老的数组的对象一个一个的赋给新的数组。当然效率上肯定arraycopy更高,因为是直接调用的c层的代码。
-4.内存耗费：
-以ArrayMap采用了一种独特的方式,能够重复的利用因为数据扩容而遗留下来的数组空间,方便下一个ArrayMap的使用。而HashMap没有这种设计。由于ArrayMap只缓存了长度是4和8的时候,所以如果频繁的使用到Map,而且数据量都比较小的时候,ArrayMap无疑是相当的节省内存的。
-5.总结:
-综上所述,数据量比较小,并且需要频繁的使用Map存储数据的时候,推荐使用ArrayMap。
-而数据量比较大的时候,则推荐使用HashMap。
+
 \subsection{ButterKnife}
-\label{sec-10-1}
+\label{sec-8-3}
 参考文章
 butterKnife 使用的是 APT 技术 也就是编译时注解，不同于运行时注解（在运行过程中通过反射动态地获取相关类，方法，参数等信息，效率低），编译时注解 则是在代码编译过程中对注解进行处理（annotationProcessor技术），通过注解获取相关类，方法，参数等信息，然后在项目中生成代码，运行时调用，其实和直接手写代码一样，没有性能问题，只有编辑时效率问题。
 ButterKnife在Bind方法中 获取到DecorView，然后通过Activity和DecorView对象获取xx$_{\text{ViewBinding类的构造对象，然后通过构造方法反射实例化了这个类}}$ Constructor。
@@ -782,7 +743,7 @@ butterknife 实现流程
 扫描Java代码中所有的ButterKnife注解
 发现注解， ButterKnifeProcessor会帮你生成一个Java类，名字<类名>\$\$ViewBinding.java，这个新生成的类实现了Unbinder接口，类中的各个view 声明和添加事件都添加到Map中，遍历每个注解对应通过JavaPoet生成的代码。
 \subsection{Rxjava 2}
-\label{sec-10-2}
+\label{sec-8-4}
 切换到子线程用的 线程池 ，切换到主线程则用的Handler。
 底层的切换原理还是基于Handler来的。
 思路1：
@@ -795,8 +756,31 @@ Handler利用线程封闭的ThreadLocal维持一个消息队列，Handler的核�
 首现 在一个线程中， new Handler() 必须先执行，Looper.prepare() 创先looper，
 主线程没有手动调用Looper.prepare()，是因为 app启动时，在ActivityThread main主入口，执行了 Looper.prepareMainThread.
 public static void prepareMainLooper() \{ \ldots{} \}
+
+
+\section{ArrayMap和HashMap的区别}
+\label{sec-9}
+HashMap和ArrayMap各自的优势
+1.查找效率:
+HashMap因为其根据hashcode的值直接算出index,所以其查找效率是随着数组长度增大而增加的。
+ArrayMap使用的是二分法查找,所以当数组长度每增加一倍时,就需要多进行一次判断,效率下降。
+所以对于Map数量比较大的情况下,推荐使用
+2.扩容数量:
+HashMap初始值16个长度,每次扩容的时候,直接申请双倍的数组空间。
+ArrayMap每次扩容的时候,如果size长度大于8时申请size*1.5个长度,大于4小于8时申请8个,小于4时申请4个。这样比较ArrayMap其实是申请了更少的内存空间,但是扩容的频率会更高。
+因此,如果当数据量比较大的时候,还是使用HashMap更合适,因为其扩容的次数要比ArrayMap少很多。
+3.扩容效率:
+HashMap每次扩容的时候时重新计算每个数组成员的位置,然后放到新的位置。
+ArrayMap则是直接使用System.arraycopy。
+所以效率上肯定是ArrayMap更占优势。这里需要说明一下,网上有一种传闻说因为ArrayMap使用System.arraycopy更省内存空间,这一点我真的没有看出来。arraycopy也是把老的数组的对象一个一个的赋给新的数组。当然效率上肯定arraycopy更高,因为是直接调用的c层的代码。
+4.内存耗费：
+以ArrayMap采用了一种独特的方式,能够重复的利用因为数据扩容而遗留下来的数组空间,方便下一个ArrayMap的使用。而HashMap没有这种设计。由于ArrayMap只缓存了长度是4和8的时候,所以如果频繁的使用到Map,而且数据量都比较小的时候,ArrayMap无疑是相当的节省内存的。
+5.总结:
+综上所述,数据量比较小,并且需要频繁的使用Map存储数据的时候,推荐使用ArrayMap。
+而数据量比较大的时候,则推荐使用HashMap。
+
 \section{HashMap原理}
-\label{sec-11}
+\label{sec-10}
 数据结构和算法思考
 1.为什么选择数组和链表结构？
 ①数组内存连续块分配，效率体现查询更快。HashMap中用作查找数组桶的位置，利用元素的key的hash值对数组长度取模得到。
@@ -814,6 +798,19 @@ public static void prepareMainLooper() \{ \ldots{} \}
 ②根据key的hash值利用二分查找在hash数组中找出index。
 ③根据index在key-value数组中对应位置查找，如果不相等认为冲突了，会以key为中心，分别上下展开，逐一查找。
 优势，数据量少时（少于1000）相比HashMap更节省内存。劣势，删除和插入时效率要比HashMap要低。
+\section{HashMap SparseArray HashTable TreeMap LinkedHashMap ArrayMap}
+\label{sec-11}
+HashMap ： jdk8后由数组、链表和红黑树组成，基于散列表实现。当数组中的数据出现 hash冲突的时候启动链表，当链表中的 个数超过8个 将链表转为红黑树。允许 key val 为NULL，key和 val存储数据可以为任何类型（非基本类型 会自动装箱）。HashMap并不是线程安全的，可以通过 Collections.synchronizedMap(new HashMap)的方式获得线程的Hahsmap，或者使用 下边的ConcurrentHashMap。
+由于HashCode冲突、自动装箱和Entry类型多余元素问题，数据量小的时候推荐使用 SparseArray 和 ArrayMap
+HashMap 源码参考文章
+SparseArray ： key 只能为整数型，内部也是两个数组，一个存key的hashcode，一个存 key和val 交叉保存, 添加的时候 key 不用装箱，val则需要如果是基本类型，查找key还是用的二分法查找。也就是说它的时间复杂度还是O(logN)
+ArrayMap ：key val 可以为 任意类型（非基本类型，会自动装箱），中有两个数组，一个存储key 的hash值，另外一个交叉存储 key val 数据（key val key val \ldots{}. 形式存储）
+TreeMap ： 相比较于HashMap，TreeMap实现SortedMap接口，所以TreeMap是有序的！HashMap是无序的。
+HashTable ： 其实主体和 HashMap类似，但是写入和 读取方法 添加了 synchronize 可以做到 线程安全，key 和val 不能为null，但是效率没有HashMap高。
+LinkedHashMap： LinkedHashMap保存了记录的插入顺序，在用Iterator遍历LinkedHashMap时，先得到的记录肯定是先插入的.也可以在构造时用带参数，按照应用次数排序。在遍历的时候会比HashMap慢，不过有种情况例外，当HashMap容量很大，实际数据较少时，遍历起来可能会比LinkedHashMap慢，因为LinkedHashMap的遍历速度只和实际数据有关，和容量无关，而HashMap的遍历速度和他的容量有关。
+ConcurrentHashMap ：ConcurrentHashMap由多个segment 组成，每个segment 包含一个Entity 的数组。这里比HashMap 多了一个segment 类。该类继承了ReentrantLock 类，所以本身是一个锁。当多线程对ConcurrentHashMap 操作时，不是完全锁住map， 而是锁住相应的segment 。这样提高了并发效率。缺点：当遍历ConcurrentMap中的元素时，需要获取所有的segment 的锁，使用遍历时慢。锁的增多，占用了系统的资源。使得对整个集合进行操作的一些方法
+ConcurrentHashMap 和 HashMap不多的博客推荐 传送门
+
 \section{Android打包流程: 熟悉Android打包编译的流程}
 \label{sec-12}
 \begin{itemize}
@@ -849,143 +846,218 @@ Java 语言建立了垃圾收集机制，用以跟踪正在使用的对象和发
 \item 7 联系厂商，加入白名单
 \end{itemize}
 \end{itemize}
-\section{设计模式}
-\label{sec-15}
-Android常用设计模式及源码使用
-单例模式
-初始化比较复杂，并且程序中只需要一个。避免重复创建消耗内存
-Android中 获取WindowManager服务引用 WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW$_{\text{SERVICE}}$);
-l另外一种不错实现单例的方式 使用 eunm,
-public class Singleton \{
-    private static volatile Singleton s;
-    private Singleton()\{\};
-    public static Singleton getInstance() \{  
-        if(s == null) \{
-            synchronized (Singleton.class) \{
-                if(s == null) \{
-                    s = new Singleton(); 
-                \}
-            \}
-        \}
-        return s; 
-创建者模式
-创建某对象时，需要设定很多的参数（通过setter方法），但是这些参数必须按照某个顺序设定
-Android 中 创建所有的 Dialog 中使用的
-public class TestClient \{
 
+\section{设计模式: Android常用设计模式及源码使用}
+\label{sec-15}
+\subsection{单例模式}
+\label{sec-15-1}
+初始化比较复杂，并且程序中只需要一个。避免重复创建消耗内存
+\begin{itemize}
+\item Android中 获取WindowManager服务引用
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW_SERVICE);
+\end{minted}
+\begin{itemize}
+\item 另外一种不错实现单例的方式 使用 eunm,
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public class Singleton {
+    private static volatile Singleton s;
+    private Singleton(){};
+    public static Singleton getInstance() {  
+        if (s == null) {
+            synchronized (Singleton.class) 
+                if(s == null) 
+                    s = new Singleton(); 
+        }
+        return s;
+    }
+}
+\end{minted}
+\subsection{创建者模式}
+\label{sec-15-2}
+\begin{itemize}
+\item 创建某对象时，需要设定很多的参数（通过setter方法），但是这些参数必须按照某个顺序设定
+\item Android 中 创建所有的 Dialog 中使用的
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public class TestClient {
     private int index;
     private String name;
-    public TestClient() \{
+    public TestClient() {
         this(new Builder());
-    \}
-    public TestClient(Builder builder)\{
+    }
+    public TestClient(Builder builder){
         this.index = builder.index;
         this.name = builder.name;
-    \}
-    public static final class Builder \{
+    }
+    public static final class Builder {
         private int index;
         private String name;
-        public Builder() \{
+        public Builder() {
             this.index = 1;
             this.name = "xxx";
-        \}
-        public Builder(TestClient testClient)\{
+        }
+        public Builder(TestClient testClient){
             this.index = testClient.index;
             this.name = testClient.name;
-        \}
-        public Builder setIndex(int index) \{
+        }
+        public Builder setIndex(int index) {
             this.index = index;
             return this;
-        \}
-        public Builder setName(String name) \{
+        }
+        public Builder setName(String name) {
             this.name = name;
             return this;
-        \}
-        public TestClient build()\{
+        }
+        public TestClient build(){
             return new TestClient(this);
-        \}
-    \}
-\}
-原型模式
-工厂模式
-定义一个创建对象的工厂，根据不同传参 创建不同的对象。
-Android 中 BitmapFactory 和 Iterator 根据循环对象不同返回不同的对象
-策略模式
-有一系列的算法，将算法封装起来（每个算法可以封装到不同的类中），各个算法之间可以替换，策略模式让算法独立于使用它的客户而独立变化
-Android 中的 时间插值器，可以使用不同的 加速 减速 或者自定义加速器 展示不同的动画效果
-责任链模式
-B
-命令模式
-命令模式将每个请求封装成一个对象，从而让用户使用不同的请求把客户端参数化；将请求进行排队或者记录请求日志，以及支持可撤销操作。
-Android 事件机制中，底层逻辑对事件的转发处理。每次的按键事件会被封装成NotifyKeyArgs对象，通过InputDispatcher封装具体的事件操作 / Runable实现中封装我们需要的实现
-观察者模式
-Java的Observable类和Observer接口就是实现了观察者模式。一个Observer对象监视着一个Observable对象的变化，当Observable对象发生变化时，Observer得到通知，就可以进行相应的工作。
-中介者模式
-在Binder机制中，即ServiceManager持有各种系统服务的引用 ，当我们需要获取系统的Service时，首先是向ServiceManager查询指定标示符对应的Binder，再由ServiceManager返回Binder的引用。并且客户端和服务端之间的通信是通过Binder驱动来实现，这里的ServiceManager和Binder驱动就是中介者。代理模式
-给某一个对象提供一个代理，并由代理对象控制对原对象的引用 (,静态代理 和 动态代理)
-适配器模式
-把一个类的接口变换成客户端所期待的另一个接口，从而使原本因接口不匹配而无法在一起工作的两个类能够在一起工作。
-补充说明：
-例模式
-//获取WindowManager服务引用
-WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW$_{\text{SERVICE}}$);  
-基本所有的获取系统服务都是单例。
-Builder 模式
-一般常用于构建需要3个以上的参数。
+        }
+    }
+}
+\end{minted}
+\subsection{原型模式}
+\label{sec-15-3}
+\subsection{工厂模式}
+\label{sec-15-4}
+\begin{itemize}
+\item 定义一个创建对象的工厂，根据不同传参 创建不同的对象。
+\item Android 中 BitmapFactory 和 Iterator 根据循环对象不同返回不同的对象
+\end{itemize}
+\subsection{策略模式}
+\label{sec-15-5}
+\begin{itemize}
+\item 有一系列的算法，将算法封装起来（每个算法可以封装到不同的类中），各个算法之间可以替换，策略模式让算法独立于使用它的客户而独立变化
+\item Android 中的 时间插值器，可以使用不同的 加速 减速 或者自定义加速器 展示不同的动画效果
+\end{itemize}
+\subsection{责任链模式}
+\label{sec-15-6}
+\subsection{命令模式}
+\label{sec-15-7}
+\begin{itemize}
+\item 命令模式将每个请求封装成一个对象，从而让用户使用不同的请求把客户端参数化；将请求进行排队或者记录请求日志，以及支持可撤销操作。
+\item Android 事件机制中，底层逻辑对事件的转发处理。每次的按键事件会被封装成NotifyKeyArgs对象，通过InputDispatcher封装具体的事件操作 / Runable实现中封装我们需要的实现
+\end{itemize}
+\subsection{观察者模式}
+\label{sec-15-8}
+\begin{itemize}
+\item Java的Observable类和Observer接口就是实现了观察者模式。一个Observer对象监视着一个Observable对象的变化，当Observable对象发生变化时，Observer得到通知，就可以进行相应的工作。
+\end{itemize}
+\subsection{中介者模式}
+\label{sec-15-9}
+\begin{itemize}
+\item 在Binder机制中，即ServiceManager持有各种系统服务的引用 ，当我们需要获取系统的Service时，首先是向ServiceManager查询指定标示符对应的Binder，再由ServiceManager返回Binder的引用。并且客户端和服务端之间的通信是通过Binder驱动来实现，这里的ServiceManager和Binder驱动就是中介者。
+\end{itemize}
+\subsection{代理模式}
+\label{sec-15-10}
+\begin{itemize}
+\item 给某一个对象提供一个代理，并由代理对象控制对原对象的引用 (,静态代理 和 动态代理)
+\end{itemize}
+\subsection{适配器模式}
+\label{sec-15-11}
+\begin{itemize}
+\item 把一个类的接口变换成客户端所期待的另一个接口，从而使原本因接口不匹配而无法在一起工作的两个类能够在一起工作。
+\end{itemize}
+\subsection{Builder 模式}
+\label{sec-15-12}
+\begin{itemize}
+\item 一般常用于构建需要3个以上的参数。
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 AlertDialog.Builer builder=new AlertDialog.Builder(context); 
 builder.setIcon(R.drawable.icon) 
- .setTitle("title") 
- .setMessage("message") 
- .setPositiveButton("Button1", new DialogInterface.OnclickListener()\{ 
-       public void onClick(DialogInterface dialog,int whichButton)\{ 
-             setTitle("click"); 
-        \} 
- \}) 
- .create() 
- .show();
-原型模式
+.setTitle("title") 
+.setMessage("message") 
+.setPositiveButton("Button1", new DialogInterface.OnclickListener(){ 
+        public void onClick(DialogInterface dialog,int whichButton){ 
+            setTitle("click"); 
+        } 
+    }) 
+.create() 
+.show();
+\end{minted}
+\subsection{原型模式}
+\label{sec-15-13}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 Uri uri=Uri.parse("smsto:10086"); 
-Intent shareIntent=new Intent(Intent.ACTION$_{\text{SENDTO}}$,uri); 
-//克隆副本 
+Intent shareIntent=new Intent(Intent.ACTION_SENDTO,uri); 
+// 克隆副本 
 Intent intent=(Intetn)shareIntent.clone(); startActivity(intent);
-工厂模式
-public Object getSystemService(String name) \{ 
-      if (getBaseContext() == null) \{ 
-          throw new IllegalStateException("System services not available to Activities before onCreate()"); 
-     \}
-    //\ldots{}\ldots{}.. 
-      if (WINDOW$_{\text{SERVICE}}$.equals(name)) \{ 
-          return mWindowManager; 
-     \} else if (SEARCH$_{\text{SERVICE}}$.equals(name)) \{ 
-         ensureSearchManager(); 
-          return mSearchManager; 
-     \} //\ldots{}\ldots{}. 
-      return super.getSystemService(name); \}
-策略者模式
-根据是否是v包选择不同的构建view方案
-责任链模式
-view的点击事件，view的touch事件等
-命令模式
-按键事件会被封装成notifyKeyArgs对象，通过inputDispatcheri 封装具体事件操作
-观察者模式
-监听器这一类都是
-备忘录模式
-activtity onSaveInstanceState等
-迭代器模式
-数据库的cursor，常用于查询
-代理模式
-Binder代理
-适配器模式
-adapter类
-装饰者模式
-Rxjava2，或者contextThemeWapper等
+\end{minted}
+\subsection{工厂模式}
+\label{sec-15-14}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public Object getSystemService(String name) { 
+    if (getBaseContext() == null) { 
+        throw new IllegalStateException("System services not available to Activities before onCreate()"); 
+    }
+    //........ 
+    if (WINDOW_SERVICE.equals(name)) { 
+        return mWindowManager; 
+    } else if (SEARCH_SERVICE.equals(name)) { 
+        ensureSearchManager(); 
+        return mSearchManager; 
+    } //....... 
+    return super.getSystemService(name);
+}
+\end{minted}
+\subsection{策略者模式}
+\label{sec-15-15}
+\begin{itemize}
+\item 根据是否是v包选择不同的构建view方案
+\end{itemize}
+\subsection{责任链模式}
+\label{sec-15-16}
+\begin{itemize}
+\item view的点击事件，view的touch事件等
+\end{itemize}
+\subsection{命令模式}
+\label{sec-15-17}
+\begin{itemize}
+\item 按键事件会被封装成notifyKeyArgs对象，通过inputDispatcheri 封装具体事件操作
+\end{itemize}
+\subsection{观察者模式}
+\label{sec-15-18}
+\begin{itemize}
+\item 监听器这一类都是
+\end{itemize}
+\subsection{备忘录模式}
+\label{sec-15-19}
+\begin{itemize}
+\item activtity onSaveInstanceState等
+\end{itemize}
+\subsection{迭代器模式}
+\label{sec-15-20}
+\begin{itemize}
+\item 数据库的cursor，常用于查询
+\end{itemize}
+\subsection{代理模式}
+\label{sec-15-21}
+\begin{itemize}
+\item Binder代理
+\end{itemize}
+\subsection{适配器模式}
+\label{sec-15-22}
+\begin{itemize}
+\item adapter类
+\end{itemize}
+\subsection{装饰者模式}
+\label{sec-15-23}
+\begin{itemize}
+\item Rxjava2，或者contextThemeWapper等
+\end{itemize}
 \section{跨平台}
 \label{sec-16}
-Flutter 和 React Native 不同主要在于 Flutter UI 是直接通过 skia 渲染的 ，而 React Native 是将 js 中的控件转化为原生控件，通过原生去渲染的。
-移动端跨平台开发的深度解析
+\begin{itemize}
+\item Flutter 和 React Native 不同主要在于 Flutter UI 是直接通过 skia 渲染的 ，而 React Native 是将 js 中的控件转化为原生控件，通过原生去渲染的。
+\item 移动端跨平台开发的深度解析
+\end{itemize}
 \section{网络}
 \label{sec-17}
-HTTP请求方式和报文解析
+\begin{itemize}
+\item HTTP请求方式和报文解析
+\end{itemize}
 1.HTTPS(Secure) 安全的 HTTP 协议
 \url{https://}<主机>:<443>/<路径>
 补充说明（其他版本）

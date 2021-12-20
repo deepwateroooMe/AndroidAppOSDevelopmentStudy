@@ -10,6 +10,7 @@
 ** 内存优化
    
    [[./pic/heapmodel.png]]
+
 - 这就是Android开发童鞋需要了解的Generational Heap Memory模型，这里我们只关心当对象在Young Generation中存活了一段时间之后，如果没被干掉，那么会被移动到Old Generation中，同理，最后会移动到Permanent Generation中。
 
 *** 珍惜Service，尽量使得Service在使用的时候才处于运行状态。尽量使用IntentService
@@ -318,20 +319,6 @@ animator.addListener(new AnimatorListenerAdapter() {
   - Heap-堆内存：Android中每个App的 Java堆内存大小都是被严格的限制的。每个对象都是使用Java的new在堆内存实例化，这是内存中相对安全的一块区域。内存有垃圾回收机制，所以当 App不在使用内存的时候，系统就会自动把这块内存回收。不幸的是，内存进行垃圾回收的过程正是问题所在。当内存进行垃圾回收时，内存不仅仅进行了垃圾回收，还把 Android 应用完全终止了。这也是用户在使用 App 时最常见的卡顿或短暂假死的原因之一。
   - Ashmem：Android 在操作 Ashmem 堆时，会把该堆中存有数据的内存区域从 Ashmem 堆中抽取出来，而不是把它释放掉，这是一种弱内存释放模式；被抽取出来的这部分内存只有当系统真正需要更多的内存时（系统内存不够用）才会被释放。当 Android 把被抽取出来的这部分内存放回 Ashmem 堆，只要被抽取的内存空间没有被释放，之前的数据就会恢复到相应的位置。
 - 不管发生什么，垃圾回收器都不会自动回收这些 Bitmap。当 Android 绘制系统在渲染这些图片，Android 的系统库就会把这些 Bitmap 从 Ashmem 堆中抽取出来，而当渲染结束后，这些 Bitmap 又会被放回到原来的位置。如果一个被抽取的图片需要再绘制一次，系统仅仅需要把它再解码一次，这个操作非常迅速。
-* View相关
-** View 工作流程
-- 通过 SetContentView()，调用 到PhoneWindow ，后实例DecorView ，通过 LoadXmlResourceParser() 进行IO操作 解析xml文件 通过反射 创建出View，并将View绘制在 DecorView上，这里的绘制则交给了ViewRootImpl 来完成，通过performTraversals() 触发绘制流程，performMeasure 方法获取View的尺寸，performLayout 方法获取View的位置 ，然后通过 performDraw 方法遍历View 进行绘制。
-** 事件分发
-- 一个 MotionEvent 产生后，按 Activity -> Window -> DecorView（ViewGroup） -> View 顺序传递，View 传递过程就是事件分发，因为开发过程中存在事件冲突，所以需要熟悉流程：
-  - dispatchTouchEvent：用于分发事件，只要接受到点击事件就会被调用，返回结果表示是否消耗了当前事件
-  - onInterceptTouchEvent：用于判断是否拦截事件（只有ViewGroup中存在），当 ViewGroup 确定要拦截事件后，该事件序列都不会再触发调用此 ViewGroup 的 onIntercept
-  - onTouchEvent：用于处理事件，返回结果表示是否处理了当前事件，未处理则传递给父容器处理。（事件顺序是：OnTouchListener -> OnTouchEvent -> OnClick）
-** 自定义View!!
-准备自定义View方面的面试最简单的方法：
-就是自己动手实现几个View（由简单到复杂）；
-分析一些热门App中的自定义View的效果是怎么实现的；
-阿里面试官： 自定义View跟绘制流程相关知识点？（标准参考解答，值得收藏）
-- https://www.cnblogs.com/Android-Alvin/p/12297933.html
 
 * Retrofit库的核心实现原理是什么?如果让你实现这个库的某些核心功能，你会考虑怎么去实现?
 - Retrofit主要是在create方法中采用动态代理模式(通过访问代理对象的方式来间接访问目标对象)实 现接口方法，这个过程构建了一个ServiceMethod对象，根据方法注解获取请求方式，参数类型和参数 注解拼接请求的链接，当一切都准备好之后会把数据添加到Retrofit的RequestBuilder中。然后当我们 主动发起网络请求的时候会调用okhttp发起网络请求，okhttp的配置包括请求方式，URL等在Retrofit 的RequestBuilder的build()方法中实现，并发起真正的网络请求。
@@ -348,6 +335,7 @@ ParameterHanlder进行解析。
 - 4、解析数据
 - 5、切换线程: 使用了适配器模式通过检测不同的Platform使用不同的回调执行器，然后使用回调执行器切换线程，这里同样是使用了装饰模式。
 - 6、处理结果
+
 * ARouter路由原理:
 - ARouter维护了一个路由表Warehouse，其中保存着全部的模块跳转关系，ARouter路由跳转实际上还 是调用了startActivity的跳转，使用了原生的Framework机制，只是通过apt注解的形式制造出跳转规 则，并人为地拦截跳转和设置跳转条件。
  
@@ -432,6 +420,7 @@ AsyncCall通过调用Dispatcher.enqueue()，并判断maxRequests （最大请求
 *** 责任链模式 和 拦截器
 责任链
 源码跟进 execute() 进入到 getResponseWithInterceptorChain() 方法
+#+BEGIN_SRC java
 Response getResponseWithInterceptorChain() throws IOException {
     //责任链 模式
     List<Interceptor> interceptors = new ArrayList<>();
@@ -471,7 +460,8 @@ chain.proceed() 方法核心代码。每个拦截器 intercept()方法中的chai
         ...
     }
 }
-拦截器
+#+END_SRC
+- 拦截器
 RetryAndFollowUpInterceptor ：重连并跟踪 拦截器。
 BridgeInterceptor : 将用户请求构建为网络请求（hander cooker content-type 等） 并发起请求 。
 CacheInterceptor ： 缓存拦截器 负责从缓存中返回响应和把网络请求响应写入缓存。
@@ -480,25 +470,7 @@ OkHttp 流程
 采用责任链方式的拦截器,实现分成处理网络请求,可更好的扩展自定义拦截器（采用GZIP压缩，支持http缓存）
 采用线程池(thread pool)和连接池(Socket pool)解决多并发问题,同时连接池支持多路复用(http2才支持,可以让一个Socket同时发送多个网络请求,内部自动维持顺序.相比http只能一个一个发送,更能减少创建开销))
 底层采用socket和服务器进行连接.采用okio实现高效的io流读写
-* ArrayMap和HashMap的区别
-HashMap和ArrayMap各自的优势
-1.查找效率:
-HashMap因为其根据hashcode的值直接算出index,所以其查找效率是随着数组长度增大而增加的。
-ArrayMap使用的是二分法查找,所以当数组长度每增加一倍时,就需要多进行一次判断,效率下降。
-所以对于Map数量比较大的情况下,推荐使用
-2.扩容数量:
-HashMap初始值16个长度,每次扩容的时候,直接申请双倍的数组空间。
-ArrayMap每次扩容的时候,如果size长度大于8时申请size*1.5个长度,大于4小于8时申请8个,小于4时申请4个。这样比较ArrayMap其实是申请了更少的内存空间,但是扩容的频率会更高。
-因此,如果当数据量比较大的时候,还是使用HashMap更合适,因为其扩容的次数要比ArrayMap少很多。
-3.扩容效率:
-HashMap每次扩容的时候时重新计算每个数组成员的位置,然后放到新的位置。
-ArrayMap则是直接使用System.arraycopy。
-所以效率上肯定是ArrayMap更占优势。这里需要说明一下,网上有一种传闻说因为ArrayMap使用System.arraycopy更省内存空间,这一点我真的没有看出来。arraycopy也是把老的数组的对象一个一个的赋给新的数组。当然效率上肯定arraycopy更高,因为是直接调用的c层的代码。
-4.内存耗费：
-以ArrayMap采用了一种独特的方式,能够重复的利用因为数据扩容而遗留下来的数组空间,方便下一个ArrayMap的使用。而HashMap没有这种设计。由于ArrayMap只缓存了长度是4和8的时候,所以如果频繁的使用到Map,而且数据量都比较小的时候,ArrayMap无疑是相当的节省内存的。
-5.总结:
-综上所述,数据量比较小,并且需要频繁的使用Map存储数据的时候,推荐使用ArrayMap。
-而数据量比较大的时候,则推荐使用HashMap。
+
 ** ButterKnife
 参考文章
 butterKnife 使用的是 APT 技术 也就是编译时注解，不同于运行时注解（在运行过程中通过反射动态地获取相关类，方法，参数等信息，效率低），编译时注解 则是在代码编译过程中对注解进行处理（annotationProcessor技术），通过注解获取相关类，方法，参数等信息，然后在项目中生成代码，运行时调用，其实和直接手写代码一样，没有性能问题，只有编辑时效率问题。
@@ -535,6 +507,31 @@ Handler利用线程封闭的ThreadLocal维持一个消息队列，Handler的核�
 首现 在一个线程中， new Handler() 必须先执行，Looper.prepare() 创先looper，
 主线程没有手动调用Looper.prepare()，是因为 app启动时，在ActivityThread main主入口，执行了 Looper.prepareMainThread.
 public static void prepareMainLooper() { ... }
+
+* ArrayList 、LinkedList
+- ArrayList ：基于动态数组实现，所以查找快（O1） 增删慢 （On），如果创建方法无参数，默认数组长度为10，添加元素如果需要扩容则是新创建一个 数组，进行数据的转移拷贝。删除的时候 如果删除成功，后续元素需要通过System.arraycopy 进行元素移动（相当的低效）。查找则比较迅速。
+- LinkedList ： 底层基于双向链表，维持了 last 和 next 两个节点，所以 查找慢 （On） 增删快（O1），链表的查找是循环的（不过查找的过程是 先判断index是靠近哪一段 然后再进行查找 可以理解为 O（n/2）），但是速度还是慢。在添加和删除中，因为添加是直接放到链表尾部 但是删除存在 先循环一遍，然后删除的情况，不过 相对于ArrayList的复制要好的很多了。
+
+* ArrayMap和HashMap的区别
+HashMap和ArrayMap各自的优势
+1.查找效率:
+HashMap因为其根据hashcode的值直接算出index,所以其查找效率是随着数组长度增大而增加的。
+ArrayMap使用的是二分法查找,所以当数组长度每增加一倍时,就需要多进行一次判断,效率下降。
+所以对于Map数量比较大的情况下,推荐使用
+2.扩容数量:
+HashMap初始值16个长度,每次扩容的时候,直接申请双倍的数组空间。
+ArrayMap每次扩容的时候,如果size长度大于8时申请size*1.5个长度,大于4小于8时申请8个,小于4时申请4个。这样比较ArrayMap其实是申请了更少的内存空间,但是扩容的频率会更高。
+因此,如果当数据量比较大的时候,还是使用HashMap更合适,因为其扩容的次数要比ArrayMap少很多。
+3.扩容效率:
+HashMap每次扩容的时候时重新计算每个数组成员的位置,然后放到新的位置。
+ArrayMap则是直接使用System.arraycopy。
+所以效率上肯定是ArrayMap更占优势。这里需要说明一下,网上有一种传闻说因为ArrayMap使用System.arraycopy更省内存空间,这一点我真的没有看出来。arraycopy也是把老的数组的对象一个一个的赋给新的数组。当然效率上肯定arraycopy更高,因为是直接调用的c层的代码。
+4.内存耗费：
+以ArrayMap采用了一种独特的方式,能够重复的利用因为数据扩容而遗留下来的数组空间,方便下一个ArrayMap的使用。而HashMap没有这种设计。由于ArrayMap只缓存了长度是4和8的时候,所以如果频繁的使用到Map,而且数据量都比较小的时候,ArrayMap无疑是相当的节省内存的。
+5.总结:
+综上所述,数据量比较小,并且需要频繁的使用Map存储数据的时候,推荐使用ArrayMap。
+而数据量比较大的时候,则推荐使用HashMap。
+
 * HashMap原理
 数据结构和算法思考
 1.为什么选择数组和链表结构？
@@ -553,6 +550,18 @@ public static void prepareMainLooper() { ... }
 ②根据key的hash值利用二分查找在hash数组中找出index。
 ③根据index在key-value数组中对应位置查找，如果不相等认为冲突了，会以key为中心，分别上下展开，逐一查找。
 优势，数据量少时（少于1000）相比HashMap更节省内存。劣势，删除和插入时效率要比HashMap要低。
+* HashMap SparseArray HashTable TreeMap LinkedHashMap ArrayMap
+HashMap ： jdk8后由数组、链表和红黑树组成，基于散列表实现。当数组中的数据出现 hash冲突的时候启动链表，当链表中的 个数超过8个 将链表转为红黑树。允许 key val 为NULL，key和 val存储数据可以为任何类型（非基本类型 会自动装箱）。HashMap并不是线程安全的，可以通过 Collections.synchronizedMap(new HashMap)的方式获得线程的Hahsmap，或者使用 下边的ConcurrentHashMap。
+由于HashCode冲突、自动装箱和Entry类型多余元素问题，数据量小的时候推荐使用 SparseArray 和 ArrayMap
+HashMap 源码参考文章
+SparseArray ： key 只能为整数型，内部也是两个数组，一个存key的hashcode，一个存 key和val 交叉保存, 添加的时候 key 不用装箱，val则需要如果是基本类型，查找key还是用的二分法查找。也就是说它的时间复杂度还是O(logN)
+ArrayMap ：key val 可以为 任意类型（非基本类型，会自动装箱），中有两个数组，一个存储key 的hash值，另外一个交叉存储 key val 数据（key val key val .... 形式存储）
+TreeMap ： 相比较于HashMap，TreeMap实现SortedMap接口，所以TreeMap是有序的！HashMap是无序的。
+HashTable ： 其实主体和 HashMap类似，但是写入和 读取方法 添加了 synchronize 可以做到 线程安全，key 和val 不能为null，但是效率没有HashMap高。
+LinkedHashMap： LinkedHashMap保存了记录的插入顺序，在用Iterator遍历LinkedHashMap时，先得到的记录肯定是先插入的.也可以在构造时用带参数，按照应用次数排序。在遍历的时候会比HashMap慢，不过有种情况例外，当HashMap容量很大，实际数据较少时，遍历起来可能会比LinkedHashMap慢，因为LinkedHashMap的遍历速度只和实际数据有关，和容量无关，而HashMap的遍历速度和他的容量有关。
+ConcurrentHashMap ：ConcurrentHashMap由多个segment 组成，每个segment 包含一个Entity 的数组。这里比HashMap 多了一个segment 类。该类继承了ReentrantLock 类，所以本身是一个锁。当多线程对ConcurrentHashMap 操作时，不是完全锁住map， 而是锁住相应的segment 。这样提高了并发效率。缺点：当遍历ConcurrentMap中的元素时，需要获取所有的segment 的锁，使用遍历时慢。锁的增多，占用了系统的资源。使得对整个集合进行操作的一些方法
+ConcurrentHashMap 和 HashMap不多的博客推荐 传送门
+
 * Android打包流程: 熟悉Android打包编译的流程
 - AAPT（Android Asset Packaging Tool）工具，Android资源打包工具。会打包资源文件（res文件夹下的文件），并生成R.java和resources.arsc文件。
 - AIDL工具会将所有的.aidl文件编译成.java文件。
@@ -577,29 +586,34 @@ Java 语言建立了垃圾收集机制，用以跟踪正在使用的对象和发
     - 2.在 NDK 环境中将 1 中编写的 C 代码编译打包成可执行文件 (BUILD_EXECUTABLE)。
     - 3.主进程启动时将守护进程放入私有目录下，赋予可执行权限，启动它即可。
   - 7 联系厂商，加入白名单
-* 设计模式
-Android常用设计模式及源码使用
-单例模式
+
+* 设计模式: Android常用设计模式及源码使用
+** 单例模式
 初始化比较复杂，并且程序中只需要一个。避免重复创建消耗内存
-Android中 获取WindowManager服务引用 WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW_SERVICE);
-l另外一种不错实现单例的方式 使用 eunm,
+- Android中 获取WindowManager服务引用 
+#+BEGIN_SRC java
+WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW_SERVICE);
+#+END_SRC
+- 另外一种不错实现单例的方式 使用 eunm,
+#+BEGIN_SRC java
 public class Singleton {
     private static volatile Singleton s;
     private Singleton(){};
     public static Singleton getInstance() {  
-        if(s == null) {
-            synchronized (Singleton.class) {
-                if(s == null) {
+        if (s == null) {
+            synchronized (Singleton.class) 
+                if(s == null) 
                     s = new Singleton(); 
-                }
-            }
         }
-        return s; 
-创建者模式
-创建某对象时，需要设定很多的参数（通过setter方法），但是这些参数必须按照某个顺序设定
-Android 中 创建所有的 Dialog 中使用的
+        return s;
+    }
+}
+#+END_SRC
+** 创建者模式
+- 创建某对象时，需要设定很多的参数（通过setter方法），但是这些参数必须按照某个顺序设定
+- Android 中 创建所有的 Dialog 中使用的
+#+BEGIN_SRC java
 public class TestClient {
-    
     private int index;
     private String name;
     public TestClient() {
@@ -633,84 +647,87 @@ public class TestClient {
         }
     }
 }
-原型模式
-工厂模式
-定义一个创建对象的工厂，根据不同传参 创建不同的对象。
-Android 中 BitmapFactory 和 Iterator 根据循环对象不同返回不同的对象
-策略模式
-有一系列的算法，将算法封装起来（每个算法可以封装到不同的类中），各个算法之间可以替换，策略模式让算法独立于使用它的客户而独立变化
-Android 中的 时间插值器，可以使用不同的 加速 减速 或者自定义加速器 展示不同的动画效果
-责任链模式
-B
-命令模式
-命令模式将每个请求封装成一个对象，从而让用户使用不同的请求把客户端参数化；将请求进行排队或者记录请求日志，以及支持可撤销操作。
-Android 事件机制中，底层逻辑对事件的转发处理。每次的按键事件会被封装成NotifyKeyArgs对象，通过InputDispatcher封装具体的事件操作 / Runable实现中封装我们需要的实现
-观察者模式
-Java的Observable类和Observer接口就是实现了观察者模式。一个Observer对象监视着一个Observable对象的变化，当Observable对象发生变化时，Observer得到通知，就可以进行相应的工作。
-中介者模式
-在Binder机制中，即ServiceManager持有各种系统服务的引用 ，当我们需要获取系统的Service时，首先是向ServiceManager查询指定标示符对应的Binder，再由ServiceManager返回Binder的引用。并且客户端和服务端之间的通信是通过Binder驱动来实现，这里的ServiceManager和Binder驱动就是中介者。代理模式
-给某一个对象提供一个代理，并由代理对象控制对原对象的引用 (,静态代理 和 动态代理)
-适配器模式
-把一个类的接口变换成客户端所期待的另一个接口，从而使原本因接口不匹配而无法在一起工作的两个类能够在一起工作。
-补充说明：
-例模式
-//获取WindowManager服务引用
-WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW_SERVICE);  
-基本所有的获取系统服务都是单例。
-Builder 模式
-一般常用于构建需要3个以上的参数。
+#+END_SRC
+** 原型模式
+** 工厂模式
+- 定义一个创建对象的工厂，根据不同传参 创建不同的对象。
+- Android 中 BitmapFactory 和 Iterator 根据循环对象不同返回不同的对象
+** 策略模式
+- 有一系列的算法，将算法封装起来（每个算法可以封装到不同的类中），各个算法之间可以替换，策略模式让算法独立于使用它的客户而独立变化
+- Android 中的 时间插值器，可以使用不同的 加速 减速 或者自定义加速器 展示不同的动画效果
+** 责任链模式
+** 命令模式
+- 命令模式将每个请求封装成一个对象，从而让用户使用不同的请求把客户端参数化；将请求进行排队或者记录请求日志，以及支持可撤销操作。
+- Android 事件机制中，底层逻辑对事件的转发处理。每次的按键事件会被封装成NotifyKeyArgs对象，通过InputDispatcher封装具体的事件操作 / Runable实现中封装我们需要的实现
+** 观察者模式
+- Java的Observable类和Observer接口就是实现了观察者模式。一个Observer对象监视着一个Observable对象的变化，当Observable对象发生变化时，Observer得到通知，就可以进行相应的工作。
+** 中介者模式
+- 在Binder机制中，即ServiceManager持有各种系统服务的引用 ，当我们需要获取系统的Service时，首先是向ServiceManager查询指定标示符对应的Binder，再由ServiceManager返回Binder的引用。并且客户端和服务端之间的通信是通过Binder驱动来实现，这里的ServiceManager和Binder驱动就是中介者。
+** 代理模式
+- 给某一个对象提供一个代理，并由代理对象控制对原对象的引用 (,静态代理 和 动态代理)
+** 适配器模式
+- 把一个类的接口变换成客户端所期待的另一个接口，从而使原本因接口不匹配而无法在一起工作的两个类能够在一起工作。
+** Builder 模式
+- 一般常用于构建需要3个以上的参数。
+#+BEGIN_SRC java
 AlertDialog.Builer builder=new AlertDialog.Builder(context); 
 builder.setIcon(R.drawable.icon) 
- .setTitle("title") 
- .setMessage("message") 
- .setPositiveButton("Button1", new DialogInterface.OnclickListener(){ 
-       public void onClick(DialogInterface dialog,int whichButton){ 
-             setTitle("click"); 
+.setTitle("title") 
+.setMessage("message") 
+.setPositiveButton("Button1", new DialogInterface.OnclickListener(){ 
+        public void onClick(DialogInterface dialog,int whichButton){ 
+            setTitle("click"); 
         } 
- }) 
- .create() 
- .show();
-原型模式
+    }) 
+.create() 
+.show();
+#+END_SRC
+** 原型模式
+   #+BEGIN_SRC java
 Uri uri=Uri.parse("smsto:10086"); 
 Intent shareIntent=new Intent(Intent.ACTION_SENDTO,uri); 
-//克隆副本 
+// 克隆副本 
 Intent intent=(Intetn)shareIntent.clone(); startActivity(intent);
-工厂模式
+   #+END_SRC
+** 工厂模式
+   #+BEGIN_SRC java
 public Object getSystemService(String name) { 
-      if (getBaseContext() == null) { 
-          throw new IllegalStateException("System services not available to Activities before onCreate()"); 
-     }
+    if (getBaseContext() == null) { 
+        throw new IllegalStateException("System services not available to Activities before onCreate()"); 
+    }
     //........ 
-      if (WINDOW_SERVICE.equals(name)) { 
-          return mWindowManager; 
-     } else if (SEARCH_SERVICE.equals(name)) { 
-         ensureSearchManager(); 
-          return mSearchManager; 
-     } //....... 
-      return super.getSystemService(name); }
-策略者模式
-根据是否是v包选择不同的构建view方案
-责任链模式
-view的点击事件，view的touch事件等
-命令模式
-按键事件会被封装成notifyKeyArgs对象，通过inputDispatcheri 封装具体事件操作
-观察者模式
-监听器这一类都是
-备忘录模式
-activtity onSaveInstanceState等
-迭代器模式
-数据库的cursor，常用于查询
-代理模式
-Binder代理
-适配器模式
-adapter类
-装饰者模式
-Rxjava2，或者contextThemeWapper等
+    if (WINDOW_SERVICE.equals(name)) { 
+        return mWindowManager; 
+    } else if (SEARCH_SERVICE.equals(name)) { 
+        ensureSearchManager(); 
+        return mSearchManager; 
+    } //....... 
+    return super.getSystemService(name);
+}
+   #+END_SRC
+** 策略者模式
+- 根据是否是v包选择不同的构建view方案
+** 责任链模式
+- view的点击事件，view的touch事件等
+** 命令模式
+- 按键事件会被封装成notifyKeyArgs对象，通过inputDispatcheri 封装具体事件操作
+** 观察者模式
+- 监听器这一类都是
+** 备忘录模式
+- activtity onSaveInstanceState等
+** 迭代器模式
+- 数据库的cursor，常用于查询
+** 代理模式
+- Binder代理
+** 适配器模式
+- adapter类
+** 装饰者模式
+- Rxjava2，或者contextThemeWapper等
 * 跨平台
-Flutter 和 React Native 不同主要在于 Flutter UI 是直接通过 skia 渲染的 ，而 React Native 是将 js 中的控件转化为原生控件，通过原生去渲染的。
-移动端跨平台开发的深度解析
+- Flutter 和 React Native 不同主要在于 Flutter UI 是直接通过 skia 渲染的 ，而 React Native 是将 js 中的控件转化为原生控件，通过原生去渲染的。
+- 移动端跨平台开发的深度解析
 * 网络
-HTTP请求方式和报文解析
+- HTTP请求方式和报文解析
 1.HTTPS(Secure) 安全的 HTTP 协议
 https://<主机>:<443>/<路径>
 补充说明（其他版本）
@@ -890,3 +907,5 @@ A soft Reference Object is basically a weak Reference Object that remains in mem
 On the other hand, a phantom Reference Object is useful only to know exactly when an object has been effectively removed from memory: normally they are used to fix weird finalize() revival/resurrection behavior, since they actually do not return the object itself but only help in keeping track of their memory presence.
 Weak Reference Objects are ideal to implement cache modules. In fact, a sort of automatic eviction can be implemented by allowing the GC to clean up memory areas whenever objects/values are no longer reachable by strong references chain. An example is the WeakHashMap retaining weak keys.
 - https://juejin.cn/post/7007326164268105741 这个有没有时间看再说
+
+
