@@ -436,6 +436,180 @@ View v = inflater.inflate(R.layout.hello_world, container, false);
 - 3、 你不需要考虑在“内存重启”的情况下，去恢复的Fragments的问题，因为FragmentPagerAdapter已经帮我们处理啦。
 ** setUserVisibleHint()不调用的问题
 - 通常情况下都是因为PagerAdapter不是FragmentPagerAdapter造成的，FragmentPagerAdapter内部实现了对setUserVisibleHint()方法的调用，所以需要懒加载的结构最好使用FragmentPagerAdapter +Fragment的结构，少用PagerAdapter。
+** 详细细节
+- 我们这里举个例子来理解Fragment生命周期方法。功能如下：共有两个Fragment：F1和F2，F1在初始化时就加入Activity，点击F1中的按钮调用replace替换为F2。
+- 当F1在Activity的onCreate()中被添加时，日志如下：
+#+BEGIN_SRC java
+MainActivity: onCreate() BEGIN
+MainActivity: onCreate() END
+
+MainActivity: onStart() BEGIN
+Fragment1: onAttach() BEGIN 
+Fragment1: onAttach() END
+MainActivity: onAttachFragment() BEGIN
+MainActivity: onAttachFragment() END
+Fragment1: onCreate() BEGIN
+Fragment1: onCreate() END
+Fragment1: onCreateView()
+Fragment1: onViewCreated() BEGIN
+Fragment1: onViewCreated() END
+Fragment1: onActivityCreated() BEGIN
+Fragment1: onActivityCreated() END
+Fragment1: onStart() BEGIN
+Fragment1: onStart() END
+MainActivity: onStart() END
+
+MainActivity: onPostCreate() BEGIN
+MainActivity: onPostCreate() END
+MainActivity: onResume() BEGIN
+MainActivity: onResume() END
+MainActivity: onPostResume() BEGIN
+Fragment1: onResume() BEGIN
+Fragment1: onResume() END
+MainActivity: onPostResume() END
+MainActivity: onAttachedToWindow() BEGIN
+MainActivity: onAttachedToWindow() END
+#+END_SRC
+- 可以看出：
+  - Fragment的onAttach()->onCreate()->onCreateView()->onActivityCreated()->onStart()都是在Activity的onStart()中调用的。
+  - Fragment的onResume()在Activity的onResume()之后调用。
+- 接下去分两种情况，分别是不加addToBackStack()和加addToBackStack()。
+  - 1、当点击F1的按钮，调用replace()替换为F2，且不加addToBackStack()时，日志如下：
+#+BEGIN_SRC java
+Fragment2: onAttach() BEGIN
+Fragment2: onAttach() END
+MainActivity: onAttachFragment() BEGIN
+MainActivity: onAttachFragment() END
+Frag    2: onCreate() BEGIN
+Frag    2: onCreate() END
+Fragment1: onPause() BEGIN
+Fragment1: onPause() END
+Fragment1: onStop() BEGIN
+Fragment1: onStop() END
+Fragment1: onDestroyView() BEGIN
+Fragment1: onDestroyView() END
+Fragment1: onDestroy() BEGIN
+Fragment1: onDestroy() END
+Fragment1: onDetach() BEGIN
+Fragment1: onDetach() END
+Frag    2: onCreateView()
+Frag    2: onViewCreated() BEGIN
+Frag    2: onViewCreated() END
+Frag    2: onActivityCreated() BEGIN
+Frag    2: onActivityCreated() END
+Frag    2: onStart() BEGIN
+Frag    2: onStart() END
+Frag    2: onResume() BEGIN
+Frag    2: onResume() END
+#+END_SRC
+    - 可以看到，F1最后调用了onDestroy()和onDetach()。
+  - 2、当点击F1的按钮，调用replace()替换为F2，且加addToBackStack()时，日志如下：
+#+BEGIN_SRC java
+Frag    2: onAttach() BEGIN
+Frag    2: onAttach() END
+MainActivity: onAttachFragment() BEGIN
+MainActivity: onAttachFragment() END
+Frag    2: onCreate() BEGIN
+Frag    2: onCreate() END
+Fragment1: onPause() BEGIN
+Fragment1: onPause() END
+Fragment1: onStop() BEGIN
+Fragment1: onStop() END
+Fragment1: onDestroyView() BEGIN
+Fragment1: onDestroyView() END
+Frag    2: onCreateView()
+Frag    2: onViewCreated() BEGIN
+Frag    2: onViewCreated() END
+Frag    2: onActivityCreated() BEGIN
+Frag    2: onActivityCreated() END
+Frag    2: onStart() BEGIN
+Frag    2: onStart() END
+Frag    2: onResume() BEGIN
+Frag    2: onResume() END
+#+END_SRC
+    - 可以看到，F1被替换时，最后只调到了onDestroyView()，并没有调用onDestroy()和onDetach()。当用户点返回按钮回退事务时，F1会调onCreateView()->onStart()->onResume()，因此在Fragment事务中加不加addToBackStack()会影响Fragment的生命周期。
+- FragmentTransaction有一些基本方法，下面给出调用这些方法时，Fragment生命周期的变化：
+  - add(): onAttach()->…->onResume()。
+  - remove(): onPause()->…->onDetach()。
+  - replace(): 相当于旧Fragment调用remove()，新Fragment调用add()。
+  - show(): 不调用任何生命周期方法，调用该方法的前提是要显示的Fragment已经被添加到容器，只是纯粹把Fragment UI的setVisibility为true。
+  - hide(): 不调用任何生命周期方法，调用该方法的前提是要显示的Fragment已经被添加到容器，只是纯粹把Fragment UI的setVisibility为false。
+  - detach(): onPause()->onStop()->onDestroyView()。UI从布局中移除，但是仍然被FragmentManager管理。
+  - attach(): onCreateView()->onStart()->onResume()。
+
+** Fragment基础知识
+- 核心的类有：
+  - Fragment：Fragment的基类，任何创建的Fragment都需要继承该类。
+  - FragmentManager：管理和维护Fragment。他是抽象类，具体的实现类是FragmentManagerImpl。
+  - FragmentTransaction：对Fragment的添加、删除等操作都需要通过事务方式进行。他是抽象类，具体的实现类是BackStackRecord。
+- Nested Fragment（Fragment内部嵌套Fragment的能力）是Android 4.2提出的，support-fragment库可以兼容到1.6。通过getChildFragmentManager()能够获得管理子Fragment的FragmentManager，在子Fragment中可以通过getParentFragment()获得父Fragment。
+- 这里给出Fragment最基本的使用方式。首先，创建继承Fragment的类，名为Fragment1：
+#+BEGIN_SRC java
+public class Fragment1 extends Fragment {
+    private static String ARG_PARAM = "param_key";
+    private Activity mActivity; // 
+    private String mParam;
+    public static Fragment1 newInstance(String str) {
+        Fragment1 frag = new Fragment1();
+        Bundle bundle = new Bundle();
+        bundle.putString(ARG_PARAM, str);
+        fragment.setArguments(bundle);   //设置参数
+        return fragment;
+    }
+    public void onAttach(Context context) {
+        mActivity = (Activity) context;
+        mParam = getArguments().getString(ARG_PARAM);  //获取参数
+    }
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        View root = inflater.inflate(R.layout.fragment_1, container, false);
+        TextView view = root.findViewById(R.id.text);
+        view.setText(mParam);
+        return root;
+    }
+}
+#+END_SRC
+- Fragment有很多可以复写的方法，其中最常用的就是onCreateView()，该方法返回Fragment的UI布局，需要注意的是inflate()的第三个参数是false，因为在Fragment内部实现中，会把该布局添加到container中，如果设为true，那么就会重复做两次添加，则会抛如下异常：
+#+BEGIN_SRC java
+Caused by: java.lang.IllegalStateException: The specified child already has a parent. You must call removeView() on the child's parent first.
+#+END_SRC
+- 如果在创建Fragment时要传入参数，必须要通过setArguments(Bundle bundle)方式添加，而不建议通过为Fragment添加带参数的构造函数，因为通过setArguments()方式添加，在由于内存紧张导致Fragment被系统杀掉并恢复（re-instantiate）时能保留这些数据。官方建议如下：
+#+BEGIN_SRC java
+It is strongly recommended that subclasses do not have other constructors with parameters, since these constructors will not be called when the fragment is re-instantiated.
+#+END_SRC
+- 我们可以在Fragment的onAttach()中通过getArguments()获得传进来的参数，并在之后使用这些参数。如果要获取Activity对象，不建议调用getActivity()，而是在onAttach()中将Context对象强转为Activity对象。
+- 创建完Fragment后，接下来就是把Fragment添加到Activity中。在Activity中添加Fragment的方式有两种：
+  - 静态添加：在xml中通过<fragment>的方式添加，缺点是一旦添加就不能在运行时删除。
+  - 动态添加：运行时添加，这种方式比较灵活，因此建议使用这种方式。
+    - 这里只给出动态添加的方式。首先Activity需要有一个容器存放Fragment，一般是FrameLayout，因此在Activity的布局文件中加入FrameLayout：
+#+BEGIN_SRC xml
+<FrameLayout
+    android:id="@+id/container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+/> 
+    #+END_SRC
+    - 然后在onCreate()中，通过以下代码将Fragment添加进Activity中。
+    #+BEGIN_SRC java
+if (bundle == null) {
+    getSupportFragmentManager().beginTransaction()
+        .add(R.id.container, Fragment1.newInstance("hello world"), "f1")
+        //.addToBackStack("fname")
+        .commit();
+}
+    #+END_SRC
+- Fragment有一个常见的问题，即Fragment重叠问题，这是由于Fragment被系统杀掉，并重新初始化时再次将fragment加入activity，因此通过在外围加if语句能判断此时是否是被系统杀掉并重新初始化的情况。
+- Fragment有个常见的异常：
+#+BEGIN_SRC java
+java.lang.IllegalStateException: Can not perform this action after onSaveInstanceState
+    at android.support.v4.app.FragmentManagerImpl.checkStateLoss(FragmentManager.java:1341)
+    at android.support.v4.app.FragmentManagerImpl.enqueueAction(FragmentManager.java:1352)
+    at android.support.v4.app.BackStackRecord.commitInternal(BackStackRecord.java:595)
+    at android.support.v4.app.BackStackRecord.commit(BackStackRecord.java:574)
+#+END_SRC
+- 该异常出现的原因是：commit()在onSaveInstanceState()后调用。首先，onSaveInstanceState()在onPause()之后，onStop()之前调用。onRestoreInstanceState()在onStart()之后，onResume()之前。
+- 因此避免出现该异常的方案有：
+  - 不要把Fragment事务放在异步线程的回调中，比如不要把Fragment事务放在AsyncTask的onPostExecute()，因此onPostExecute()可能会在onSaveInstanceState()之后执行。
+  - 逼不得已时使用commitAllowingStateLoss()。
 
 ** Fragment注意事项
 - 在使用Fragment时，我发现了一个金矿，那就是setRetainInstance()方法,此方法可以有效地提高系统的运行效率，对流畅性要求较高的应用可以适当采用此方法进行设置。
@@ -551,16 +725,34 @@ A 再到 B
 如果在B页面输入了数据，B返回A再到B，B中数据也会恢复
   #+END_SRC
 
+
 * Android Fragment 之间数据传递
-** 获得对方的引用强转
+** 获得对方的引用强转: 这种方式不推荐
 - 通过findFragmentByTag或者getActivity获得对方的引用（强转）之后，再相互调用对方的public方法，但是这样做一是引入了“强转”的丑陋代码，另外两个类之间各自持有对方的强引用，耦合较大，容易造成内存泄漏。
+#+BEGIN_SRC java
+// 宿主activity中的getTitles()方法
+public String getTitles(){
+    return "hello";
+}
+// Fragment中的onAttach方法
+@Override
+public void onAttach(Activity activity) {
+    super.onAttach(activity);
+    titles = ((MainActivity) activity).getTitles(); // 通过强转成宿主activity，就可以获取到传递过来的数据
+}
+#+END_SRC
 ** 通过Bundle的方法进行传值，例如以下代码：
 #+BEGIN_SRC java
-// Activity中对fragment设置一些参数 
-fragment.setArguments(bundle); 
-// fragment中通过getArguments获得Activity中的方法 
+// 从Activity中对fragment设置一些参数 
+MyFragment myFragment = new MyFragment();
+Bundle bundle = new Bundle();
+bundle.putString("DATA",values); // 这里的 values 就是我们要传的值
+myFragment.setArguments(bundle);
+
+// 在fragment中，通过getArguments获得Activity中传来的bundle
 Bundle arguments = getArguments();  
 #+END_SRC
+- 然后在Fragment中的onCreatView()方法中，通过getArgments()方法，获取到bundle对象，然后通过getString的key值拿到我们传递过来的值。
 ** 利用eventbus进行通信，这种方法实时性高，而且Activity与Fragment之间可以完全解耦。
    #+BEGIN_SRC java
 // Activity中的代码 
@@ -572,6 +764,76 @@ public void test(String text) {
     tv_test.setText(text); 
 } 
    #+END_SRC
+** 其它自定义（？这里讲得不透彻，寻找更透彻的解释）
+- 如果我们不需要传递数值，那就直接可以在宿主activity中，跟平常一样创建fragment，但是如果我们需要传递数据的话，可以使用newInstance（数据）方法来传递，这个方法是自己定义的，但是是定义在Fragment中的一个静态方法。
+#+BEGIN_SRC java
+static MyFragment newInstance(String s){
+    MyFragment myFragment = new MyFragment();
+    Bundle bundle = new Bundle();
+    bundle.putString("DATA",s);
+    myFragment.setArguments(bundle);
+    return myFragment;
+}
+@Nullable @Override // 同样，在onCreatView中直接获取这个值
+public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    View view = inflater.inflate(R.layout.layout_fragment,container,false);
+    Bundle bundle = getArguments();
+    String data = bundle.getString("DATA");
+    tv = (TextView) view.findViewById(R.id.id_fm_tv);
+    if (data != null)
+        tv.setText(data);
+    return view;
+}
+#+END_SRC
+- 在宿主activity中，创建Fragment
+#+BEGIN_SRC java
+FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
+fragmentTransaction.setCustomAnimations(android.R.anim.fade_in,android.R.anim.fade_out);
+fragment1 = MyFragment.newInstance("这是第一个fragment");//这里只需要直接调用这个方法，就创建了一个fragment
+fragment2 = MyFragment.newInstance("这是第二个fragment");
+fragment3 = MyFragment.newInstance("这是第三个fragment");
+#+END_SRC
+*** Fragment向Activity传递数据
+- 首先，在Fragment中定义接口，并让Activity实现该接口（具体实现省略）：
+#+BEGIN_SRC java
+public interface OnFragmentInteractionListener {
+    void onItemClick(String str);  //将str从Fragment传递给Activity
+}
+#+END_SRC
+- 在Fragment的onAttach()中，将参数Context强转为OnFragmentInteractionListener对象：
+#+BEGIN_SRC java
+public void onAttach(Context context) {
+    super.onAttach(context);
+    if (context instanceof OnFragmentInteractionListener) {
+        mListener = (OnFragmentInteractionListener) context;
+    } else {
+        throw new RuntimeException(context.toString()
+                + " must implement OnFragmentInteractionListener");
+    }
+}
+#+END_SRC
+- 并在Fragment合适的地方调用mListener.onItemClick("hello")将”hello”从Fragment传递给Activity。
+**** FABridge
+- https://github.com/hongyangAndroid/FABridge
+- 由于通过接口的方式从Fragment向Activity进行数据传递比较麻烦，需要在Fragment中定义interface，并让Activity实现该interface，FABridge通过注解的形式免去了这些定义。
+- 在build.gradle中添加依赖：
+#+BEGIN_SRC groovy
+annotationProcessor 'com.zhy.fabridge:fabridge-compiler:1.0.0'
+compile 'com.zhy.fabridge:fabridge-api:1.0.0'
+#+END_SRC
+- 首先定义方法ID，这里为FAB_ITEM_CLICK，接着在Activity中定义接口：
+#+BEGIN_SRC java
+@FCallbackId(id = FAB_ITEM_CLICK)
+public void onItemClick(String str) {  //方法名任意
+    Toast.makeText(this, str, Toast.LENGTH_SHORT).show();
+}
+#+END_SRC
+- 最后，在Fragment中，通过以下形式调用”ID=FAB_ITEM_CLICK”的方法（该方法可能在Activity中，也可能在任何类中）：
+#+BEGIN_SRC java
+Fabridge.call(mActivity,FAB_ITEM_CLICK,"data");  //调用ID对应的方法，"data"为参数值
+#+END_SRC
+- 后半部分，关于FragmentViewPager https://github.com/tyzlmjj/PagerBottomTabStrip.git
+- https://cloud.tencent.com/developer/article/1005540
 
 - http://www.cnblogs.com/purediy/p/3276545.html
 - Fragment与Activity生命周期对比图：
@@ -607,7 +869,68 @@ public void test(String text) {
 - Notes:
   - 一旦activity进入resumed状态（也就是running状态），你就可以自由地添加和删除fragment了。
   - 因此，只有当activity在resumed状态时，fragment的生命周期才能独立的运转，其它时候是依赖于activity的生命周期变化的。
+** Dialog
+- 主要应用于一些临时的对话框，比如向用户询问是否允许开启一些权限AlertDialog，让用户选择一个时间TimePickerDialog，或者自定义界面进行选择DialogFragment。初始化一个简单的Dialog的语法是：
+#+BEGIN_SRC java
+// 使用Builder class来定义AlertDialog的属性
+val builder = AlertDialog.Builder(this)
+builder.setMessage(R.string.your_dialog_message)
+    .setPositiveButton(
+        R.string.ok,
+        DialogInterface.OnClickListener { dialog, id ->
+            // 定义用户按下OK按钮后的行为
+        })
+    .setNegativeButton(
+        R.string.cancel,
+        DialogInterface.OnClickListener { dialog, id ->
+            // 定义用户按下CANCEL按钮后的行为
+        })
+// 创建一个AlertDIalog实例
+builder.create()
+#+END_SRC
+- 上面的代码会创建出一个带有两个按钮的对话框，并且根据用户的选择来运行相对应的逻辑。
+** DialogFragment
+- DialogFragment是Android 3.0提出的，代替了Dialog，用于实现对话框。他的优点是：即使旋转屏幕，也能保留对话框状态。
+- 如果要自定义对话框样式，只需要继承DialogFragment，并重写onCreateView()，该方法返回对话框UI。这里我们举个例子，实现进度条样式的圆角对话框。
+#+BEGIN_SRC java
+public class ProgressDialogFragment extends DialogFragment {
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        getDialog().requestWindowFeature(Window.FEATURE_NO_TITLE); //消除Title区域
+        getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));  //将背景变为透明
+        setCancelable(false);  //点击外部不可取消
+        View root = inflater.inflate(R.layout.fragment_progress_dialog, container);
+        return root;
+    }
 
+    public static ProgressDialogFragment newInstance() {
+        return new ProgressDialogFragment();
+    }
+}
+#+END_SRC
+- 进度条动画我们使用Lottie实现，Lottie动画从这里找到。使用非常方便，只需要下载JSON动画文件，然后在XML中写入：
+#+BEGIN_SRC xml
+<com.airbnb.lottie.LottieAnimationView
+    android:layout_width="wrap_content"    // 大小根据JSON文件确定
+    android:layout_height="wrap_content"
+    app:lottie_fileName="loader_ring.json"  /JSON文件
+    app:lottie_loop="true"         // 循环播放
+    app:lottie_autoPlay="true" />  // 自动播放
+#+END_SRC
+然后通过下面代码显示对话框：
+#+BEGIN_SRC java
+ProgressDialogFragment fragment = ProgressDialogFragment.newInstance();
+fragment.show(getSupportFragmentManager(), "tag");
+//fragment.dismiss();
+#+END_SRC
+- 为了实现圆角，除了在onCreateView()中把背景设为透明，还需要对UI加入背景：
+#+BEGIN_SRC xml
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#ffffff"/>
+    <corners
+        android:radius="20dp"/>
+</shape>
+#+END_SRC
 
 * 启动模式与任务栈
 - 安卓有四种启动模式：standard、singleTop、singleTask和singleInstance，想要更改模式可以在AndroidManifest.xml中activity标签下添加launchMode标签。下面是各种模式的详细介绍(下文中所有的栈，均指任务栈)：

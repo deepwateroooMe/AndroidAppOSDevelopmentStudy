@@ -4,7 +4,14 @@
 
 * 性能优化
 - https://segmentfault.com/a/1190000037449196 总结得很全面也很透彻
+  
+[[./pic/ulti.png]]
+
 ** 内存优化
+   
+   [[./pic/heapmodel.png]]
+- 这就是Android开发童鞋需要了解的Generational Heap Memory模型，这里我们只关心当对象在Young Generation中存活了一段时间之后，如果没被干掉，那么会被移动到Old Generation中，同理，最后会移动到Permanent Generation中。
+
 *** 珍惜Service，尽量使得Service在使用的时候才处于运行状态。尽量使用IntentService
 - IntentService在内部其实是通过线程以及Handler实现的，当有新的Intent到来的时候，会创建线程并且处理这个Intent，处理完毕以后就自动销毁自身。因此使用IntentService能够节省系统资源。
 *** 内存紧张的时候释放资源（例如UI隐藏的时候释放资源等）。复写Activity的回调方法。
@@ -125,6 +132,117 @@ android:largeHeap="true"
 - 连接复用、请求合并、请求数据Body可以利用压缩算法Gzip来进行压缩，使用JSON 代替 XML
 - 网络请求的安全性: 这块了解的不多。我给你说说我的思路吧，利用哈希算法，比如MD5，服务器给我们的数据可以通过时间戳和其他参数做个加密，得到一个key，在客户端取出数据后根据数据和时间戳再去生成key与服务端给的做个对比。
 
+** 导致性能问题的原因
+   
+   [[./pic/reasons.png]]
+- 1.人为在ui线程中做了轻微的耗时操作，导致ui线程卡顿
+- 2.layout过于复杂，无法在16ms完成渲染   
+  - 先简单的把渲染大概分为"layout","measure""draw"这么几个阶段，当然你不要以为实际情况也是如此，好，层级复杂，layout,measure可能就用到了不该用的时间，自然而然，留给draw的时间就可能不够了，自然而然就悲剧了。
+  - 那么以前给出的很多建议是，使用RelativeLayout替换LinearLayout,说是可以减少布局层次，然鹅，现在请不要在建议别人使用RelativeLayout，因为ConstraintLayout才是一个更高性能的消灭布局层级的神器。ConstraintLayout 基于Cassowary算法，而Cassowary算法的优势是在于解决线性方程时有极高的效率，事实证明，线性方程组是非常适合用于定义用户界面元素的参数。由于人们对图形的敏感度非常高，所以UI的渲染速度显得非常重要。
+- 3.同一时间执行的动画过多，导致CPU或者GPU负载过重
+  - 这里主要是因为动画一般会频繁变更view的属性，导致displayList失效，而需要重新创建一个新的displayList，如果动画过多，这个开销可想而知，如果你想了解得更加详细，推荐看这篇咯，知识点在第5节那里。
+- 4.view过度绘制的问题。
+  - view过度绘制的问题可以说是我们在写布局的时候遇到的一个最常见的问题之一，可以说写着写着一不留神就写出了一个过度绘制，通常发生在一个嵌套的viewgroup中，比如你给他设置了一个不必要的背景。这方面问题的排查不太难，我们可以通过手机设置里面的开发者选项，打开Show GPU Overdraw的选项，轻松发现这些问题，然后尽量往蓝色靠近。
+- 5.gc过多的问题，这里就不在赘述了，上面已经讲的非常直接了。
+- 6、资源加载导致执行缓慢。
+- 有些时候避免不要加载一些资源，这里有两种解决的办法，使用的场景也不相同。
+  - a、预加载，即还没有来到路径之前，就提前加载好，诶，好像x5内核就是酱紫哦。
+  - b、实在是要等到用到的时候加载，请给一个进度条，不要让用户干等着，也不知道什么时候结束而造成不好的用户体验。
+- 7、工作线程优先级设置不对，导致和ui线程抢占cpu时间。
+- 使用Rxjava的小伙伴要注意这点，设置任务的执行线程可能会对你的性能产生较大的影响，没有使用的小伙伴也不能太过大意。
+- 8、静态变量。
+  - 嘿嘿，大家一定有过在application中设置静态变量的经历，遥想当年，为了越过Intent只能传递1M以下数据的坑，我在application中设置了一个静态变量，用于两个activity“传递（共享）数据”，然而，一步小心，数据中，有着前一个activity的尾巴，因此泄露了。不光是这样的例子，随便举几个：
+    - a、你用静态集合保存过数据吧？
+    - b、某某单例的Manger，比如管理AudioManger遇到过吧？
+** 如何解决这些问题
+   
+   [[./pic/solve.png]]
+*** 1、GPU过度绘制，定位过度绘制区域
+- 这里直接在开发者选项，打开Show GPU Overdraw，就可以看到效果，轻松发现哪块需要优化，那么具体如何去优化
+  - a、减少布局层级，上面有提到过，使用ConstraintLayout替换传统的布局方式。如果你对ConstraintLayout不了解，没有关系，这篇文章教你15分钟了解如何使用ConstraintLayout。
+  - b、检查是否有多余的背景色设置，我们通常会犯一些低级错误--对被覆盖的父view设置背景，多数情况下这些背景是没有必要的。
+*** 2、主线程耗时操作排查。
+- a、开启strictmode,这样一来，主线程的耗时操作都将以告警的形式呈现到logcat当中。
+- b、直接对怀疑的对象加@DebugLog注解，查看方法执行耗时。DebugLog注解需要引入插件hugo，这个是Android之神JakeWharton的早期作品，对于监控函数执行时间非常方便，直接在函数上加入注解就可以实现，但是有一个缺点，就是JakeWharton发布的最后一个版本没有支持release版本用空方法替代监控代码，因此，我这里发布了一个到公司的maven仓库，引用的方式和官网类似，只不过，地址是：
+#+BEGIN_SRC groovy
+'com.tencent.tip:hugo-plugin:2.0.0-SNAPSHOT'。
+#+END_SRC
+*** 3、对于measure，layout耗时过多的问题
+- 一般这类问题是优于布局过于复杂的原因导致，现在因为有ConstraintLayout，所以，强烈建议使用ConstraintLayout减少布局层级，问题一般得以解决，如果发现还存在性能问题，可以使用traceView观察方法耗时，来定位下具体原因。
+*** 4、leakcany
+- 这个是内存泄露监测的银弹，大家应该都使用过，需要提醒一下的是，要注意
+#+BEGIN_SRC groovy
+dependencies {
+    debugImplementation 'com.squareup.leakcanary:leakcanary-android:1.5.4'
+    releaseImplementation 'com.squareup.leakcanary:leakcanary-android-no-op:1.5.4'
+}
+#+END_SRC
+- 引入方式，releaseImplementation保证在发布包中移除监控代码，否则，他自生不停的catch内存快照，本身也影响性能。
+*** 5、onDraw里面写代码需要注意
+- onDraw优于大概每16ms都会被执行一次，因此本身就相当于一个forloop，如果你在里面new对象的话，不知不觉中就满足了短时间内大量对象创建并释放，于是频繁GC就发生了，嗯，内存抖动，于是，卡了。因此，正确的做法是将对象放在外面new出来。
+*** 6、json反序列化问题
+- json反序列化是指将json字符串转变为对象，这里如果数据量比较多，特别是有相当多的string的时候，解析起来不仅耗时，而且还很吃内存。解决的方式是：
+  - a、精简字段，与后台协商，相关接口剔除不必要的字段。保证最小可用原则。
+  - b、使用流解析，之前我考虑过json解析优化，在Stack Overflow上搜索到这个。于是了解到Gson.fromJson是可以这样玩的，可以提升25%的解析效率。
+#+BEGIN_SRC java
+public List<Messge> readJsonStream(InputStream in) throws IOException {
+    JsonReader reader = new JsonReader(enw InputStreamReader(in, "UTF-8"));
+    List<Message> msgs = new ArrayList<>();
+    reader.beginArray();
+    while (reader.hasNext()) {
+        Message msgCur = gson.fromJson(reader, Message.class);
+        msgs.add(msgCur);
+    }
+    reader.endArray();
+    reader.close();
+    return msgs;
+}
+#+END_SRC
+*** 7、viewStub & merge的使用
+- 这里merge和viewStub想必是大家非常了解的两个布局组件了，对于只有在某些条件下才展示出来的组件，建议使用viewStub包裹起来，同样的道理，include 某布局如果其根布局和引入他的父布局一致，建议使用merge包裹起来，如果你担心preview效果问题，这里完全没有必要，因为你可以
+- tools:showIn=""属性，这样就可以正常展示preview了。
+*** 8、加载优化
+- 这里并没有过多的技术点在里面，无非就是将耗时的操作封装到异步中去了，但是，有一点不得不提的是，要注意多进程的问题，如果你的应用是多进程，你应该认识到你的application的oncreate方法会被执行多次，你一定不希望资源加载多次吧，于是你只在主进程加载，如是有些坑就出现了，有可能其他进程需要那某份资源，然后他这个进程缺没有加载相应的资源，然后就嗝屁了。
+- 如果你的应用是多进程，你应该认识到你的application的oncreate方法会被执行多次。多进程应用，概念、应用设计等还需要好好熟悉一下
+*** 9、刷新优化。
+- 这点在我之前的文章中有提到过，这里举两个例子吧。
+  - a、对于列表的中的item的操作，比如对item点赞，此时不应该让整个列表刷新，而是应该只刷新这个item，相比对于熟练使用recyclerView的你，应该明白如何操作了,不懂请看这里，你将会明白什么叫做 _recyclerView的局部刷新_
+  - b、对于较为复杂的页面，个人建议不要写在一个activity中，建议使用几个fragment进行组装，这样一来，module的变更可以只刷新某一个具体的fragment，而不用整个页面都走刷新逻辑。但是问题来了，fragment之间如何共享数据呢？好，看我怎么操作。
+    
+[[./pic/fragData.png]]
+
+- Activity将数据这部分抽象成一个LiveData，交个LiveDataManger数据进行管理，然后各个Fragment通过Activity的这个context从LiveDataManger中拿到LiveData,进行操作，通知activity数据变更等等。哈哈，你没有看错，这个确实和Google的那个LiveData有点像，当然，如果你想使用Google的那个，也自然没问题，只不过，这个是简化版的。项目的引入
+#+BEGIN_SRC groovy
+'com.tencent.tip:simple_live_data:1.0.1-SNAPSHOT'
+#+END_SRC
+*** 10、动画优化
+- 这里主要是想说使用硬件加速来做优化，不过要注意，动画做完之后，关闭硬件加速，因为开启硬件加速本身就是一种消耗。下面有一幅图，第二幅对比第一幅是说开启硬件加速和没开启的时候做动画的效果对比，可以看到开启后的渲染速度明显快不少，开启硬件加速就一定万事大吉么？第三幅图实际上就说明，如果你的这个view不断的失效的话，也会出现性能问题，第三图中可以看到蓝色的部曲线图有了一定的起色，这说明，displaylist不断的失效并重现创建，如果你想了解的更加详细，可以查看这里
+#+BEGIN_SRC java
+// Set the layer type to hardware
+myView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+// Setup the animation
+ObjectAnimator animator = ObjectAnimator.ofFloat(myView,View.TRANSLATION_X, 150);
+// Add a listener that does cleanup
+animator.addListener(new AnimatorListenerAdapter() {
+        @Override
+        public void onAnimationEnd(Animator animation) {
+            myView.setLayerType(View.LAYER_TYPE_NONE, null);
+        }
+    });
+#+END_SRC
+*** 11、耗电优化
+- 这里仅仅只是建议；
+  - a、在定位精度要求不高的情况下，使用wifi或移动网络进行定位，没有必要开启GPS定位。
+  - b、先验证网络的可用性，在发送网络请求，比如，当用户处于2G状态下，而此时的操作是查看一张大图，下载下来可能都200多K甚至更大，我们没必要去发送这个请求，让用户一直等待那个菊花吧。   
+** 关于一些代码的建议
+   
+   [[./pic/codeUlti.png]]
+   
+- pb->model这里的优化就不在赘述，前面有讲如何优化。
+- 然后建议使用SparseArray代替HashMap,这里是Google建议的，因为SparseArray比HashMap更省内存，在某些条件下性能更好，主要是因为它避免了对key的自动装箱比如（int转为Integer类型），它内部则是通过两个数组来进行数据存储的，一个存储key，另外一个存储value，为了优化性能，它内部对数据还采取了压缩的方式来表示稀疏数组的数据，从而节约内存空间。
+- 不到不得已，不要使用wrap_content,,推荐使用match_parent,或者固定尺寸，配合gravity="center"。
+- 因为 在测量过程中，match_parent和固定宽高度对应EXACTLY ,而wrap_content对应AT_MOST,这两者对比AT_MOST耗时较多。
+
 * app优化 （项目中处理的一些难点）
 - 主要分为 启动优化，布局优化 ，打包优化 等
 ** 启动优化
@@ -140,7 +258,6 @@ android:largeHeap="true"
   - recyclerView 缓存 ( 可扩展 说明 rv的缓存原理 )
   - 比较极端的 将 measure 和 layout 放在子线程，在主线程进行draw。或者 子线程中 加载view 进行IO读取xml,通过Handler 回调主线程 加载view(比如android 原生类 AsyncLayoutInflate )
   - 将xml直接通过 第三方工具（原理 APT 注解 翻译xml）直接将xml 转为 java代码
-
 
 * 数据交互
 ** Android中数据常见存储方式
@@ -186,7 +303,6 @@ android:largeHeap="true"
 - 信号量机制(Semaphore):包括无名线程信号量和命名线程信号量
 - 信号机制(Signal):类似进程间的信号处理
 - 线程间的通信目的主要是用于线程同步，所以线程没有像进程通信中的用于 数据交换的通信机制。
-
 * 常见的网络框架
 - HttpURLConnection:在Android 2.2版本之前，HttpClient拥有较少的bug，因此使用它是***的选择。而在Android 2.3版本及以后，HttpURLConnection则是***的选择。它的API简单，体积较小，因而非常适用于Android项目。压缩和缓存机制可以有效地减少网络访问的流量，在提升速度和省电方面也起到了较大的作用。对于新的应用程序应该更加偏向于使用HttpURLConnection，因为在以后的工作当中我们也会将更多的时间放在优化HttpURLConnection上面。特点：比较轻便，灵活，易于扩展，在3.0后以及4.0中都进行了改善，如对HTTPS的支持，在4.0中，还增加了对缓存的支持。
 - HttpClient：高效稳定，但是维护成本高昂，故android 开发团队不愿意在维护该库而是转投更为轻便的
@@ -194,7 +310,6 @@ android:largeHeap="true"
 - volley：早期使用HttpClient，后来使用HttpURLConnection，是谷歌2013年推出的网络请求框架，非常适合去进行数据量不大，但通信频繁的网络操作，而对于大数据量的网络操作，比如说下载文件等，Volley的表现就会非常糟糕。
 - xutils：缓存网络请求数据
 - Retrofit：和Volley框架的请求方式很相似，底层网络请求采用okhttp（效率高，android4.4底层采用okhttp），采用注解方式来指定请求方式和url地址，减少了代码量。
-
 * 常用的图片加载框架以及特点、源码
 - Picasso：PicassoSquare的网络库一起能发挥***作用，因为Picasso可以选择将网络请求的缓存部分交给了okhttp实现。
 - Glide：模仿了Picasso的API，而且在他的基础上加了很多的扩展(比如gif等支持)，支持图片流，因此在做爱拍之类的视频应用用得比较多一些。
@@ -203,7 +318,6 @@ android:largeHeap="true"
   - Heap-堆内存：Android中每个App的 Java堆内存大小都是被严格的限制的。每个对象都是使用Java的new在堆内存实例化，这是内存中相对安全的一块区域。内存有垃圾回收机制，所以当 App不在使用内存的时候，系统就会自动把这块内存回收。不幸的是，内存进行垃圾回收的过程正是问题所在。当内存进行垃圾回收时，内存不仅仅进行了垃圾回收，还把 Android 应用完全终止了。这也是用户在使用 App 时最常见的卡顿或短暂假死的原因之一。
   - Ashmem：Android 在操作 Ashmem 堆时，会把该堆中存有数据的内存区域从 Ashmem 堆中抽取出来，而不是把它释放掉，这是一种弱内存释放模式；被抽取出来的这部分内存只有当系统真正需要更多的内存时（系统内存不够用）才会被释放。当 Android 把被抽取出来的这部分内存放回 Ashmem 堆，只要被抽取的内存空间没有被释放，之前的数据就会恢复到相应的位置。
 - 不管发生什么，垃圾回收器都不会自动回收这些 Bitmap。当 Android 绘制系统在渲染这些图片，Android 的系统库就会把这些 Bitmap 从 Ashmem 堆中抽取出来，而当渲染结束后，这些 Bitmap 又会被放回到原来的位置。如果一个被抽取的图片需要再绘制一次，系统仅仅需要把它再解码一次，这个操作非常迅速。
-
 * View相关
 ** View 工作流程
 - 通过 SetContentView()，调用 到PhoneWindow ，后实例DecorView ，通过 LoadXmlResourceParser() 进行IO操作 解析xml文件 通过反射 创建出View，并将View绘制在 DecorView上，这里的绘制则交给了ViewRootImpl 来完成，通过performTraversals() 触发绘制流程，performMeasure 方法获取View的尺寸，performLayout 方法获取View的位置 ，然后通过 performDraw 方法遍历View 进行绘制。
@@ -214,12 +328,10 @@ android:largeHeap="true"
   - onTouchEvent：用于处理事件，返回结果表示是否处理了当前事件，未处理则传递给父容器处理。（事件顺序是：OnTouchListener -> OnTouchEvent -> OnClick）
 ** 自定义View!!
 准备自定义View方面的面试最简单的方法：
-
 就是自己动手实现几个View（由简单到复杂）；
 分析一些热门App中的自定义View的效果是怎么实现的；
 阿里面试官： 自定义View跟绘制流程相关知识点？（标准参考解答，值得收藏）
 - https://www.cnblogs.com/Android-Alvin/p/12297933.html
-
 
 * Retrofit库的核心实现原理是什么?如果让你实现这个库的某些核心功能，你会考虑怎么去实现?
 - Retrofit主要是在create方法中采用动态代理模式(通过访问代理对象的方式来间接访问目标对象)实 现接口方法，这个过程构建了一个ServiceMethod对象，根据方法注解获取请求方式，参数类型和参数 注解拼接请求的链接，当一切都准备好之后会把数据添加到Retrofit的RequestBuilder中。然后当我们 主动发起网络请求的时候会调用okhttp发起网络请求，okhttp的配置包括请求方式，URL等在Retrofit 的RequestBuilder的build()方法中实现，并发起真正的网络请求。
@@ -236,7 +348,6 @@ ParameterHanlder进行解析。
 - 4、解析数据
 - 5、切换线程: 使用了适配器模式通过检测不同的Platform使用不同的回调执行器，然后使用回调执行器切换线程，这里同样是使用了装饰模式。
 - 6、处理结果
-
 * ARouter路由原理:
 - ARouter维护了一个路由表Warehouse，其中保存着全部的模块跳转关系，ARouter路由跳转实际上还 是调用了startActivity的跳转，使用了原生的Framework机制，只是通过apt注解的形式制造出跳转规 则，并人为地拦截跳转和设置跳转条件。
  
@@ -256,7 +367,6 @@ public void watch(Object watchedReference, String referenceName) {
    retainedKeys.add(key);
    final KeyedWeakReference reference =
        new KeyedWeakReference(watchedReference, key, referenceName, queue);
-
    ensureGoneAsync(watchStartNanoTime, reference);
 }
 #+END_SRC
@@ -273,7 +383,6 @@ void waitForIdle(final Retryable retryable, final int failedAttempts) {
   }
 #+END_SRC
 - IdleHandler，就是当主线程空闲的时候，如果设置了这个东西，就会执行它的queueIdle()方法，所以这个方法就是在onDestory以后，一旦主线程空闲了，就会执行一个延时五秒的子线程任务，任务：检测到未被回收则主动 gc ，然后继续监控，如果还是没有回收掉，就证明是内存泄漏了。 通过抓取 dump文件，在使用 第三方 HAHA 库 分析文件，获取到到达泄露点最近的线路，通过 启动另一个进程的 DisplayLeakService 发送通知 进行消息的展示。
-
 ** OkHttp
 - 同步和异步 网络请求使用方法
 #+BEGIN_SRC java
@@ -285,7 +394,6 @@ void waitForIdle(final Retryable retryable, final int failedAttempts) {
             Response response = call.execute();
         } catch (IOException e) {
         }
-
         
         //异步get请求 
         OkHttpClient okHttpClient=new OkHttpClient();
@@ -299,7 +407,6 @@ void waitForIdle(final Retryable retryable, final int failedAttempts) {
             public void onResponse(Call call, Response response) throws IOException {
             }
         });
-
         // 异步post 请求
         OkHttpClient okHttpClient1 = new OkHttpClient();
         RequestBody requestBody = new FormBody.Builder()
@@ -319,15 +426,12 @@ void waitForIdle(final Retryable retryable, final int failedAttempts) {
 Dispatcher.executed() 中 通过添加realcall到runningSyncCalls队列中
 通过 getResponseWithInterceptorChain() 对request层层拦截，生成Response
 通过Dispatcher.finished()，把call实例从队列中移除，返回最终的response
-
 异步请求流程：
 生成一个AsyncCall(responseCallback)实例(实现了Runnable)
 AsyncCall通过调用Dispatcher.enqueue()，并判断maxRequests （最大请求数）maxRequestsPerHost(最大host请求数)是否满足条件，如果满足就把AsyncCall添加到runningAsyncCalls中，并放入线程池中执行；如果条件不满足，就添加到等待就绪的异步队列，当那些满足的条件的执行时 ，在Dispatcher.finifshed(this)中的promoteCalls();方法中 对等待就绪的异步队列进行遍历，生成对应的AsyncCall实例，并添加到runningAsyncCalls中，最后放入到线程池中执行，一直到所有请求都结束。
-
 *** 责任链模式 和 拦截器
 责任链
 源码跟进 execute() 进入到 getResponseWithInterceptorChain() 方法
-
 Response getResponseWithInterceptorChain() throws IOException {
     //责任链 模式
     List<Interceptor> interceptors = new ArrayList<>();
@@ -346,7 +450,6 @@ Response getResponseWithInterceptorChain() throws IOException {
     return chain.proceed(originalRequest);
   }
 chain.proceed() 方法核心代码。每个拦截器 intercept()方法中的chain，都在上一个 chain实例的 chain.proceed()中被初始化，并传递了拦截器List与 index，调用interceptor.intercept(next)，直接最后一个 chain实例执行即停止。
-
 //递归循环下一个 拦截器
     RealInterceptorChain next = new RealInterceptorChain(interceptors, streamAllocation, httpCodec,
         connection, index + 1, request, call, eventListener, connectTimeout, readTimeout,
@@ -369,17 +472,14 @@ chain.proceed() 方法核心代码。每个拦截器 intercept()方法中的chai
     }
 }
 拦截器
-
 RetryAndFollowUpInterceptor ：重连并跟踪 拦截器。
 BridgeInterceptor : 将用户请求构建为网络请求（hander cooker content-type 等） 并发起请求 。
 CacheInterceptor ： 缓存拦截器 负责从缓存中返回响应和把网络请求响应写入缓存。
 ConnectInterceptor ： 与服务端 建立连接，并且获得通向服务端的输入和输出流对象。
 OkHttp 流程
-
 采用责任链方式的拦截器,实现分成处理网络请求,可更好的扩展自定义拦截器（采用GZIP压缩，支持http缓存）
 采用线程池(thread pool)和连接池(Socket pool)解决多并发问题,同时连接池支持多路复用(http2才支持,可以让一个Socket同时发送多个网络请求,内部自动维持顺序.相比http只能一个一个发送,更能减少创建开销))
 底层采用socket和服务器进行连接.采用okio实现高效的io流读写
-
 * ArrayMap和HashMap的区别
 HashMap和ArrayMap各自的优势
 1.查找效率:
@@ -399,22 +499,17 @@ ArrayMap则是直接使用System.arraycopy。
 5.总结:
 综上所述,数据量比较小,并且需要频繁的使用Map存储数据的时候,推荐使用ArrayMap。
 而数据量比较大的时候,则推荐使用HashMap。
-
 ** ButterKnife
 参考文章
-
 butterKnife 使用的是 APT 技术 也就是编译时注解，不同于运行时注解（在运行过程中通过反射动态地获取相关类，方法，参数等信息，效率低），编译时注解 则是在代码编译过程中对注解进行处理（annotationProcessor技术），通过注解获取相关类，方法，参数等信息，然后在项目中生成代码，运行时调用，其实和直接手写代码一样，没有性能问题，只有编辑时效率问题。
 ButterKnife在Bind方法中 获取到DecorView，然后通过Activity和DecorView对象获取xx_ViewBinding类的构造对象，然后通过构造方法反射实例化了这个类 Constructor。
 在编写完demo之后，需要先build一下项目，之后可以在build/generated/source/apt/debug/包名/下面找到 对应的xx_ViewBinding类，查看bk 帮我们做的事情，
-
 xx_ViewBinding.java
 @UiThread
   public ViewActivity_ViewBinding(ViewActivity target, View source) {
     this.target = target;
-
     target.view = Utils.findRequiredView(source, R.id.view, "field 'view'");
   }
-
 Utils.java
 public static View findRequiredView(View source, @IdRes int id, String who) {
     View view = source.findViewById(id);
@@ -424,61 +519,40 @@ public static View findRequiredView(View source, @IdRes int id, String who) {
     String name = getResourceEntryName(source, id);
     throw new IllegalStateException("Required view ...."}
 通过上述上述代码 可以看到 注解也是帮我们完成了 findviewbyid 的工作。
-
 butterknife 实现流程
-
 扫描Java代码中所有的ButterKnife注解
 发现注解， ButterKnifeProcessor会帮你生成一个Java类，名字<类名>$$ViewBinding.java，这个新生成的类实现了Unbinder接口，类中的各个view 声明和添加事件都添加到Map中，遍历每个注解对应通过JavaPoet生成的代码。
-
 ** Rxjava 2
 切换到子线程用的 线程池 ，切换到主线程则用的Handler。
-
 底层的切换原理还是基于Handler来的。
-
 思路1：
-
 在子线程发送消息，却能够在主线程接收消息，主线程和子线程是怎么样切换的？
-
 子线程用handler发送消息，发送的消息被送到与主线程相关联的MessageQueue，也是主线程相关联的Looper在循环消息,handler所关联的是主线程的Looper和MessageQueue,所以最后消息的处理逻辑也是在主线程。只有发送消息是在子线程，其它都是在主线程，Handler与哪个线程的Looper相关联，消息处理逻辑就在与之相关的线程中执行，相应的消息的走向也就在相关联的MessageQueue中。所以子线程切换到主线程是很自然的过程，并没有想象中的复杂。
-
 https://zhuanlan.zhihu.com/p/...
-
 思路2：
-
 Handler利用线程封闭的ThreadLocal维持一个消息队列，Handler的核心是通过这个消息队列来传递Message，从而实现线程间通信。
-
 思路3：实际线程间切换，就是通过线程间共享变量实现的。
-
 首现 在一个线程中， new Handler() 必须先执行，Looper.prepare() 创先looper，
 主线程没有手动调用Looper.prepare()，是因为 app启动时，在ActivityThread main主入口，执行了 Looper.prepareMainThread.
-
 public static void prepareMainLooper() { ... }
-
 * HashMap原理
 数据结构和算法思考
-
 1.为什么选择数组和链表结构？
 ①数组内存连续块分配，效率体现查询更快。HashMap中用作查找数组桶的位置，利用元素的key的hash值对数组长度取模得到。
-
 ②链表效率体现增加和删除。HashMap中链表是用来解决hash冲突，增删空间消耗平衡。
-
 扩展：为什么不是ArrayList而是使用Node<K,V>[] tab？因为ArrayList的扩容机制是1.5倍扩容，而HashMap扩容是2的次幂。
-
 2.HashMap出现线程问题
 ①多线程扩容，引起的死循环问题（jdk1.8中，死循环问题已经解决）。
 ②多线程put的时候可能导致元素丢失
 ③put非null元素后get出来的却是null
-
 3.使用线程安全Map
 ①HashMap并不是线程安全，要实现线程安全可以用Collections.synchronizedMap(m)获取一个线程安全的HashMap。
 ②CurrentHashMap和HashTable是线程安全的。CurrentHashMap使用分段锁技术，要操作节点先获取段锁，在修改节点。
-
 4.Android提倡使用ArrayMap
 ①ArrayMap数据结构是两个数组，一个存放hash值，另一个存放key和value。
 ②根据key的hash值利用二分查找在hash数组中找出index。
 ③根据index在key-value数组中对应位置查找，如果不相等认为冲突了，会以key为中心，分别上下展开，逐一查找。
 优势，数据量少时（少于1000）相比HashMap更节省内存。劣势，删除和插入时效率要比HashMap要低。
-
 * Android打包流程: 熟悉Android打包编译的流程
 - AAPT（Android Asset Packaging Tool）工具，Android资源打包工具。会打包资源文件（res文件夹下的文件），并生成R.java和resources.arsc文件。
 - AIDL工具会将所有的.aidl文件编译成.java文件。
@@ -486,14 +560,10 @@ public static void prepareMainLooper() { ... }
 - dex脚本将很多.class文件转换打包成一个.dex文件。
 - apkbuilder脚本将资源文件和.dex文件生成未签名的.apk文件。
 - jarsigner对apk进行签名。
-
 * 谈谈 Android 的 GC
 Java 语言建立了垃圾收集机制，用以跟踪正在使用的对象和发现并回收不再 使用(引用)的对象。该机制可以有效防范动态内存分配中可能发生的两个危险: 因内存垃圾过多而引发的内存耗尽，以及不恰当的内存释放所造成的内存非法引用。
-
 垃圾收集算法的核心思想是:对虚拟机可用内存空间，即堆空间中的对象进 行识别，如果对象正在被引用，那么称其为存活对象，反之，如果对象不再被引用，则为垃圾对象，可以回收其占据的空间，用于再分配。
-
 垃圾收集算法的选择 和垃圾收集系统参数的合理调节直接影响着系统性能，因此需要开发人员做比较 深入的了解。
-
 * 怎样保证 App 不被杀死？
 - 强烈建议不要这么做，不仅仅从用户角度考虑，作为 Android 开发者也有责任去维护 Android 的生态环境。当然从可行性讲，谷歌也不会让容易的实现。同 时这样的 app 一般属于流氓应用
 - 通常为了保证自己 app 避免被杀死，我们一般使用以下方法:
@@ -507,14 +577,12 @@ Java 语言建立了垃圾收集机制，用以跟踪正在使用的对象和发
     - 2.在 NDK 环境中将 1 中编写的 C 代码编译打包成可执行文件 (BUILD_EXECUTABLE)。
     - 3.主进程启动时将守护进程放入私有目录下，赋予可执行权限，启动它即可。
   - 7 联系厂商，加入白名单
-
 * 设计模式
 Android常用设计模式及源码使用
 单例模式
 初始化比较复杂，并且程序中只需要一个。避免重复创建消耗内存
 Android中 获取WindowManager服务引用 WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW_SERVICE);
 l另外一种不错实现单例的方式 使用 eunm,
-
 public class Singleton {
     private static volatile Singleton s;
     private Singleton(){};
@@ -541,7 +609,6 @@ public class TestClient {
         this.index = builder.index;
         this.name = builder.name;
     }
-
     public static final class Builder {
         private int index;
         private String name;
@@ -567,15 +634,12 @@ public class TestClient {
     }
 }
 原型模式
-
 工厂模式
 定义一个创建对象的工厂，根据不同传参 创建不同的对象。
 Android 中 BitmapFactory 和 Iterator 根据循环对象不同返回不同的对象
-
 策略模式
 有一系列的算法，将算法封装起来（每个算法可以封装到不同的类中），各个算法之间可以替换，策略模式让算法独立于使用它的客户而独立变化
 Android 中的 时间插值器，可以使用不同的 加速 减速 或者自定义加速器 展示不同的动画效果
-
 责任链模式
 B
 命令模式
@@ -583,24 +647,18 @@ B
 Android 事件机制中，底层逻辑对事件的转发处理。每次的按键事件会被封装成NotifyKeyArgs对象，通过InputDispatcher封装具体的事件操作 / Runable实现中封装我们需要的实现
 观察者模式
 Java的Observable类和Observer接口就是实现了观察者模式。一个Observer对象监视着一个Observable对象的变化，当Observable对象发生变化时，Observer得到通知，就可以进行相应的工作。
-
 中介者模式
 在Binder机制中，即ServiceManager持有各种系统服务的引用 ，当我们需要获取系统的Service时，首先是向ServiceManager查询指定标示符对应的Binder，再由ServiceManager返回Binder的引用。并且客户端和服务端之间的通信是通过Binder驱动来实现，这里的ServiceManager和Binder驱动就是中介者。代理模式
 给某一个对象提供一个代理，并由代理对象控制对原对象的引用 (,静态代理 和 动态代理)
-
 适配器模式
 把一个类的接口变换成客户端所期待的另一个接口，从而使原本因接口不匹配而无法在一起工作的两个类能够在一起工作。
-
 补充说明：
-
 例模式
 //获取WindowManager服务引用
 WindowManager wm = (WindowManager)getSystemService(getApplication().WINDOW_SERVICE);  
 基本所有的获取系统服务都是单例。
-
 Builder 模式
 一般常用于构建需要3个以上的参数。
-
 AlertDialog.Builer builder=new AlertDialog.Builder(context); 
 builder.setIcon(R.drawable.icon) 
  .setTitle("title") 
@@ -632,50 +690,35 @@ public Object getSystemService(String name) {
       return super.getSystemService(name); }
 策略者模式
 根据是否是v包选择不同的构建view方案
-
 责任链模式
 view的点击事件，view的touch事件等
-
 命令模式
 按键事件会被封装成notifyKeyArgs对象，通过inputDispatcheri 封装具体事件操作
-
 观察者模式
 监听器这一类都是
-
 备忘录模式
 activtity onSaveInstanceState等
-
 迭代器模式
 数据库的cursor，常用于查询
-
 代理模式
 Binder代理
-
 适配器模式
 adapter类
-
 装饰者模式
 Rxjava2，或者contextThemeWapper等
-
 * 跨平台
 Flutter 和 React Native 不同主要在于 Flutter UI 是直接通过 skia 渲染的 ，而 React Native 是将 js 中的控件转化为原生控件，通过原生去渲染的。
-
 移动端跨平台开发的深度解析
-
 * 网络
 HTTP请求方式和报文解析
-
 1.HTTPS(Secure) 安全的 HTTP 协议
 https://<主机>:<443>/<路径>
 补充说明（其他版本）
-
 HTTPS就是“安全版”的HTTP, HTTPS = HTTP + SSL。HTTPS相当于在应用层和TCP层之间加入了一个SSL（或TLS），SSL层对从应用层收到的数据进行加密。TLS/SSL中使用了RSA非对称加密，对称加密以及HASH算法。
-
 RSA算法基于一个十分简单的数论事实：将两个大素数相乘十分容易，但那时想要对其乘积进行因式分解却极其困难，因此可以将乘积公开作为加密密钥。
 1.1 加密模型
 「对称加密：加密与解密都使用同一个秘钥」。
 「非对称加密：公钥加密，私钥解密，并且公钥与私钥是拥有一定数学关系的一组秘钥」。
-
 「私钥：自己使用，不对外公开」。
 「公钥：给大家使用，对外公开」。
 1.2 数字证书 签名校验
@@ -688,7 +731,6 @@ RSA算法基于一个十分简单的数论事实：将两个大素数相乘十�
 对象公开秘钥
 1.3 SSL(Secure Sockets Layer)安全套接层
 「SSL 位于传输层与应用层之间，它是一个子层，作用主要有两点」：
-
 1）、「数据安全（保证数据不会被泄漏）与数据完整（保证数据不会被篡改）」。
 2）、「对数据进行加密后传输」。
 1.4 HTTPS 的通信过程
@@ -699,23 +741,18 @@ RSA算法基于一个十分简单的数论事实：将两个大素数相乘十�
 1.5 SSL(Secure Sockets Layer) 安全套接层握手过程
 1）、生成随机数 1、2、3 的过程
 image-20200527230427775
-
 2）、双端根据随机数 1、2、3 与相同的算法生成对称秘钥进行加密通信
 image-20200527230523455
-
 「HTTPS 综合地运用了对称加密与非对称加密，在进行随机数校验的阶段是使用了非对称加密来进行通信的，然后等双方都确定了三个随机数之后，就可以使用相同的算法来生成对称秘钥进行加密通信了。HTTPS 的优势在于双端分别生成了秘钥，没有经过传输，减少了秘钥泄漏的可能性」。
-
 https在项目的运用实践：Android HTTPS 自制证书实现双向认证(OkHttp + Retrofit + Rxjava)
 
 * MVC MVP MVVM
-
 * java 基础
 1.synchronized的修饰对象
 当synchronized用来修饰静态方法或者类时，将会使得这个类的所有对象都是共享一把类锁，导致线程阻塞，所以这种写法一定要规避
 无论synchronized关键字加在方法上还是对象上，如果它作用的对象是非静态的，则它取得的锁是对象；如果synchronized作用的对象是一个静态方法或一个类，则它取得的锁是对类，该类所有的对象同一把锁。
 每个对象只有一个锁（lock）与之相关联，谁拿到这个锁谁就可以运行它所控制的那段代码。
 实现同步是要很大的系统开销作为代价的，甚至可能造成死锁，所以尽量避免无谓的同步控制。
-
 2. try{}catch{}finally中的执行顺序 ?
 - 任何执行try 或者catch中的return语句之前，都会先执行finally语句，如果finally存在的话。
 - 如果finally中有return语句，那么程序就return了，所以finally中的return是一定会被return的，
@@ -746,7 +783,6 @@ public class tmp {
 - 在转去之前，try中先把要返回的结果存放到不同于x的局部变量中去，执行完finally之后，在从中取出返回结果，
 - 因此，即使finally中对变量x进行了改变，但是不会影响返回结果。
 - 它应该使用栈保存返回值。
-
 3. JAVA中的死锁
 - JAVA中的ArrayList是否是线程安全
 - 为什么ArrayList线程不安全？不安全为什么要使用？如何解决线程不安全？
@@ -758,7 +794,6 @@ public class tmp {
   - 在单线程运行的情况下，如果 Size = 0，添加一个元素后，此元素在位置 0，而且 Size=1；
   - 而如果是在多线程情况下，比如有两个线程，线程 A 先将元素存放在位置 0。但是此时 CPU 调度线程A暂停，线程 B 得到运行的机会。线程B也向此 ArrayList 添加元素，因为此时 Size 仍然等于 0 （注意哦，我们假设的是添加一个元素是要两个步骤哦，而线程A仅仅完成了步骤1），所以线程B也将元素存放在位置0。然后线程A和线程B都继续运行，都增加 Size 的值。
 那好，现在我们来看看 ArrayList 的情况，元素实际上只有一个，存放在位置 0，而 Size 却等于 2。这就是“线程不安全”了。
-
 - 不安全为什么要使用？
 - 这个ArrayList比线程安全的Vector效率高。
 - 如何解决线程不安全
@@ -787,7 +822,6 @@ List<Map<String,Object>> data=Collections.synchronizedList(newArrayList<Map<Stri
     - 都允许直接序号索引元素，但是插入数据要设计到数组元素移动 等内存操作，所以索引数据快插入数据慢，
     - Vector由于使用了synchronized方法（线程安全）所以性能上比ArrayList要差，LinkedList使用双向链表实现存储，按序号索引数据需要进行向前或向后遍历，但是插入数据时只需要记录本项的前后项即可，所以插入数度较快！
   - 7.笼统来说：LinkedList：增删改快, ArrayList：查询快（有索引的存在）
-
 4.synchronized和volatile 关键字的区别
 - 1.volatile 本质是在告诉 jvm 当前变量在寄存器(工作内存)中的值是不确定的， 需要从主存中读取;
 ​  - synchronized 则是锁定当前变量，只有当前线程可以访问该 变量，其他线程被阻塞住。
@@ -795,7 +829,6 @@ List<Map<String,Object>> data=Collections.synchronizedList(newArrayList<Map<Stri
 - 3.volatile 仅能实现变量的修改可见性，不能保证原子性;而 synchronized 则可以 保证变量的修改可见性和原子性
 - 4.volatile 不会造成线程的阻塞;synchronized 可能会造成线程的阻塞。
 - 5.volatile 标记的变量不会被编译器优化;synchronized 标记的变量可以被编译器优化
-
 5.Java中的自动装箱和自动拆箱
 - 所以，当 “==”运算符的两个操作数都是 包装器类型的引用，则是比较指向的是否是同一个对象，而如果其中有一个操作数是表达式（即包含算术运算）则比较的是数值（即会触发自动拆箱的过程）。
 - 通过上面的分析我们需要知道两点：
@@ -803,7 +836,6 @@ List<Map<String,Object>> data=Collections.synchronizedList(newArrayList<Map<Stri
   - 2、装箱操作会创建对象，频繁的装箱操作会消耗许多内存，影响性能，所以可以避免装箱的时候应该尽量避免。
 - https://zhidao.baidu.com/ques...
 - 为什么我们在Java中使用自动装箱和拆箱？
-
 6.Java中的乐观锁和悲观锁
 - 悲观锁
   - 总是假设最坏的情况，每次去拿数据的时候都认为别人会修改，所以每次在拿数据的时候都会上锁，这样别人想拿这个数据就会阻塞直到它拿到锁（共享资源每次只给一个线程使用，其它线程阻塞，用完后再把资源转让给其它线程）。传统的关系型数据库里边就用到了很多这种锁机制，比如行锁，表锁等，读锁，写锁等，都是在做操作之前先上锁。Java中synchronized和ReentrantLock等独占锁就是悲观锁思想的实现。
@@ -811,13 +843,11 @@ List<Map<String,Object>> data=Collections.synchronizedList(newArrayList<Map<Stri
   - 总是假设最好的情况，每次去拿数据的时候都认为别人不会修改，所以不会上锁，但是在更新的时候会判断一下在此期间别人有没有去更新这个数据，可以使用版本号机制和CAS算法实现。乐观锁适用于多读的应用类型，这样可以提高吞吐量，像数据库提供的类似于write_condition机制，其实都是提供的乐观锁。在Java中java.util.concurrent.atomic包下面的原子变量类就是使用了乐观锁的一种实现方式CAS实现的。
 - 两种锁的使用场景
   - 从上面对两种锁的介绍，我们知道两种锁各有优缺点，不可认为一种好于另一种，像乐观锁适用于写比较少的情况下（多读场景），即冲突真的很少发生的时候，这样可以省去了锁的开销，加大了系统的整个吞吐量。但如果是多写的情况，一般会经常产生冲突，这就会导致上层应用会不断的进行retry，这样反倒是降低了性能，所以一般多写的场景下用悲观锁就比较合适。
-
 7.抽象类和接口
 如何理解与记忆：
 1.抽象类-->像xxx一样
 接 口-->能xxx这样
 2.接口是设计的结果，抽象类是重构的结果。
-
 8.JAVA内存模型
 jmm内存分配的概念:
 堆heap： 优点：运行时数据区，动态分配内存大小，有gc；,缺点：因为要在运行时动态分配，所以存取速度慢，对象存储在堆上，静态类型的变量跟着类的定义一起存储在堆上。
@@ -828,37 +858,26 @@ cpu高速缓存：由于处理器与内存访问速度差距非常大，所以�
 内存：一个计算机包含一个主存，所有cpu都可以访问主存，主存通常远大于cpu中的缓存，
 运作原理： 通常，当一个cpu需要读取主存时，他会将主存的内容读取到缓存中，将缓存中的内容读取到内部寄存器中，在寄存器中执行操作，当cpu需要将结果回写到主存中时，他会将内部寄存器的值刷新到缓存中，然后会在某个时间点将值刷新回主存。
 原文链接：https://blog.csdn.net/wangnan...
-
 9.GC Roots如何确定？哪些对象可以作为GC Roots？
 原文链接：https://blog.csdn.net/weixin_...
-
 判断对象是否可以被回收之引用计数法:
 Java中，引用和对象是有关联的。如果要操作对象则必须用引用进行。
 因此，很显然一个简单的办法是通过引用计数来判断一个对象是否可以回收。简单说，给对象中添加一个引用计数器，每当有一个地方引用它，计数器值加1，每当有一个引用失效时，计数器值减1。
-
 任何时刻计数器值为零的对象就是不可能再被使用的，那么这个对象就是可回收对象。
-
 那为什么主流的Java虚拟机里面都没有选用这种算法呢？其中最主要的原因是它很难解决对象之间相互循环引用的问题。
-
 判断对象是否可以被回收之枚举根节点可达性分析
 为了解决引用计数法的循环引用问题，Java使用了可达性分析的方法。
 所谓"GC roots，或者说tracing GC的“根集合”就是一组必须活跃的引用。
 基本思路就是通过一系列名为”GCRoots”的对象作为起始点，从这个被称为GC Roots的对象开始向下搜索，如果一个对象到GCRoots没有任何引用链相连时，则说明此对象不可用。也即给定一个集合的引用作为根出发，通过引用关系遍历对象图，能被遍历到的（可到达的）对象就被判定为存活，没有被遍历到的就自然被判定为死亡。
-
 Java中可以作为GC Roots的对象:
 虚拟机栈（栈帧中的本地变量表）中引用的对象
 方法区中类静态属性引用的对象
 方法区中常量引用的对象
 本地方法栈中JNI（即一般说的native方法）中引用的对象
-
 抽象类和接口的区别
-
 [[./pic/interface.png]]
-
 四种引用的区别
-
 [[./pic/reference.png]]
-
 Strong Reference Object
 StringBuilder builder = new StringBuilder();
 This is the default type/class of Reference Object, if not differently specified: builder is a strong Reference Object. This kind of reference makes the referenced object not eligible for GC. That is, whenever an object is referenced by a chain of strong Reference Objects, it cannot be garbage collected.
@@ -870,5 +889,4 @@ Two different levels of weakness can be enlisted: soft and phantom.
 A soft Reference Object is basically a weak Reference Object that remains in memory a bit more: normally, it resists GC cycle until no memory is available and there is risk of OutOfMemoryError (in that case, it can be removed).
 On the other hand, a phantom Reference Object is useful only to know exactly when an object has been effectively removed from memory: normally they are used to fix weird finalize() revival/resurrection behavior, since they actually do not return the object itself but only help in keeping track of their memory presence.
 Weak Reference Objects are ideal to implement cache modules. In fact, a sort of automatic eviction can be implemented by allowing the GC to clean up memory areas whenever objects/values are no longer reachable by strong references chain. An example is the WeakHashMap retaining weak keys.
-
 - https://juejin.cn/post/7007326164268105741 这个有没有时间看再说

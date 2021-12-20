@@ -1,4 +1,4 @@
-% Created 2021-12-18 Sat 22:04
+% Created 2021-12-19 Sun 17:16
 \documentclass[9pt, b5paaper]{book}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -158,7 +158,7 @@ public void onRestoreInstanceState(Bundle savedInstanceState) {
 \item (2)在用户改变屏幕方向时，重建的过程中，此方法会被调用。
 \item 我们可以重写此方法，以便可以恢复一些临时数据。
 \item onRestoreInstanceState的调用顺序是在onStart之后。
-\item 在当前Activity跳转到其他Activity或者按Home键回到主屏，自身退居后台时：onRestoreInstanceState不会调用，但是onSaveInstanceState会调用，这点就是区别
+\item 在当前Activity跳转到其他Activity或者按Home键回到主屏，自身退居后台时：onRestoreInstanceState不会调用，但是onSaveInstanceState会调用，这点就是区别(验证一下)
 \end{itemize}
 \subsection{注意一下两个函数在生命周期中的调用顺序}
 \label{sec-1-3-4}
@@ -294,7 +294,7 @@ String str = intent.getStringExtra("data");
 tv.setText(str);
 \end{minted}
 \end{itemize}
-\subsection{使用Intention的Bundle传递}
+\subsection{使用Intent的Bundle传递}
 \label{sec-1-6-2}
 \begin{itemize}
 \item 第一个Activity中
@@ -391,7 +391,7 @@ startActivity(intent);
 Intent intent = getIntent();
 //反序列化数据对象
 Serializable se = intent.getSerializableExtra("key");
-if(se instanceof DataBean){
+if (se instanceof DataBean){
     //获取到携带数据的DataBean对象db
     DataBean db = (DataBean) se;
     tv.setText(db.getName()+"==="+db.getSex());
@@ -415,7 +415,7 @@ protected static String str;
 tv.setText(str+name);
 \end{minted}
 \end{itemize}
-\subsection{剪切板，稍偏}
+\subsection{剪切板，利用系统剪切板服务，稍偏}
 \label{sec-1-6-7}
 \begin{itemize}
 \item 第一个Activity中
@@ -625,21 +625,233 @@ View v = inflater.inflate(R.layout.hello_world, container, false);
 \begin{itemize}
 \item 通常情况下都是因为PagerAdapter不是FragmentPagerAdapter造成的，FragmentPagerAdapter内部实现了对setUserVisibleHint()方法的调用，所以需要懒加载的结构最好使用FragmentPagerAdapter +Fragment的结构，少用PagerAdapter。
 \end{itemize}
+\section{详细细节}
+\label{sec-2-8}
+\begin{itemize}
+\item 我们这里举个例子来理解Fragment生命周期方法。功能如下：共有两个Fragment：F1和F2，F1在初始化时就加入Activity，点击F1中的按钮调用replace替换为F2。
+\item 当F1在Activity的onCreate()中被添加时，日志如下：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+MainActivity: onCreate() BEGIN
+MainActivity: onCreate() END
+
+MainActivity: onStart() BEGIN
+Fragment1: onAttach() BEGIN 
+Fragment1: onAttach() END
+MainActivity: onAttachFragment() BEGIN
+MainActivity: onAttachFragment() END
+Fragment1: onCreate() BEGIN
+Fragment1: onCreate() END
+Fragment1: onCreateView()
+Fragment1: onViewCreated() BEGIN
+Fragment1: onViewCreated() END
+Fragment1: onActivityCreated() BEGIN
+Fragment1: onActivityCreated() END
+Fragment1: onStart() BEGIN
+Fragment1: onStart() END
+MainActivity: onStart() END
+
+MainActivity: onPostCreate() BEGIN
+MainActivity: onPostCreate() END
+MainActivity: onResume() BEGIN
+MainActivity: onResume() END
+MainActivity: onPostResume() BEGIN
+Fragment1: onResume() BEGIN
+Fragment1: onResume() END
+MainActivity: onPostResume() END
+MainActivity: onAttachedToWindow() BEGIN
+MainActivity: onAttachedToWindow() END
+\end{minted}
+\begin{itemize}
+\item 可以看出：
+\begin{itemize}
+\item Fragment的onAttach()->onCreate()->onCreateView()->onActivityCreated()->onStart()都是在Activity的onStart()中调用的。
+\item Fragment的onResume()在Activity的onResume()之后调用。
+\end{itemize}
+\item 接下去分两种情况，分别是不加addToBackStack()和加addToBackStack()。
+\begin{itemize}
+\item 1、当点击F1的按钮，调用replace()替换为F2，且不加addToBackStack()时，日志如下：
+\end{itemize}
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+Fragment2: onAttach() BEGIN
+Fragment2: onAttach() END
+MainActivity: onAttachFragment() BEGIN
+MainActivity: onAttachFragment() END
+Frag    2: onCreate() BEGIN
+Frag    2: onCreate() END
+Fragment1: onPause() BEGIN
+Fragment1: onPause() END
+Fragment1: onStop() BEGIN
+Fragment1: onStop() END
+Fragment1: onDestroyView() BEGIN
+Fragment1: onDestroyView() END
+Fragment1: onDestroy() BEGIN
+Fragment1: onDestroy() END
+Fragment1: onDetach() BEGIN
+Fragment1: onDetach() END
+Frag    2: onCreateView()
+Frag    2: onViewCreated() BEGIN
+Frag    2: onViewCreated() END
+Frag    2: onActivityCreated() BEGIN
+Frag    2: onActivityCreated() END
+Frag    2: onStart() BEGIN
+Frag    2: onStart() END
+Frag    2: onResume() BEGIN
+Frag    2: onResume() END
+\end{minted}
+\begin{itemize}
+\item 可以看到，F1最后调用了onDestroy()和onDetach()。
+\item 2、当点击F1的按钮，调用replace()替换为F2，且加addToBackStack()时，日志如下：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+Frag    2: onAttach() BEGIN
+Frag    2: onAttach() END
+MainActivity: onAttachFragment() BEGIN
+MainActivity: onAttachFragment() END
+Frag    2: onCreate() BEGIN
+Frag    2: onCreate() END
+Fragment1: onPause() BEGIN
+Fragment1: onPause() END
+Fragment1: onStop() BEGIN
+Fragment1: onStop() END
+Fragment1: onDestroyView() BEGIN
+Fragment1: onDestroyView() END
+Frag    2: onCreateView()
+Frag    2: onViewCreated() BEGIN
+Frag    2: onViewCreated() END
+Frag    2: onActivityCreated() BEGIN
+Frag    2: onActivityCreated() END
+Frag    2: onStart() BEGIN
+Frag    2: onStart() END
+Frag    2: onResume() BEGIN
+Frag    2: onResume() END
+\end{minted}
+\begin{itemize}
+\item 可以看到，F1被替换时，最后只调到了onDestroyView()，并没有调用onDestroy()和onDetach()。当用户点返回按钮回退事务时，F1会调onCreateView()->onStart()->onResume()，因此在Fragment事务中加不加addToBackStack()会影响Fragment的生命周期。
+\item FragmentTransaction有一些基本方法，下面给出调用这些方法时，Fragment生命周期的变化：
+\begin{itemize}
+\item add(): onAttach()->…->onResume()。
+\item remove(): onPause()->…->onDetach()。
+\item replace(): 相当于旧Fragment调用remove()，新Fragment调用add()。
+\item show(): 不调用任何生命周期方法，调用该方法的前提是要显示的Fragment已经被添加到容器，只是纯粹把Fragment UI的setVisibility为true。
+\item hide(): 不调用任何生命周期方法，调用该方法的前提是要显示的Fragment已经被添加到容器，只是纯粹把Fragment UI的setVisibility为false。
+\item detach(): onPause()->onStop()->onDestroyView()。UI从布局中移除，但是仍然被FragmentManager管理。
+\item attach(): onCreateView()->onStart()->onResume()。
+\end{itemize}
+\end{itemize}
+
+\section{Fragment基础知识}
+\label{sec-2-9}
+\begin{itemize}
+\item 核心的类有：
+\begin{itemize}
+\item Fragment：Fragment的基类，任何创建的Fragment都需要继承该类。
+\item FragmentManager：管理和维护Fragment。他是抽象类，具体的实现类是FragmentManagerImpl。
+\item FragmentTransaction：对Fragment的添加、删除等操作都需要通过事务方式进行。他是抽象类，具体的实现类是BackStackRecord。
+\end{itemize}
+\item Nested Fragment（Fragment内部嵌套Fragment的能力）是Android 4.2提出的，support-fragment库可以兼容到1.6。通过getChildFragmentManager()能够获得管理子Fragment的FragmentManager，在子Fragment中可以通过getParentFragment()获得父Fragment。
+\item 这里给出Fragment最基本的使用方式。首先，创建继承Fragment的类，名为Fragment1：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public class Fragment1 extends Fragment {
+    private static String ARG_PARAM = "param_key";
+    private Activity mActivity; // 
+    private String mParam;
+    public static Fragment1 newInstance(String str) {
+        Fragment1 frag = new Fragment1();
+        Bundle bundle = new Bundle();
+        bundle.putString(ARG_PARAM, str);
+        fragment.setArguments(bundle);   //设置参数
+        return fragment;
+    }
+    public void onAttach(Context context) {
+        mActivity = (Activity) context;
+        mParam = getArguments().getString(ARG_PARAM);  //获取参数
+    }
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        View root = inflater.inflate(R.layout.fragment_1, container, false);
+        TextView view = root.findViewById(R.id.text);
+        view.setText(mParam);
+        return root;
+    }
+}
+\end{minted}
+\begin{itemize}
+\item Fragment有很多可以复写的方法，其中最常用的就是onCreateView()，该方法返回Fragment的UI布局，需要注意的是inflate()的第三个参数是false，因为在Fragment内部实现中，会把该布局添加到container中，如果设为true，那么就会重复做两次添加，则会抛如下异常：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+Caused by: java.lang.IllegalStateException: The specified child already has a parent. You must call removeView() on the child's parent first.
+\end{minted}
+\begin{itemize}
+\item 如果在创建Fragment时要传入参数，必须要通过setArguments(Bundle bundle)方式添加，而不建议通过为Fragment添加带参数的构造函数，因为通过setArguments()方式添加，在由于内存紧张导致Fragment被系统杀掉并恢复（re-instantiate）时能保留这些数据。官方建议如下：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+It is strongly recommended that subclasses do not have other constructors with parameters, since these constructors will not be called when the fragment is re-instantiated.
+\end{minted}
+\begin{itemize}
+\item 我们可以在Fragment的onAttach()中通过getArguments()获得传进来的参数，并在之后使用这些参数。如果要获取Activity对象，不建议调用getActivity()，而是在onAttach()中将Context对象强转为Activity对象。
+\item 创建完Fragment后，接下来就是把Fragment添加到Activity中。在Activity中添加Fragment的方式有两种：
+\begin{itemize}
+\item 静态添加：在xml中通过<fragment>的方式添加，缺点是一旦添加就不能在运行时删除。
+\item 动态添加：运行时添加，这种方式比较灵活，因此建议使用这种方式。
+\begin{itemize}
+\item 这里只给出动态添加的方式。首先Activity需要有一个容器存放Fragment，一般是FrameLayout，因此在Activity的布局文件中加入FrameLayout：
+\end{itemize}
+\end{itemize}
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
+<FrameLayout
+    android:id="@+id/container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+/>
+\end{minted}
+\begin{itemize}
+\item 然后在onCreate()中，通过以下代码将Fragment添加进Activity中。
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+if (bundle == null) {
+    getSupportFragmentManager().beginTransaction()
+        .add(R.id.container, Fragment1.newInstance("hello world"), "f1")
+        //.addToBackStack("fname")
+        .commit();
+}
+\end{minted}
+\begin{itemize}
+\item Fragment有一个常见的问题，即Fragment重叠问题，这是由于Fragment被系统杀掉，并重新初始化时再次将fragment加入activity，因此通过在外围加if语句能判断此时是否是被系统杀掉并重新初始化的情况。
+\item Fragment有个常见的异常：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+java.lang.IllegalStateException: Can not perform this action after onSaveInstanceState
+    at android.support.v4.app.FragmentManagerImpl.checkStateLoss(FragmentManager.java:1341)
+    at android.support.v4.app.FragmentManagerImpl.enqueueAction(FragmentManager.java:1352)
+    at android.support.v4.app.BackStackRecord.commitInternal(BackStackRecord.java:595)
+    at android.support.v4.app.BackStackRecord.commit(BackStackRecord.java:574)
+\end{minted}
+\begin{itemize}
+\item 该异常出现的原因是：commit()在onSaveInstanceState()后调用。首先，onSaveInstanceState()在onPause()之后，onStop()之前调用。onRestoreInstanceState()在onStart()之后，onResume()之前。
+\item 因此避免出现该异常的方案有：
+\begin{itemize}
+\item 不要把Fragment事务放在异步线程的回调中，比如不要把Fragment事务放在AsyncTask的onPostExecute()，因此onPostExecute()可能会在onSaveInstanceState()之后执行。
+\item 逼不得已时使用commitAllowingStateLoss()。
+\end{itemize}
+\end{itemize}
 
 \section{Fragment注意事项}
-\label{sec-2-8}
+\label{sec-2-10}
 \begin{itemize}
 \item 在使用Fragment时，我发现了一个金矿，那就是setRetainInstance()方法,此方法可以有效地提高系统的运行效率，对流畅性要求较高的应用可以适当采用此方法进行设置。
 \item Fragment有一个非常强大的功能--就是可以在Activity重新创建时可以不完全销毁Fragment，以便Fragment可以恢复。在onCreate()方法中调用setRetainInstance(true/false)方法是最佳位置。当Fragment恢复时的生命周期如上图所示，注意图中的红色箭头。当在onCreate()方法中调用了setRetainInstance(true)后，Fragment恢复时会跳过onCreate()和onDestroy()方法，因此不能在onCreate()中放置一些初始化逻辑.
 \end{itemize}
 
 \section{回退栈}
-\label{sec-2-9}
+\label{sec-2-11}
 \subsection{相关操作下生命周期函数调用顺序}
-\label{sec-2-9-1}
+\label{sec-2-11-1}
 \begin{enumerate}
 \item 首先点击“ADD”按钮，将SecondFragment和ThirdFragment动态添加到相应容器
-\label{sec-2-9-1-1}
+\label{sec-2-11-1-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 Second onAttach()
 Second onCreate()
@@ -655,7 +867,7 @@ Trd onStart()
 Trd onResume()
 \end{minted}
 \item 然后点击“REMOVE”将SecondFragment移除，再点击“REPLACE”按钮将本来加载了ThirdFragment的第二个容器替换为SecondFragment。打开Logcat日志可以看到：
-\label{sec-2-9-1-2}
+\label{sec-2-11-1-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 Second onAttach()
 Second onCreate()
@@ -671,7 +883,7 @@ Second onResume()
 \end{minted}
 \end{enumerate}
 \subsection{基础原理: 这里是否会涉及两套fragment的不同？（应该不会，可以证实一下）}
-\label{sec-2-9-2}
+\label{sec-2-11-2}
 \begin{itemize}
 \item 如果没有加入回退栈，则用户点击返回按钮会直接将Activity出栈；如果加入了回退栈，则用户点击返回按钮会回滚Fragment事务。
 \item 默认情况下，Fragment事务是不会加入回退栈的，如果想将Fragment加入回退栈并实现事物回滚，首先需要在commit()方法之前调用事务的以下方法将其添加到回退栈中：
@@ -772,21 +984,41 @@ A 再到 B
 \end{minted}
 \end{itemize}
 
+
 \chapter{Android Fragment 之间数据传递}
 \label{sec-3}
-\section{获得对方的引用强转}
+\section{获得对方的引用强转: 这种方式不推荐}
 \label{sec-3-1}
 \begin{itemize}
 \item 通过findFragmentByTag或者getActivity获得对方的引用（强转）之后，再相互调用对方的public方法，但是这样做一是引入了“强转”的丑陋代码，另外两个类之间各自持有对方的强引用，耦合较大，容易造成内存泄漏。
 \end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+// 宿主activity中的getTitles()方法
+public String getTitles(){
+    return "hello";
+}
+// Fragment中的onAttach方法
+@Override
+public void onAttach(Activity activity) {
+    super.onAttach(activity);
+    titles = ((MainActivity) activity).getTitles(); // 通过强转成宿主activity，就可以获取到传递过来的数据
+}
+\end{minted}
 \section{通过Bundle的方法进行传值，例如以下代码：}
 \label{sec-3-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
-// Activity中对fragment设置一些参数 
-fragment.setArguments(bundle); 
-// fragment中通过getArguments获得Activity中的方法 
+// 从Activity中对fragment设置一些参数 
+MyFragment myFragment = new MyFragment();
+Bundle bundle = new Bundle();
+bundle.putString("DATA",values); // 这里的 values 就是我们要传的值
+myFragment.setArguments(bundle);
+
+// 在fragment中，通过getArguments获得Activity中传来的bundle
 Bundle arguments = getArguments();
 \end{minted}
+\begin{itemize}
+\item 然后在Fragment中的onCreatView()方法中，通过getArgments()方法，获取到bundle对象，然后通过getString的key值拿到我们传递过来的值。
+\end{itemize}
 \section{利用eventbus进行通信，这种方法实时性高，而且Activity与Fragment之间可以完全解耦。}
 \label{sec-3-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
@@ -799,16 +1031,107 @@ public void test(String text) {
     tv_test.setText(text); 
 }
 \end{minted}
-
+\section{其它自定义（？这里讲得不透彻，寻找更透彻的解释）}
+\label{sec-3-4}
 \begin{itemize}
+\item 如果我们不需要传递数值，那就直接可以在宿主activity中，跟平常一样创建fragment，但是如果我们需要传递数据的话，可以使用newInstance（数据）方法来传递，这个方法是自己定义的，但是是定义在Fragment中的一个静态方法。
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+static MyFragment newInstance(String s){
+    MyFragment myFragment = new MyFragment();
+    Bundle bundle = new Bundle();
+    bundle.putString("DATA",s);
+    myFragment.setArguments(bundle);
+    return myFragment;
+}
+@Nullable @Override // 同样，在onCreatView中直接获取这个值
+public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    View view = inflater.inflate(R.layout.layout_fragment,container,false);
+    Bundle bundle = getArguments();
+    String data = bundle.getString("DATA");
+    tv = (TextView) view.findViewById(R.id.id_fm_tv);
+    if (data != null)
+        tv.setText(data);
+    return view;
+}
+\end{minted}
+\begin{itemize}
+\item 在宿主activity中，创建Fragment
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
+fragmentTransaction.setCustomAnimations(android.R.anim.fade_in,android.R.anim.fade_out);
+fragment1 = MyFragment.newInstance("这是第一个fragment");//这里只需要直接调用这个方法，就创建了一个fragment
+fragment2 = MyFragment.newInstance("这是第二个fragment");
+fragment3 = MyFragment.newInstance("这是第三个fragment");
+\end{minted}
+\subsection{Fragment向Activity传递数据}
+\label{sec-3-4-1}
+\begin{itemize}
+\item 首先，在Fragment中定义接口，并让Activity实现该接口（具体实现省略）：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public interface OnFragmentInteractionListener {
+    void onItemClick(String str);  //将str从Fragment传递给Activity
+}
+\end{minted}
+\begin{itemize}
+\item 在Fragment的onAttach()中，将参数Context强转为OnFragmentInteractionListener对象：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public void onAttach(Context context) {
+    super.onAttach(context);
+    if (context instanceof OnFragmentInteractionListener) {
+        mListener = (OnFragmentInteractionListener) context;
+    } else {
+        throw new RuntimeException(context.toString()
+                + " must implement OnFragmentInteractionListener");
+    }
+}
+\end{minted}
+\begin{itemize}
+\item 并在Fragment合适的地方调用mListener.onItemClick("hello")将”hello”从Fragment传递给Activity。
+\end{itemize}
+\begin{enumerate}
+\item FABridge
+\label{sec-3-4-1-1}
+\begin{itemize}
+\item \url{https://github.com/hongyangAndroid/FABridge}
+\item 由于通过接口的方式从Fragment向Activity进行数据传递比较麻烦，需要在Fragment中定义interface，并让Activity实现该interface，FABridge通过注解的形式免去了这些定义。
+\item 在build.gradle中添加依赖：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{groovy}
+annotationProcessor 'com.zhy.fabridge:fabridge-compiler:1.0.0'
+compile 'com.zhy.fabridge:fabridge-api:1.0.0'
+\end{minted}
+\begin{itemize}
+\item 首先定义方法ID，这里为FAB$_{\text{ITEM}}$$_{\text{CLICK，接着在Activity中定义接口：}}$
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+@FCallbackId(id = FAB_ITEM_CLICK)
+public void onItemClick(String str) {  //方法名任意
+    Toast.makeText(this, str, Toast.LENGTH_SHORT).show();
+}
+\end{minted}
+\begin{itemize}
+\item 最后，在Fragment中，通过以下形式调用”ID=FAB$_{\text{ITEM}}$$_{\text{CLICK”的方法（该方法可能在Activity中，也可能在任何类中）：}}$
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+Fabridge.call(mActivity,FAB_ITEM_CLICK,"data");  //调用ID对应的方法，"data"为参数值
+\end{minted}
+\begin{itemize}
+\item 后半部分，关于FragmentViewPager \url{https://github.com/tyzlmjj/PagerBottomTabStrip.git}
+\item \url{https://cloud.tencent.com/developer/article/1005540}
+
 \item \url{http://www.cnblogs.com/purediy/p/3276545.html}
 \item Fragment与Activity生命周期对比图：
 \end{itemize}
+\end{enumerate}
 
 \section{生命周期分析}
-\label{sec-3-4}
+\label{sec-3-5}
 \subsection{当一个fragment被创建的时候(它会经历以下状态)}
-\label{sec-3-4-1}
+\label{sec-3-5-1}
 \begin{itemize}
 \item onAttach()
 \item onCreate()
@@ -816,19 +1139,19 @@ public void test(String text) {
 \item onActivityCreated()
 \end{itemize}
 \subsection{当这个fragment对用户可见的时候}
-\label{sec-3-4-2}
+\label{sec-3-5-2}
 \begin{itemize}
 \item onStart()
 \item onResume()
 \end{itemize}
 \subsection{当这个fragment进入“后台模式”的时候}
-\label{sec-3-4-3}
+\label{sec-3-5-3}
 \begin{itemize}
 \item onPause()
 \item onStop()
 \end{itemize}
 \subsection{当这个fragment被销毁了（或者持有它的activity被销毁了）}
-\label{sec-3-4-4}
+\label{sec-3-5-4}
 \begin{itemize}
 \item onPause()
 \item onStop()
@@ -837,14 +1160,14 @@ public void test(String text) {
 \item onDetach()
 \end{itemize}
 \subsection{就像activity一样，在以下的状态中，可以使用Bundle对象保存一个fragment的对象。}
-\label{sec-3-4-5}
+\label{sec-3-5-5}
 \begin{itemize}
 \item onCreate()
 \item onCreateView()
 \item onActivityCreated()
 \end{itemize}
 \subsection{fragments的大部分状态都和activity很相似，但fragment有一些新的状态。}
-\label{sec-3-4-6}
+\label{sec-3-5-6}
 \begin{itemize}
 \item onAttached() -- 当fragment被加入到activity时调用（在这个方法中可以获得所在的activity）。
 \item onCreateView() -- 当activity要得到fragment的layout时，调用此方法，fragment在其中创建自己的layout(界面)。
@@ -857,7 +1180,80 @@ public void test(String text) {
 \item 因此，只有当activity在resumed状态时，fragment的生命周期才能独立的运转，其它时候是依赖于activity的生命周期变化的。
 \end{itemize}
 \end{itemize}
+\section{Dialog}
+\label{sec-3-6}
+\begin{itemize}
+\item 主要应用于一些临时的对话框，比如向用户询问是否允许开启一些权限AlertDialog，让用户选择一个时间TimePickerDialog，或者自定义界面进行选择DialogFragment。初始化一个简单的Dialog的语法是：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+// 使用Builder class来定义AlertDialog的属性
+val builder = AlertDialog.Builder(this)
+builder.setMessage(R.string.your_dialog_message)
+    .setPositiveButton(
+        R.string.ok,
+        DialogInterface.OnClickListener { dialog, id ->
+            // 定义用户按下OK按钮后的行为
+        })
+    .setNegativeButton(
+        R.string.cancel,
+        DialogInterface.OnClickListener { dialog, id ->
+            // 定义用户按下CANCEL按钮后的行为
+        })
+// 创建一个AlertDIalog实例
+builder.create()
+\end{minted}
+\begin{itemize}
+\item 上面的代码会创建出一个带有两个按钮的对话框，并且根据用户的选择来运行相对应的逻辑。
+\end{itemize}
+\section{DialogFragment}
+\label{sec-3-7}
+\begin{itemize}
+\item DialogFragment是Android 3.0提出的，代替了Dialog，用于实现对话框。他的优点是：即使旋转屏幕，也能保留对话框状态。
+\item 如果要自定义对话框样式，只需要继承DialogFragment，并重写onCreateView()，该方法返回对话框UI。这里我们举个例子，实现进度条样式的圆角对话框。
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public class ProgressDialogFragment extends DialogFragment {
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        getDialog().requestWindowFeature(Window.FEATURE_NO_TITLE); //消除Title区域
+        getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));  //将背景变为透明
+        setCancelable(false);  //点击外部不可取消
+        View root = inflater.inflate(R.layout.fragment_progress_dialog, container);
+        return root;
+    }
 
+    public static ProgressDialogFragment newInstance() {
+        return new ProgressDialogFragment();
+    }
+}
+\end{minted}
+\begin{itemize}
+\item 进度条动画我们使用Lottie实现，Lottie动画从这里找到。使用非常方便，只需要下载JSON动画文件，然后在XML中写入：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
+<com.airbnb.lottie.LottieAnimationView
+    android:layout_width="wrap_content"    // 大小根据JSON文件确定
+    android:layout_height="wrap_content"
+    app:lottie_fileName="loader_ring.json"  /JSON文件
+    app:lottie_loop="true"         // 循环播放
+    app:lottie_autoPlay="true" />  // 自动播放
+\end{minted}
+然后通过下面代码显示对话框：
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+ProgressDialogFragment fragment = ProgressDialogFragment.newInstance();
+fragment.show(getSupportFragmentManager(), "tag");
+//fragment.dismiss();
+\end{minted}
+\begin{itemize}
+\item 为了实现圆角，除了在onCreateView()中把背景设为透明，还需要对UI加入背景：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#ffffff"/>
+    <corners
+        android:radius="20dp"/>
+</shape>
+\end{minted}
 
 \chapter{启动模式与任务栈}
 \label{sec-4}
@@ -1934,13 +2330,81 @@ Uri uri_user = Uri.parse("content://cn.scu.myprovider/user");
 \end{itemize}
 \end{itemize}
 
-\chapter{activity lifecycle}
+
+\chapter{性能优化}
 \label{sec-7}
+\section{内存优化}
+\label{sec-7-1}
+\subsection{珍惜Service，尽量使得Service在使用的时候才处于运行状态。尽量使用IntentService}
+\label{sec-7-1-1}
+IntentService在内部其实是通过线程以及Handler实现的，当有新的Intent到来的时候，会创建线程并且处理这个Intent，处理完毕以后就自动销毁自身。因此使用IntentService能够节省系统资源。
+\subsection{内存紧张的时候释放资源（例如UI隐藏的时候释放资源等）。复写Activity的回调方法。}
+\label{sec-7-1-2}
+@Override 
+ public void onLowMemory() \{ 
+
+super.onLowMemory(); 
+
+\}  
+
+@Override 
+
+public void onTrimMemory(int level) \{ 
+
+super.onTrimMemory(level);  
+
+
+switch (level) \{ 
+
+case TRIM$_{\text{MEMORY}}$$_{\text{COMPLETE}}$: 
+
+//\ldots{} 
+
+break; 
+
+case 其他: 
+
+\} 
+
+\} 
+\subsection{通过Manifest中对Application配置更大的内存，但是一般不推荐}
+\label{sec-7-1-3}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
+android:largeHeap="true"
+\end{minted}
+\subsection{避免Bitmap的浪费，应该尽量去适配屏幕设备。尽量使用成熟的图片加载框架，Picasso，Fresco，Glide等。}
+\label{sec-7-1-4}
+
+\subsection{使用优化的容器，SparseArray等}
+\label{sec-7-1-5}
+
+\subsection{其他建议：尽量少用枚举变量，尽量少用抽象，尽量少增加类，避免使用依赖注入框架，谨慎使用library，使用代码混淆，时当场合考虑使用多进程等。}
+\label{sec-7-1-6}
+
+\subsection{避免内存泄漏（本来应该被回收的对象没有被回收）}
+\label{sec-7-1-7}
+\begin{itemize}
+\item 一旦APP的内存短时间内快速增长或者GC非常频繁的时候，就应该考虑是否是内存泄漏导致的。
+
+分析方法
+
+\begin{enumerate}
+\item 使用Android Studio提供的Android Monitors中Memory工具查看内存的使用以及没使用的情况。
+
+\item 使用DDMS提供的Heap工具查看内存使用情况，也可以手动触发GC。
+
+\item 使用性能分析的依赖库，例如Square的LeakCanary，这个库会在内存泄漏的前后通过Notification通知你。
+\end{enumerate}
+\end{itemize}
+
+
+\chapter{activity lifecycle}
+\label{sec-8}
 \subsection{Activity横竖屏切换生命周期变化}
-\label{sec-7-0-1}
+\label{sec-8-0-1}
 \begin{enumerate}
 \item 新建一个Activity，并把各个生命周期打印出来
-\label{sec-7-0-1-1}
+\label{sec-8-0-1-1}
 onCreate,
 创建activity时调用。设置在该方法中，还以Bundle中可以提出用于创建该 Activity 所需的信息。
 onStart,
@@ -1959,14 +2423,14 @@ Android在横竖排切换时候，将主动销毁activity和重新创建一个�
 onConfigurationChanged,
 配置指定属性后,屏幕方向发生变化后回调此函数.
 \item 运行Activity，得到如下信息
-\label{sec-7-0-1-2}
+\label{sec-8-0-1-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 onCreate  -->
 onStart  -->
 onResume  -->
 \end{minted}
 \item 按crtl+f12切换成横屏时
-\label{sec-7-0-1-3}
+\label{sec-8-0-1-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 onPause  -->
 onStop  -->
@@ -1977,7 +2441,7 @@ onRestoreInstanceState  -->
 onResume  -->
 \end{minted}
 \item 再按crtl+f12切换成竖屏时，发现又打印了相同的log
-\label{sec-7-0-1-4}
+\label{sec-8-0-1-4}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 onPause  -->
 onStop  -->
@@ -1988,7 +2452,7 @@ onRestoreInstanceState  -->
 onResume  -->
 \end{minted}
 \item 修改AndroidManifest.xml
-\label{sec-7-0-1-5}
+\label{sec-8-0-1-5}
 把该Activity添加
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 android:configChanges="orientation"，
@@ -2004,7 +2468,7 @@ onRestoreInstanceState  -->
 onResume  -->
 \end{minted}
 \item 再执行步骤4(切换竖屏)，发现再打印相同信息
-\label{sec-7-0-1-6}
+\label{sec-8-0-1-6}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 onPause  -->
 onStop  -->
@@ -2017,22 +2481,22 @@ onResume  -->
 \end{enumerate}
 
 \subsection{Why do developers often put app initialization code in the Application class?}
-\label{sec-7-0-2}
+\label{sec-8-0-2}
 \begin{itemize}
 \item The Application class is instantiated before any other class when the process for the application is created.
 \end{itemize}
 
 \chapter{fragmnet}
-\label{sec-8}
+\label{sec-9}
 \subsection{What are Retained Fragments?}
-\label{sec-8-0-1}
+\label{sec-9-0-1}
 \begin{itemize}
 \item By default, Fragments are destroyed and recreated along with their parent Activity’s when a configuration change occurs.
 \item Calling setRetainInstance(true) allows us to bypass this destroy-and-recreate cycle, signaling the system to retain the current instance of the fragment when the activity is recreated.
 \end{itemize}
 
 \subsection{How would you communicate between two Fragments?}
-\label{sec-8-0-2}
+\label{sec-9-0-2}
 
 All Fragment-to-Fragment communication is done either through a shared ViewModel or through the associated Activity. Two Fragments should never communicate directly.
 
@@ -2076,9 +2540,9 @@ public class DetailFragment extends Fragment {
 \end{itemize}
 
 \section{transaction stack backstack}
-\label{sec-8-1}
+\label{sec-9-1}
 \subsection{What is the chief purpose of line five in this code snippet?}
-\label{sec-8-1-1}
+\label{sec-9-1-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState) setContentView(R.layout.activity_post_create)
     if (savedInstanceState != null) return
@@ -2094,15 +2558,15 @@ override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanc
 \end{itemize}
 
 \chapter{View}
-\label{sec-9}
+\label{sec-10}
 \section{What should you use to display a large, scrolling list of elements?}
-\label{sec-9-1}
+\label{sec-10-1}
 \begin{itemize}
 \item Recycler View
 \end{itemize}
 
 \section{Given the fragment below, how would you get access to a TextView with an ID of text$_{\text{home}}$ contained in the layout file of a Fragment class?}
-\label{sec-9-2}
+\label{sec-10-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
     private lateinit var textView: TextView
     override fun onCreateView(...): View? {
@@ -2115,9 +2579,9 @@ override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanc
 
 
 \chapter{Intent}
-\label{sec-10}
+\label{sec-11}
 \section{You have created a NextActivity class that relies on a string containing some data that pass inside the intent Which code snippet allows you to launch your activity?}
-\label{sec-10-1}
+\label{sec-11-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 Intent(this, NextActivity::class.java).apply {
     putExtra(EXTRA_NEXT, "some data")
@@ -2126,14 +2590,14 @@ Intent(this, NextActivity::class.java).apply {
 }
 \end{minted}
 \section{You have created an AboutActivity class that displays details about your app. Which code snippet allows you to launch your activity?}
-\label{sec-10-2}
+\label{sec-11-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 Intent(this, AboutActivity::class.java).also { 
     intent -> startActivity(intent) 
 }
 \end{minted}
 \section{Which definition will prevent other apps from accessing your Activity class via an intent?}
-\label{sec-10-3}
+\label{sec-11-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 <activity android:name=".ExampleActivity" />
 \end{minted}
@@ -2141,7 +2605,7 @@ Intent(this, AboutActivity::class.java).also {
 \item Intent filters are used to make activities accessible to other apps using intents. So we have to choose option which have no intent filter to make sure it is not accessible by intent
 \end{itemize}
 \section{You want to allow users to take pictures in your app. Which is not an advantage of creating an appropriate intent, instead of requesting the camera permission directly?}
-\label{sec-10-4}
+\label{sec-11-4}
 \begin{itemize}
 \item Users can select their favorite photo apps to take pictures.
 \item You do not have to make a permission request in your app to take a picture.
@@ -2150,7 +2614,7 @@ Intent(this, AboutActivity::class.java).also {
 \end{itemize}
 
 \section{onActivityResult()}
-\label{sec-10-5}
+\label{sec-11-5}
 \begin{itemize}
 \item When will an activity's onActivityResult()be called?
 \begin{itemize}
@@ -2158,7 +2622,7 @@ Intent(this, AboutActivity::class.java).also {
 \end{itemize}
 \end{itemize}
 \section{startActivityWithResult(): You want to open the default Dialer app on a device. What is wrong with this code?}
-\label{sec-10-6}
+\label{sec-11-6}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 val dialerIntent = Intent()
 val et = findViewById(R.id.some_edit_text)
@@ -2172,17 +2636,17 @@ startActivity(dialerIntent) // <--
 
 
 \chapter{Data}
-\label{sec-11}
+\label{sec-12}
 \section{storage}
-\label{sec-11-1}
+\label{sec-12-1}
 \subsection{To persist a small collection of key-value data, what should you use?}
-\label{sec-11-1-1}
+\label{sec-12-1-1}
 \begin{itemize}
 \item SharedPereferences
 \end{itemize}
 
 \subsection{What allows you to properly restore a user's state when an activity is restarted?}
-\label{sec-11-1-2}
+\label{sec-12-1-2}
 \begin{itemize}
 \item the onSaveInstance()method
 \item persistent storage
@@ -2190,7 +2654,7 @@ startActivity(dialerIntent) // <--
 \item all of these answers (Refrence) (ANSWER)
 \end{itemize}
 \subsection{To preserve on-device memory, how might you determine that the user's device has limited storage capabilities?}
-\label{sec-11-1-3}
+\label{sec-12-1-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 ActivityManager.isLowRamDevice() ;
 \end{minted}
@@ -2199,7 +2663,7 @@ ActivityManager.isLowRamDevice() ;
 \end{itemize}
 
 \section{How would you retrieve the value of a user's email from SharedPreferences while ensuring that the returned value is not null?}
-\label{sec-11-2}
+\label{sec-12-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
   getDefaultSharedPreferances(this).getString(EMAIL,"")
 \end{minted}
@@ -2208,17 +2672,17 @@ ActivityManager.isLowRamDevice() ;
 \end{itemize}
 
 \chapter{xml resource files}
-\label{sec-12}
+\label{sec-13}
 \section{layout}
-\label{sec-12-1}
+\label{sec-13-1}
 \subsection{Which layout is best for large, complex hierarchies?}
-\label{sec-12-1-1}
+\label{sec-13-1-1}
 \begin{itemize}
 \item ConstraintLayout
 \end{itemize}
 
 \subsection{Which drawable definition allows you to achieve the shape below?}
-\label{sec-12-1-2}
+\label{sec-13-1-2}
 
 \includegraphics[width=.9\linewidth]{./pic/circle.png}
 
@@ -2232,7 +2696,7 @@ android:shape="oval">
 </shape>
 \end{minted}
 \subsection{Which image best corresponds to the following LinearLayout?}
-\label{sec-12-1-3}
+\label{sec-13-1-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
   <LinearLayout
       android:layout_width="match_parent"
@@ -2254,7 +2718,7 @@ android:shape="oval">
 \item gravity: todo
 \end{itemize}
 \subsection{Which code snippet would achieve the layout displayed below?}
-\label{sec-12-1-4}
+\label{sec-13-1-4}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 <androidx.constraintlayout.widget.ConstraintLayout
     ...>
@@ -2278,7 +2742,7 @@ android:shape="oval">
 \end{itemize}
 
 \subsection{实现矩形，右下角白色，左上角黑色的渐变效果}
-\label{sec-12-1-5}
+\label{sec-13-1-5}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
   <shape xmlns:android-"http://schemas.android.com/apk/res/android"
   android:shape-"rectangle">
@@ -2289,7 +2753,7 @@ android:shape="oval">
     </shape>
 \end{minted}
 \subsection{Given the following dimens.xml file, how would you define an ImageView with medium spacing at the bottom?}
-\label{sec-12-1-6}
+\label{sec-13-1-6}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
 <?xml version=1.0 encoding="utf-8"?>
 <resources>
@@ -2306,27 +2770,27 @@ android:shape="oval">
    android:src=@drawable/map_pin />
 \end{minted}
 \subsection{You want to provide a different drawable for devices that are in landscape mode and whose language is set to French. which directory is named correctly?}
-\label{sec-12-1-7}
+\label{sec-13-1-7}
 \begin{itemize}
 \item drawable-fr-land
 \end{itemize}
 
 \subsection{What folder should you use for your app's launcher icons?}
-\label{sec-12-1-8}
+\label{sec-13-1-8}
 \begin{itemize}
 \item /mipmap
 \end{itemize}
 \section{permissions}
-\label{sec-12-2}
+\label{sec-13-2}
 \subsection{写外部存储权限}
-\label{sec-12-2-1}
+\label{sec-13-2-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 <uses-permission
      android:name="android.permission.WRITE_EXTERNAL_STORAGE"
      android:maxSdkVersion="18" />
 \end{minted}
 \subsection{When would you use the ActivityCompat.shouldShowRequestPermissionRationale() function?}
-\label{sec-12-2-2}
+\label{sec-13-2-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 ActivityCompat.shouldShowRequestPermissionRationale();
 \end{minted}
@@ -2335,7 +2799,7 @@ ActivityCompat.shouldShowRequestPermissionRationale();
 \end{itemize}
 
 \subsection{Why might you need to include the following permission to your app?}
-\label{sec-12-2-3}
+\label{sec-13-2-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 android.permission.ACCESS_NETWORK_STATE
 \end{minted}
@@ -2345,35 +2809,35 @@ android.permission.ACCESS_NETWORK_STATE
 
 
 \chapter{annotation}
-\label{sec-13}
+\label{sec-14}
 \section{@VisibleForTesting:}
-\label{sec-13-1}
+\label{sec-14-1}
 \begin{itemize}
 \item to denote that a class, methos, or field has its visibility relaxed to make code testable
 \end{itemize}
 
 
 \chapter{apk}
-\label{sec-14}
+\label{sec-15}
 \section{basic}
-\label{sec-14-1}
+\label{sec-15-1}
 \subsection{When would you use a product flavour in your build setup?}
-\label{sec-14-1-1}
+\label{sec-15-1-1}
 when you want to provide different version of your app with custom configuration and resources
 \subsection{To shrink your code in release builds, what tool does Android Studio use?}
-\label{sec-14-1-2}
+\label{sec-15-1-2}
 \begin{itemize}
 \item R8
 \end{itemize}
 \section{build configuration}
-\label{sec-14-2}
+\label{sec-15-2}
 \subsection{Which statement, in build.gradle file, correctly denotes that the corresponding module is an Android library module?}
-\label{sec-14-2-1}
+\label{sec-15-2-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
  apply plugin: 'com.android.library'
 \end{minted}
 \subsection{You would like to enable analytics tracking only in release builds. How can you create a new field in the generated BuildConfig class to store that value?}
-\label{sec-14-2-2}
+\label{sec-15-2-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 buildTypes {
     debug {
@@ -2385,20 +2849,20 @@ buildTypes {
 }
 \end{minted}
 \subsection{To optimize your APK size, what image codec should you use?}
-\label{sec-14-2-3}
+\label{sec-15-2-3}
 \begin{itemize}
 \item WebP (Reference)
 \end{itemize}
 
 \subsection{Given an APK named app-internal-debug.apk produced from the build process, which statement is likely to be true?}
-\label{sec-14-2-4}
+\label{sec-15-2-4}
 \begin{itemize}
 \item This APK is created from the debug build type and internal product flavor.
 \end{itemize}
 \section{build errors}
-\label{sec-14-3}
+\label{sec-15-3}
 \subsection{When attempting to build your project, what might the following error indicate?}
-\label{sec-14-3-1}
+\label{sec-15-3-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 Conversion to Dalvik format filed: Unable to execute dex: method ID not in [0, 0xffff]: 65536
 \end{minted}
@@ -2407,9 +2871,9 @@ Conversion to Dalvik format filed: Unable to execute dex: method ID not in [0, 0
 \end{itemize}
 
 \chapter{testing}
-\label{sec-15}
+\label{sec-16}
 \section{Why do you use the AndroidJUnitRunner when running UI tests?}
-\label{sec-15-1}
+\label{sec-16-1}
 \begin{itemize}
 \item Notice: AndroidJUnitRunner lets us run JUnit3/4-style tests on Android Devices
 \begin{itemize}
@@ -2417,18 +2881,18 @@ Conversion to Dalvik format filed: Unable to execute dex: method ID not in [0, 0
 \end{itemize}
 \end{itemize}
 \section{Given the test class below, which code snippet would be a correct assertion?}
-\label{sec-15-2}
+\label{sec-16-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
  assertNotNull(resultAdd)
 \end{minted}
 
 
 \chapter{debugging}
-\label{sec-16}
+\label{sec-17}
 \section{network}
-\label{sec-16-1}
+\label{sec-17-1}
 \subsection{You have built code to make a network call and tested that it works in your development environment. However, when you publish it to the Play console, the networking call fails to work. What will NOT help you troubleshoot this issue?}
-\label{sec-16-1-1}
+\label{sec-17-1-1}
 \begin{itemize}
 \item checking whether ProGuard -keepclassmembers have been added to the network data transfer objects (DTOs) in question
 \item checking for exceptions in the server logs or server console
@@ -2438,25 +2902,25 @@ Conversion to Dalvik format filed: Unable to execute dex: method ID not in [0, 0
 
 
 \chapter{Frameworks}
-\label{sec-17}
+\label{sec-18}
 \section{Retrofit}
-\label{sec-17-1}
+\label{sec-18-1}
 \subsection{You need to remove an Event based on it;s id from your API, Which code snippet defines that request in Retrofit?}
-\label{sec-17-1-1}
+\label{sec-18-1-1}
 \begin{itemize}
 \item @DELETE("events/\{id\}") fun deleteEvent(@Path("id") id: Long): Call
 \end{itemize}
 \subsection{You need to retrieve a list of photos from an API. Which code snippet defines an HTML GET request in Retrofit?}
-\label{sec-17-1-2}
+\label{sec-18-1-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
  @GET("photo") fun listPhotos() : Call<List>
 \end{minted}
 
 
 \chapter{需要分类出去的}
-\label{sec-18}
+\label{sec-19}
 \subsection{What are the permission protection levels in Android?}
-\label{sec-18-0-1}
+\label{sec-19-0-1}
 \begin{itemize}
 \item Normal — A lower-risk permission that gives requesting applications access to isolated application-level features, with minimal risk to other applications, the system, or the user. The system automatically grants this type of permission to a requesting application at installation, without asking for the user’s explicit approval.
 \item Dangerous — A higher-risk permission. Any dangerous permissions requested by an application may be displayed to the user and require confirmation before proceeding, or some other approach may be taken to avoid the user automatically allowing the use of such facilities.
@@ -2465,7 +2929,7 @@ Conversion to Dalvik format filed: Unable to execute dex: method ID not in [0, 0
 \end{itemize}
 
 \subsection{What is Android Data Binding?}
-\label{sec-18-0-2}
+\label{sec-19-0-2}
 
 The Data Binding Library is a support library that allows you to bind UI components in your layouts to data sources in your app using a declarative format rather than programmatically.
 
@@ -2495,7 +2959,7 @@ The following example shows how to use the Data Binding Library to assign text t
 \end{itemize}
 
 \subsection{What is the ViewHolder pattern? Why should we use it?}
-\label{sec-18-0-3}
+\label{sec-19-0-3}
 
 Every time when the adapter calls getView() method, the findViewById() method is also called. This is a very intensive work for the mobile CPU and so affects the performance of the application and the battery consumption increases. ViewHolder is a design pattern which can be applied as a way around repeated use of findViewById().
 
@@ -2542,7 +3006,7 @@ private ViewHolder createViewHolderFrom(View view) {
 \end{itemize}
 
 \subsection{What is the difference between Handler vs AsyncTask vs Thread?}
-\label{sec-18-0-4}
+\label{sec-19-0-4}
 Mid 
 Top 113 Android Interview Questions  Android  113  
 Answer
@@ -2556,7 +3020,7 @@ No default for handling configuration changes in Android
 Having Tech or Coding Interview? Check 👉 113 Android Interview Questions
 Source: stackoverflow.com
 \subsection{What is the difference between compileSdkVersion and targetSdkVersion?}
-\label{sec-18-0-5}
+\label{sec-19-0-5}
 Mid 
 Top 113 Android Interview Questions  Android  113  
 Answer
@@ -2564,7 +3028,7 @@ The compileSdkVersion is the version of the API the app is compiled against. Thi
 
 The targetSdkVersion has nothing to do with how your app is compiled or what APIs you can utilize. The targetSdkVersion is supposed to indicate that you have tested your app on (presumably up to and including) the version you specify. This is more like a certification or sign off you are giving the Android OS as a hint to how it should handle your app in terms of OS features.
 \subsection{What is the difference between a Bundle and an Intent?}
-\label{sec-18-0-6}
+\label{sec-19-0-6}
 Mid 
 Top 113 Android Interview Questions  Android  113  
 Answer
@@ -2573,7 +3037,7 @@ However, an Intent is much more. It contains information about an operation that
 Think of the Intent as a Bundle that also contains information on who should receive the contained data, and how it should be presented.
 
 \subsection{What are the wake locks available in android?}
-\label{sec-18-0-7}
+\label{sec-19-0-7}
 A - PARTIAL$_{\text{WAKE}}$$_{\text{LOCK}}$
 B - SCREEN$_{\text{DIM}}$$_{\text{WAKE}}$$_{\text{LOCK}}$
 C - SCREEN$_{\text{BRIGHT}}$$_{\text{WAKE}}$$_{\text{LOCK}}$
@@ -2591,22 +3055,22 @@ When CPU, Screen, bright Screen High is on mode, FULL$_{\text{WAKE}}$$_{\text{LO
 
 
 \chapter{项目中用到的小点}
-\label{sec-19}
+\label{sec-20}
 \section{api level 28, androidx之前的最后一个版本}
-\label{sec-19-1}
+\label{sec-20-1}
 
 \section{android api level 30 androidx 中项目一定需要修改的条款: androidx.fragment还没有弄通}
-\label{sec-19-2}
+\label{sec-20-2}
 \subsection{gradles.propertiess}
-\label{sec-19-2-1}
+\label{sec-20-2-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xm}
 android.useAndroidX=true
 landroid.enableJetifier=true
 \end{minted}
 \subsection{project build.gragle: gragle versions}
-\label{sec-19-2-2}
+\label{sec-20-2-2}
 \subsection{app module build.gradle}
-\label{sec-19-2-3}
+\label{sec-20-2-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{.gradle}
    implementation 'androidx.appcompat:appcompat:1.1.0'
     //implementation 'com.android.support:appcompat-v7:30.0.0'
@@ -2620,7 +3084,7 @@ landroid.enableJetifier=true
 \item 什么是Jetifier？ 例如，要使用androidx打包的依赖项创建新项目，此新项目需要在gradle.properties文件中添加以下行：
 \end{itemize}
 \subsection{JavaVersion.VERSION$_{\text{1}}$$_{\text{8}}$}
-\label{sec-19-2-4}
+\label{sec-20-2-4}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 java version 8
  compileOptions {
@@ -2629,7 +3093,7 @@ java version 8
     }
 \end{minted}
 \subsection{references}
-\label{sec-19-2-5}
+\label{sec-20-2-5}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 import android.content.Context;
 import android.os.Bundle;
@@ -2649,7 +3113,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
 \end{minted}
 \subsection{xml中也还有一些注意事项}
-\label{sec-19-2-6}
+\label{sec-20-2-6}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
 <com.me.generalprac.CustomTitleView
     android:layout_width="match_parent"
