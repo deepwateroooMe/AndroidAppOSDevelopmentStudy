@@ -164,8 +164,8 @@ app/build.gradle
 *** Adapter
 - 在RecylerView中，Adapter扮演着两个角色：一是根据不同viewType创建与之相应的的itemView，二是访问数据集合并将数据绑定到正确的View上。这就需要我们实现以下两个函数：
 #+BEGIN_SRC java
-public VH onCreateViewHolder(ViewGroup parent, int viewType); //创建Item视图，并返回相应的ViewHolder
-public void onBindViewHolder(VH holder, int position); //绑定数据到正确的Item视图上。
+public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType); //创建Item视图，并返回相应的ViewHolder
+public void onBindViewHolder(ViewHolder holder, int position); //绑定数据到正确的Item视图上。
 #+END_SRC
 - 另外我们还需要重写另一个方法，像ListView-Adapter那样，同样地告诉RecyclerView-Adapter列表Items的总数：
 #+BEGIN_SRC java
@@ -536,7 +536,7 @@ public View getViewForPosition(int position);
   privatestaticfinalintDEFAULT_MAX_SCRAP = 5;
 #+END_SRC
 
-  [[./pic/recyclerviewcache.png]]
+  [[./pic/recyclerviewcache.jpg]]
    
 - Scrap: 在屏幕内可视的Item。
 - Cache: 在屏幕外的Item
@@ -657,5 +657,5 @@ void onContentsChanged() {
     - 如果Adapter的数据变化不会导致RecyclerView的大小变化就可以用
 - 4.多个RectclerView共用RecycledViewPool.
   
-  [[./pic/viewpool.png]]
+  [[./pic/viewpool.jpg]]
 - 5.使用DiffUtil
