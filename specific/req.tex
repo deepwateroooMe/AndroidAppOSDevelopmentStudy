@@ -1,4 +1,4 @@
-% Created 2021-12-20 Mon 22:32
+% Created 2021-12-21 Tue 08:32
 \documentclass[9pt, b5paper]{article}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -162,13 +162,12 @@ app/build.gradle
     }
 \end{minted}
 
-
-\section{Retrofit2 Json Parsing (data downloaded from internet?)}
+\section{HttpURLConnection Retrofit2 Json Parsing}
 \label{sec-3}
 \subsection{常见的网络框架}
 \label{sec-3-1}
 \begin{itemize}
-\item HttpURLConnection:在Android 2.2版本之前，HttpClient拥有较少的bug，因此使用它是***的选择。而在Android 2.3版本及以后，HttpURLConnection则是***的选择。它的API简单，体积较小，因而非常适用于Android项目。压缩和缓存机制可以有效地减少网络访问的流量，在提升速度和省电方面也起到了较大的作用。对于新的应用程序应该更加偏向于使用HttpURLConnection，因为在以后的工作当中我们也会将更多的时间放在优化HttpURLConnection上面。特点：比较轻便，灵活，易于扩展，在3.0后以及4.0中都进行了改善，如对HTTPS的支持，在4.0中，还增加了对缓存的支持。
+\item HttpURLConnection:  Android 2.2版本之前，HttpClient拥有较少的bug，因此使用它是***的选择。而在Android 2.3版本及以后，HttpURLConnection则是***的选择。它的API简单，体积较小，因而非常适用于Android项目。压缩和缓存机制可以有效地减少网络访问的流量，在提升速度和省电方面也起到了较大的作用。对于新的应用程序应该更加偏向于使用HttpURLConnection，因为在以后的工作当中我们也会将更多的时间放在优化HttpURLConnection上面。特点：比较轻便，灵活，易于扩展，在3.0后以及4.0中都进行了改善，如对HTTPS的支持，在4.0中，还增加了对缓存的支持。
 \item HttpClient：高效稳定，但是维护成本高昂，故android 开发团队不愿意在维护该库而是转投更为轻便的
 \item okHttp：okhttp 是一个 Java 的 HTTP+SPDY 客户端开发包，同时也支持 Android。需要Android 2.3以上。特点：OKHttp是Android版Http客户端。非常高效，支持SPDY、连接池、GZIP和 HTTP 缓存。默认情况下，OKHttp会自动处理常见的网络问题，像二次连接、SSL的握手问题。如果你的应用程序中集成了OKHttp，Retrofit默认会使用OKHttp处理其他网络层请求。从Android4.4开始HttpURLConnection的底层实现采用的是okHttp。
 \item volley：早期使用HttpClient，后来使用HttpURLConnection，是谷歌2013年推出的网络请求框架，非常适合去进行数据量不大，但通信频繁的网络操作，而对于大数据量的网络操作，比如说下载文件等，Volley的表现就会非常糟糕。
@@ -247,8 +246,8 @@ app/build.gradle
 \item 在RecylerView中，Adapter扮演着两个角色：一是根据不同viewType创建与之相应的的itemView，二是访问数据集合并将数据绑定到正确的View上。这就需要我们实现以下两个函数：
 \end{itemize}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
-public VH onCreateViewHolder(ViewGroup parent, int viewType); //创建Item视图，并返回相应的ViewHolder
-public void onBindViewHolder(VH holder, int position); //绑定数据到正确的Item视图上。
+public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType); // 创建Item视图，并返回相应的ViewHolder
+public void onBindViewHolder(ViewHolder holder, int position);        // 绑定数据到正确的Item视图上
 \end{minted}
 \begin{itemize}
 \item 另外我们还需要重写另一个方法，像ListView-Adapter那样，同样地告诉RecyclerView-Adapter列表Items的总数：
@@ -290,6 +289,15 @@ public static abstract class ViewHolder {
 \item FLAG\underADAPTER\underFULLUPDATE——方法addChangePayload(null)调用时设置
 \end{itemize}
 \end{itemize}
+\begin{enumerate}
+\item RecyclerView为什么强制我们实现ViewHolder模式？
+\label{sec-5-3-2-1}
+\begin{itemize}
+\item ListView使用ViewHolder的好处就在于可以避免每次getView都进行findViewById()操作，因为findViewById()利用的是DFS算法（深度优化搜索），是非常耗性能的.
+\item 而对于RecyclerView来说，强制实现ViewHolder的其中一个原因就是避免多次进行findViewById（）的处理；另一个原因就是因为ItemView和ViewHolder的关系是一对一，也就是说一个ViewHolder对应一个ItemView。这个ViewHolder当中持有对应的ItemView的所有信息，比如说：position；view；width等等，拿到了ViewHolder基本就拿到了ItemView的所有信息，而ViewHolder使用起来相比itemView更加方便。
+\item RecyclerView缓存机制缓存的就是ViewHolder（ListView缓存的是ItemView），这也是为什么RecyclerView为什么强制我们实现ViewHolder的原因。
+\end{itemize}
+\end{enumerate}
 
 \subsubsection{LayoutManager}
 \label{sec-5-3-3}
@@ -339,8 +347,7 @@ public static abstract class ItemDecoration {
     }
     // 设置itemView上下左右的间距
     public void getItemOffsets(Rect outRect, View view, RecyclerView parent, State state) {
-        getItemOffsets(outRect, ((LayoutParams) view.getLayoutParams()).getViewLayoutPosition(),
-                parent);
+        getItemOffsets(outRect, ((LayoutParams) view.getLayoutParams()).getViewLayoutPosition(), parent);
     }
 }
 \end{minted}
@@ -357,7 +364,7 @@ public void getItemOffsets(Rect outRect, int itemPosition, RecyclerView parent)
 \end{minted}
 自定义间隔样式需要继承RecyclerView.ItemDecoration类，该类是个抽象类，主要有三个方法
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
-onDraw(Canvas c, RecyclerView parent, State state) // 在Item绘制之前被调用，该方法主要用于绘制间隔样式
+onDraw(Canvas c, RecyclerView parent, State state)     // 在Item绘制之前被调用，该方法主要用于绘制间隔样式
 onDrawOver(Canvas c, RecyclerView parent, State state) // 在Item绘制之前被调用，该方法主要用于绘制间隔样式
 // 设置item的偏移量，偏移的部分用于填充间隔样式，在RecyclerView的onMesure()中会调用该方法
 getItemOffsets(Rect outRect, View view, RecyclerView parent, State state)
@@ -390,7 +397,7 @@ imgAdapter.notifyItemChanged(i); // 只更新修改的item
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 selectedImgs.remove(position);
 notifyItemRemoved(position);
-notifyItemRangeChanged(0,selectedImgs.size());
+notifyItemRangeChanged(0, selectedImgs.size());
 \end{minted}
 \item 屏蔽动画方法
 \label{sec-5-3-5-1-2}
@@ -417,7 +424,7 @@ notifyItemRangeChanged(0,selectedImgs.size());
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 ((SimpleItemAnimator)recyclerView.getItemAnimator()).setSupportsChangeAnimations(false);
 \end{minted}
-\item 设置动画执行时间为0来解决闪烁问题
+\item 设置动画执行时间为0来解决闪烁问题: （这个效率会不会比较低？)
 \label{sec-5-3-5-1-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 recyclerView.getItemAnimator().setChangeDuration(0);// 通过设置动画执行时间为0来解决闪烁问题
@@ -638,7 +645,7 @@ public abstract static class ViewCacheExtension {
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 private ArrayList<ViewHolder> mAttachedScrap;
 private ArrayList<ViewHolder> mChangedScrap; // 与RecyclerView分离的ViewHolder列表。
-private ArrayList<ViewHolder> mCachedViews; // ViewHolder缓存列表。
+private ArrayList<ViewHolder> mCachedViews;  // ViewHolder缓存列表。
 private ViewCacheExtension mViewCacheExtension; // 开发者控制的ViewHolder缓存
 private RecycledViewPool mRecyclerPool; // 提供复用ViewHolder池。
 public void bindViewToPosition(View view, int position); // 将某个View绑定到Adapter的某个位置。
@@ -648,7 +655,7 @@ public View getViewForPosition(int position);
 \item 获取某个位置需要展示的View，先检查是否有可复用的View，没有则创建新View并返回。具体过程为：
 \begin{itemize}
 \item 检查mChangedScrap，若匹配到则返回相应holder
-\item 检查mAttachedScrap，若匹配到且holder有效则返回相应holder
+\item 检查mAttachedScrap，若匹配到、且holder有效则返回相应holder
 \item 检查mViewCacheExtension，若匹配到则返回相应holder
 \item 检查mRecyclerPool，若匹配到则返回相应holder
 \item 否则执行Adapter.createViewHolder()，新建holder实例
@@ -666,13 +673,19 @@ public View getViewForPosition(int position);
 \item listView 是继承于 AbsListView ，RecycleBin 是 AbsListView 的内部类，其作用是通过两级缓存来缓存 view。
 \item 一级缓存：mActiveViews
 \begin{itemize}
-\item 第一级缓存，这些 View 是布局过程开始时屏幕上的 view，layout 开始时这个数组被填充，layout 结束，mActiveViews 中的 View 移动到 mScrapView，意义在于快速重用屏幕上可见的列表项 ItemView，而不需要重新 createView 和 bindView。
+\item 第一级缓存，这些 View 是布局过程开始时屏幕上的 view，layout 开始时这个数组被填充，layout 结束，mActiveViews 中的 View 移动到 mScrapView，意义在于快速重用屏幕上可见的列表项 ItemView，而不需要重新 createView 和 bindView。Active View：是缓存在屏幕内的ItemView，当列表数据发生变化时，屏幕内的数据可以直接拿来复用，无须进行数据绑定。
 \end{itemize}
 \item 二级缓存：mScrapView
 \begin{itemize}
-\item 第二级缓存，mScrapView 是多个 List 组成的数据，数组的长度为 viewTypeCount，每个 List 缓存不同类型 Item 布局的 View，其意义在于缓存离开屏幕的 ItemView，目的是让即将进入屏幕的 itemView 重用，当 mAdapter 被更换时，mScrapViews 则被清空。
+\item 第二级缓存，mScrapView 是多个 List 组成的数据，数组的长度为 viewTypeCount，每个 List 缓存不同类型 Item 布局的 View，其意义在于缓存离开屏幕的 ItemView，目的是让即将进入屏幕的 itemView 重用，当 mAdapter 被更换时，mScrapViews 则被清空。Scrap view：缓存屏幕外的ItemView，这里所有的缓存的数据都是"脏的"，也就是数据需要重新绑定，也就是说屏幕外的所有数据在进入屏幕的时候都要走一遍getView（）方法。当Active View和Scrap View中都没有缓存的时候就会直接create view。
+\item 再来一张图，看看ListView的缓存流程
 \end{itemize}
 \end{itemize}
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/listviewcache.png}
+
+\begin{itemize}
 \item RecyclerView 也有一个类专门来管理缓存，不过与 ListView 不同的是，RecylerView 缓存的是 ViewHolder，而且实现的是四级缓存。
 \begin{itemize}
 \item 一级：Scrap
@@ -697,13 +710,27 @@ public View getViewForPosition(int position);
 \item 把所有的 ArrayList 放在一个 Map 里面，这也是 RecyclerView 最大的亮点，这样根据 itemType 来取不同的缓存 Holder，每一个 Holder 都有对应的缓存，而只需要为这些不同 RecyclerView 设置同一个 Pool 就可以了。
 \item 简而言之， pool一般会和cached配合使用，这么来说，cached存不下的会被保存到pool中毕竟cached默认容量大小只有2，但是pool容量 也是有限的当保存满之后再有viewholder到来的话就只能会无情抛弃掉，它也有一个默认的容量大小
 \end{itemize}
+\item Scrap对应ListView 的Active View，就是屏幕内的缓存数据，就是相当于换了个名字，可以直接拿来复用。
+\item Cache 刚刚移出屏幕的缓存数据，默认大小是2个，当其容量被充满同时又有新的数据添加的时候，会根据FIFO原则，把优先进入的缓存数据移出并放到下一级缓存中，然后再把新的数据添加进来。Cache里面的数据是干净的，也就是携带了原来的ViewHolder的所有数据信息，数据可以直接来拿来复用。需要注意的是，cache是根据position来寻找数据的，这个postion是根据第一个或者最后一个可见的item的position以及用户操作行为（上拉还是下拉）。
+\begin{itemize}
+\item 举个栗子：当前屏幕内第一个可见的item的position是1，用户进行了一个下拉操作，那么当前预测的position就相当于（1-1=0），也就是position=0的那个item要被拉回到屏幕，此时RecyclerView就从Cache里面找position=0的数据，如果找到了就直接拿来复用。
+\end{itemize}
+\item ViewCacheExtension是google留给开发者自己来自定义缓存的，这个ViewCacheExtension我个人建议还是要慎用，因为我扒拉扒拉网上其他的博客，没有找到对应的使用场景，而且这个类的api设计的也有些奇怪，只有一个
 \end{itemize}
 \end{itemize}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
-  privatestaticfinalintDEFAULT_MAX_SCRAP = 5;
+public abstract View getViewForPositionAndType(@NonNull Recycler recycler, int position, int type);
+\end{minted}
+\begin{itemize}
+\item 让开发者重写通过position和type拿到ViewHolder的方法，却没有提供如何产生ViewHolder或者管理ViewHolder的方法，给人一种只出不进的感觉，还是那句话慎用。
+\item RecycledViewPool刚才说了Cache默认的缓存数量是2个，当Cache缓存满了以后会根据FIFO（先进先出）的规则把Cache先缓存进去的ViewHolder移出并缓存到RecycledViewPool中，RecycledViewPool默认的缓存数量是5个。RecycledViewPool与Cache相比不同的是，从Cache里面移出的ViewHolder再存入RecycledViewPool之前ViewHolder的数据会被全部重置，相当于一个新的ViewHolder，而且Cache是根据position来获取ViewHolder，而RecycledViewPool是根据itemType获取的，如果没有重写getItemType()方法，itemType就是默认的。因为RecycledViewPool缓存的ViewHolder是全新的，所以取出来的时候需要走onBindViewHolder（）方法。
+\end{itemize}
+
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+  private static final int DEFAULT_MAX_SCRAP = 5;
 \end{minted}
 
-\includegraphics[width=.9\linewidth]{./pic/recyclerviewcache.png}
+\includegraphics[width=.9\linewidth]{./pic/recyclerviewcache.jpg}
 
 \begin{itemize}
 \item Scrap: 在屏幕内可视的Item。
@@ -760,9 +787,8 @@ ViewHolder tryGetViewHolderForPositionByDeadline(int position, boolean dryRun, l
         //  ...省略 
         final int type = mAdapter.getItemViewType(offsetPosition); 
         // 如果Adapter中声明了Id，尝试从id中获取，这里不属于缓存 
-        if (mAdapter.hasStableIds()) { 
+        if (mAdapter.hasStableIds()) 
             holder = getScrapOrCachedViewForId(mAdapter.getItemId(offsetPosition), type, dryRun); 
-        } 
         if (holder == null && mViewCacheExtension != null) { 
             //  3、从自定义缓存mViewCacheExtension中尝试获取ViewHolder，该缓存需要开发者实现 
             final View view = mViewCacheExtension.getViewForPositionAndType(this, position, type); 
@@ -801,7 +827,7 @@ ViewHolder tryGetViewHolderForPositionByDeadline(int position, boolean dryRun, l
 \includegraphics[width=.9\linewidth]{./pic/cache2.png}
 
 \begin{itemize}
-\item 通过mAttachedScrap、mCachedViews及mViewCacheExtension获取的ViewHolder不需要重新创建布局及绑定数据;通过缓存池mRecyclerPool获取的ViewHolder不需要重新创建布局，但是需要重新绑定数据;如果上述缓存中都没有获取到目标ViewHolder，那么就会回调Adapter\#onCreateViewHolder创建布局，以及回调Adapter\#onBindViewHolder来绑定数据
+\item 通过mAttachedScrap、mCachedViews及mViewCacheExtension获取的ViewHolder不需要重新创建布局及绑定数据；通过缓存池mRecyclerPool获取的ViewHolder不需要重新创建布局，但是需要重新绑定数据；如果上述缓存中都没有获取到目标ViewHolder，那么就会回调Adapter\#onCreateViewHolder()创建布局，以及回调Adapter\#onBindViewHolder()来绑定数据
 \item RecyclerView 滑动场景下的回收复用涉及到的结构体两个：
 \begin{itemize}
 \item mCachedViews 和 RecyclerViewPool
@@ -814,8 +840,8 @@ ViewHolder tryGetViewHolderForPositionByDeadline(int position, boolean dryRun, l
 \subsection{你可能不知道的RecyclerView性能优化策略}
 \label{sec-5-5}
 \begin{itemize}
-\item 1.不要在onBindViewHolder中设置监听器，在onCreateViewHolder中设置监听器.
-\item 2.做如下设置
+\item 1.不要在onBindViewHolder()中设置监听器，在onCreateViewHolder()中设置监听器.
+\item 2.对于使用LinearLayoutManager的情况，做如下设置
 \end{itemize}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
 LinearLayoutManager.setInitialPrefetchitemCount();
@@ -823,7 +849,7 @@ LinearLayoutManager.setInitialPrefetchitemCount();
 \begin{itemize}
 \item 用户滑动到横向滑动的item RecyclerView的时候，由于需要创建更复杂的RecyclerView以及多个子view,可能会导致页面卡顿
 \item 由于RenderThread的存在，RecyclerView会进行prefetch
-\item LinearLayoutManager.setInitialPrefetchItemCount(横向列表初次显示可见的item个数)
+\item LinearLayoutManager.setInitialPrefetchItemCount(int? 横向列表初次显示可见的item个数)
 \begin{itemize}
 \item 只有LinearLayoutManager有这个API
 \item 只有潜逃在内部的RecyclerView才会生效.
@@ -846,7 +872,7 @@ void onContentsChanged() {
 \end{itemize}
 \item 4.多个RectclerView共用RecycledViewPool.
 
-\includegraphics[width=.9\linewidth]{./pic/viewpool.png}
+\includegraphics[width=.9\linewidth]{./pic/viewpool.jpg}
 \item 5.使用DiffUtil
 \end{itemize}
 % Emacs 27.1 (Org mode 8.2.7c)
