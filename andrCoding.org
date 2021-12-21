@@ -998,7 +998,7 @@ fragment.show(getSupportFragmentManager(), "tag");
 - 使用该标识位启动的Activity不添加到最近应用列表，也即我们从最近应用里面查看不到我们启动的这个activity。
 - 等同于在manifest中设置activity属性
 #+BEGIN_SRC xml
-android:excludeFromRecents="true"
+<android:excludeFromRecents="true"/>
 #+END_SRC
 **** Intent.FLAG_ACTIVITY_NO_HISTORY
 - 使用该模式来启动Activity，当该Activity启动其他Activity后，该Activity就被销毁了，不会保留在任务栈中。如A-B,B中以这种模式启动C，C再启动D，则任务栈只有ABD。
