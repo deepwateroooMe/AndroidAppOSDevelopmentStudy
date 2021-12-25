@@ -1,4 +1,4 @@
-% Created 2021-12-19 Sun 14:32
+% Created 2021-12-24 Fri 08:37
 \documentclass[9pt, b5paper]{article}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -711,6 +711,34 @@ public void onWindowFocusChanged(boolean hasWindowFocus) {
 \label{sec-1-10}
 准备自定义View方面的面试最简单的方法：
 
+就是自己动手实现几个View（由简单到复杂）；
+分析一些热门App中的自定义View的效果是怎么实现的；
+阿里面试官： 自定义View跟绘制流程相关知识点？（标准参考解答，值得收藏）
+\begin{itemize}
+\item \url{https://www.cnblogs.com/Android-Alvin/p/12297933.html}
+\end{itemize}
+
+
+\section{View相关}
+\label{sec-2}
+\subsection{View 工作流程}
+\label{sec-2-1}
+\begin{itemize}
+\item 通过 SetContentView()，调用 到PhoneWindow ，后实例DecorView ，通过 LoadXmlResourceParser() 进行IO操作 解析xml文件 通过反射 创建出View，并将View绘制在 DecorView上，这里的绘制则交给了ViewRootImpl 来完成，通过performTraversals() 触发绘制流程，performMeasure 方法获取View的尺寸，performLayout 方法获取View的位置 ，然后通过 performDraw 方法遍历View 进行绘制。
+\end{itemize}
+\subsection{事件分发}
+\label{sec-2-2}
+\begin{itemize}
+\item 一个 MotionEvent 产生后，按 Activity -> Window -> DecorView（ViewGroup） -> View 顺序传递，View 传递过程就是事件分发，因为开发过程中存在事件冲突，所以需要熟悉流程：
+\begin{itemize}
+\item dispatchTouchEvent：用于分发事件，只要接受到点击事件就会被调用，返回结果表示是否消耗了当前事件
+\item onInterceptTouchEvent：用于判断是否拦截事件（只有ViewGroup中存在），当 ViewGroup 确定要拦截事件后，该事件序列都不会再触发调用此 ViewGroup 的 onIntercept
+\item onTouchEvent：用于处理事件，返回结果表示是否处理了当前事件，未处理则传递给父容器处理。（事件顺序是：OnTouchListener -> OnTouchEvent -> OnClick）
+\end{itemize}
+\end{itemize}
+\subsection{自定义View!!}
+\label{sec-2-3}
+准备自定义View方面的面试最简单的方法：
 就是自己动手实现几个View（由简单到复杂）；
 分析一些热门App中的自定义View的效果是怎么实现的；
 阿里面试官： 自定义View跟绘制流程相关知识点？（标准参考解答，值得收藏）

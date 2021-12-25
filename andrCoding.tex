@@ -1,4 +1,4 @@
-% Created 2021-12-19 Sun 17:16
+% Created 2021-12-22 Wed 07:41
 \documentclass[9pt, b5paaper]{book}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -276,9 +276,10 @@ onResume()
 \item 同4的流程: onRestart ----> onStart() ----> onResume()
 \end{itemize}
 \end{itemize}
+
 \section{activity之间的数据传递： 6种方式}
 \label{sec-1-6}
-\subsection{使用Inten的putExtra传递}
+\subsection{使用Intent的putExtra传递}
 \label{sec-1-6-1}
 \begin{itemize}
 \item 第一个Activity中
@@ -662,6 +663,9 @@ MainActivity: onPostResume() END
 MainActivity: onAttachedToWindow() BEGIN
 MainActivity: onAttachedToWindow() END
 \end{minted}
+
+\includegraphics[width=.9\linewidth]{./pic/fragmentAct.png}
+
 \begin{itemize}
 \item 可以看出：
 \begin{itemize}
@@ -982,8 +986,11 @@ A 再到 B
     B(  onAttach()  --> onViewStateRestored( )--> onResume() )
 如果在B页面输入了数据，B返回A再到B，B中数据也会恢复
 \end{minted}
+\item androidX 一文读懂 Fragment 的方方面面
+\begin{itemize}
+\item \url{https://juejin.cn/post/7006970844542926855} androidX很值得一读
 \end{itemize}
-
+\end{itemize}
 
 \chapter{Android Fragment 之间数据传递}
 \label{sec-3}
@@ -1371,7 +1378,7 @@ fragment.show(getSupportFragmentManager(), "tag");
 \item 等同于在manifest中设置activity属性
 \end{itemize}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{xml}
-android:excludeFromRecents="true"
+<android:excludeFromRecents="true"/>
 \end{minted}
 \item Intent.FLAG$_{\text{ACTIVITY}}$$_{\text{NO}}$$_{\text{HISTORY}}$
 \label{sec-4-6-2-5}

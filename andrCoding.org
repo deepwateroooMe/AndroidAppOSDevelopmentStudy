@@ -471,6 +471,9 @@ MainActivity: onPostResume() END
 MainActivity: onAttachedToWindow() BEGIN
 MainActivity: onAttachedToWindow() END
 #+END_SRC
+
+[[./pic/fragmentAct.png]]
+
 - 可以看出：
   - Fragment的onAttach()->onCreate()->onCreateView()->onActivityCreated()->onStart()都是在Activity的onStart()中调用的。
   - Fragment的onResume()在Activity的onResume()之后调用。
