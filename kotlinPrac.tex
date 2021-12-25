@@ -1,4 +1,4 @@
-% Created 2021-12-24 Fri 23:08
+% Created 2021-12-25 Sat 11:38
 \documentclass[9pt, b5paper]{article}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -612,11 +612,166 @@ fun MyObject.Companion.someExtension() {}//定义扩展函数
 \item \url{http://www.4k8k.xyz/article/u013064109/89199478} 这个没读，扫一眼
 \end{itemize}
 
+\section{Kotlin-查看Kotlin编译成class后代码的三种方式}
+\label{sec-5}
+\subsection{在AndroidStudio中查看}
+\label{sec-5-1}
+\begin{itemize}
+\item 第一步：选择你要查看你的kotlin文件，然后点击Tools-->Kotlin-->Show Kotlin Bytecode
+\item 第二步：点击左上角的 Decompile 按钮就会弹出你想要的class源码
+\end{itemize}
+\subsection{方法二}
+\label{sec-5-2}
+\begin{itemize}
+\item 利用命令行 javap [option] *.class 命令
+\end{itemize}
+\begin{center}
+\begin{tabular}{ll}
+\hline
+子命令 & 输出信息\\
+\hline
+-l & 输出行和变量的表\\
+-public & 只输出公共的方法和成员\\
+-protected & 只输出public和protected类和成员\\
+-package & 只输出包，public和protected类和成员，这是默认情况\\
+-p -private & 输出所有类和成员\\
+-s & 输出内部类型签名\\
+-c & 对代码进行反汇编。 eg：类中每一个方法内，包含 java 字节码的指令\\
+-verbose & 输出栈大小，方法参数的个数\\
+-costants & 输出静态 final 常量\\
+\hline
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item 样码
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class TestMain {
+    public val msg1 = "类中的变量"
+    private val msg2 = "类中的变量"
+    companion object {
+        val msg3 = "伴生对象的变量"
+    }
+}
+val msg4 = "Kotlin文件中的变量"
+fun sayHello(msg: String) {
+    println("msg=$msg")
+}
+fun main() {
+    val msg5 = "我要看你的class文件"
+    sayHello(msg5)
+}
+\end{minted}
+\begin{itemize}
+\item Javap -public 输出结果
+\begin{itemize}
+\item Javap -public     输出公共的方法和成员
+\end{itemize}
+\item 输出的结果为
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+// javap -public TestMainKt.class
+// Compiled from "TestMain.kt"
+public final class com.yobo.yobo_kotlin.TestMainKt {
+  public static final java.lang.String getMsg2();
+  public static final void sayHello(java.lang.String);
+  public static final void main();
+  public static void main(java.lang.String[]);
+}
+// javap -public TestMain.class
+// Compiled from "TestMain.kt"
+public final class com.yobo.yobo_kotlin.TestMain {
+  public static final com.yobo.yobo_kotlin.TestMain$Companion Companion;
+  public final java.lang.String getMsg1();
+  public com.yobo.yobo_kotlin.TestMain();
+  public static final java.lang.String access$getMsg3$cp();
+}
+\end{minted}
+\begin{itemize}
+\item javap -p -private 
+\begin{itemize}
+\item javap -p -private  显示所有的类和成员
+\end{itemize}
+\item javap -p -private  TestMainKt.class
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public final class com.yobo.yobo_kotlin.TestMainKt {
+  private static final java.lang.String msg4;
+  public static final java.lang.String getMsg4();
+  public static final void sayHello(java.lang.String);
+  public static final void main();
+  public static void main(java.lang.String[]);
+  static {};
+}
+\end{minted}
+\begin{itemize}
+\item Javap -c 输出结果
+\begin{itemize}
+\item Javap -c    对代码进行反汇编。 eg：类中每一个方法内，包含 java 字节码的
+\end{itemize}
+\item 可以看到虽然是把我们整个class文件进行了反编译，但是可读性不是很好，这时候我们就推荐第二种方法。
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public final class com.yobo.yobo_kotlin.TestMainKt {
+  public static final java.lang.String getMsg2();
+    Code:
+       0: getstatic     #13                 // Field msg2:Ljava/lang/String;
+       3: areturn
+
+  public static final void sayHello(java.lang.String);
+    Code:
+       0: aload_0
+       1: ldc           #17                 // String msg
+       3: invokestatic  #23                 // Method kotlin/jvm/internal/Intrinsics.checkParameterIsNotNull:(Ljava/lang/Object;Ljava/lang/String;)V
+       6: new           #25                 // class java/lang/StringBuilder
+       9: dup
+      10: invokespecial #29                 // Method java/lang/StringBuilder."<init>":()V
+      13: ldc           #31                 // String msg=
+      15: invokevirtual #35                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      18: aload_0
+      19: invokevirtual #35                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      22: invokevirtual #38                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      25: astore_1
+      26: iconst_0
+      27: istore_2
+      28: getstatic     #44                 // Field java/lang/System.out:Ljava/io/PrintStream;
+      31: aload_1
+      32: invokevirtual #50                 // Method java/io/PrintStream.println:(Ljava/lang/Object;)V
+      35: return
+ 
+  public static final void main();
+    Code:
+       0: ldc           #56                 // String 我要看你的class文件
+       2: astore_0
+       3: aload_0
+       4: invokestatic  #58                 // Method sayHello:(Ljava/lang/String;)V
+       7: return
+ 
+  public static void main(java.lang.String[]);
+    Code:
+       0: invokestatic  #54                 // Method main:()V
+       3: return
+ 
+  static {};
+    Code:
+       0: ldc           #8                  // String Kotlin文件中的变量
+       2: putstatic     #13                 // Field msg2:Ljava/lang/String;
+       5: return
+}
+\end{minted}
+\subsection{Jadx反编译工具}
+\label{sec-5-3}
+\begin{itemize}
+\item 先给出工具的GitHub地址，可以按照自己喜欢的方式安装并查看功能文档：
+\begin{itemize}
+\item \url{https://github.com/skylot/jadx}
+\end{itemize}
+\end{itemize}
 
 \section{Synchronized、Volatile}
-\label{sec-5}
+\label{sec-6}
 \subsection{如何创建线程 Thread}
-\label{sec-5-1}
+\label{sec-6-1}
 在Kotlin 中，我们仍然可以使用 java 的语法创建一个线程
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 Thread(Runnable { 
@@ -667,7 +822,7 @@ fun main() {
 }
 \end{minted}
 \subsection{如何使用 Synchronized 同步锁}
-\label{sec-5-2}
+\label{sec-6-2}
 \begin{itemize}
 \item 在Java中，给一个方法加锁 ，需要给方法加 synchronized 关键字
 \end{itemize}
@@ -699,7 +854,7 @@ public final class Util {
 \item 除此之外，kotlin 在方法内，可以使用 block 块
 \end{itemize}
 \subsubsection{例子1}
-\label{sec-5-2-1}
+\label{sec-6-2-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class Util {
     val lock = Any()
@@ -711,11 +866,25 @@ class Util {
 \end{minted}
 \begin{itemize}
 \item 编译成 java 如下
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class Util {
+    @NotNull
+        private final Object lock = new Object();
+    @NotNull
+        public final Object getLock() {
+        return this.lock;
+    }
+    public final void main() {
+        synchronized(this) {
+            boolean var2 = false;
+            Unit var4 = Unit.INSTANCE;
+        }
+    }
+}
+\end{minted}
 \end{itemize}
-
-\includegraphics[width=.9\linewidth]{./pic/eg1.png}
 \subsubsection{例子2}
-\label{sec-5-2-2}
+\label{sec-6-2-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class Util {
     val lock = Any()
@@ -727,12 +896,26 @@ class Util {
 \end{minted}
 \begin{itemize}
 \item 编译成 java 如下
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class Util {
+    @NotNull
+        private final Object lock = new Object();
+    @NotNull
+        public final Object getLock() {
+        return this.lock;
+    }
+    public final void main() {
+        Object var1 = this.lock;
+        synchronized(var1) {
+            boolean var2 = false;
+            Unit var4 = Unit.INSTANCE;
+        }
+    }
+}
+\end{minted}
 \end{itemize}
-
-\includegraphics[width=.9\linewidth]{./pic/eg2.png}
-
 \subsection{Volatile 关键字}
-\label{sec-5-3}
+\label{sec-6-3}
 \begin{itemize}
 \item 在kotlin中没有volatile关键字，但是有 @Volatile 注解
 \end{itemize}
@@ -744,66 +927,181 @@ class Util {
 \end{minted}
 \begin{itemize}
 \item 编译成 java 如下
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class Util {
+    @NotNull
+        private volatile Object lock = new Object();
+    @NotNull
+        public final Object getLock() {
+        return this.lock;
+    }
+    public final void setLock(@NotNull Object var1) {
+        Intrinsics.checkNotNullParameter(var1, "<set-?>");
+        this.lock = var1;
+    }
+}
+\end{minted}
 \end{itemize}
 
-\includegraphics[width=.9\linewidth]{./pic/eg3.png}
-
 \subsection{默认赋值}
-\label{sec-5-4}
+\label{sec-6-4}
 \subsubsection{默认不为空}
-\label{sec-5-4-1}
+\label{sec-6-4-1}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class A(val name: String, val age: Int)
 \end{minted}
 \begin{itemize}
 \item 代表 name、age 不能为 null ， 转换成 java , 会看到在构造函数中会对 name 字段做 空校验。
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class A {
+    @NotNull
+        private final String name;
+    private final int age;
+    @NotNull
+        public final String getName() {
+        return this.name;
+    }
+    public final int getAge() {
+        return this.age;
+    }
+    public A(@NotNull String name, int age) {
+        Intrinsics.checkNotNullParameter(name, "name");
+        super();
+        this.name = name;
+        this.age = age;
+    }
+}
+\end{minted}
+\item 函数 checkNotNullParameter()源码如下：
 \end{itemize}
-
-\includegraphics[width=.9\linewidth]{./pic/eg4.png}
 
 \includegraphics[width=.9\linewidth]{./pic/eg5.png}
 
 \subsubsection{可以为空}
-\label{sec-5-4-2}
+\label{sec-6-4-2}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class A(val name: String?, val age: Int)
 \end{minted}
 \begin{itemize}
 \item 代表 name 可为 null ， 转换成 java , 会看到在构造函数中没有对 name 字段做 空校验。
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class A {
+    @Nullable
+        private final String name;
+    private final int age;
+    @Nullable
+        public final String getName() {
+        return this.name;
+    }
+    public final int getAge() {
+        return this.age;
+    }
+    public A(@Nullable String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+}
+\end{minted}
 \end{itemize}
 
-\includegraphics[width=.9\linewidth]{./pic/eg6.png}
-
 \subsubsection{默认值}
-\label{sec-5-4-3}
+\label{sec-6-4-3}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class A(val name: String? = "zhaoyanjun", val age: Int)
 \end{minted}
 \begin{itemize}
 \item name 可为空，如果name 为null， 使用默认值 “zhaoyanjun”
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class A {
+    @Nullable
+        private final String name;
+    private final int age;
+    @Nullable
+        public final String getName() {
+        return this.name;
+    }
+    public final int getAge() {
+        return this.age;
+    }
+    public A(@Nullable String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+    // $FF: synthetic method
+    public A(String var1, int var2, int var3, DefaultConstructorMarker var4) {
+        if ((var3 & 1) != 0) {
+            var1 = "zhaoyanjun";
+        }
+        this(var1, var2);
+    }
+}
+\end{minted}
 \end{itemize}
 
-\includegraphics[width=.9\linewidth]{./pic/eg7.png}
-
 \subsubsection{两个默认值}
-\label{sec-5-4-4}
+\label{sec-6-4-4}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class A(val name: String? = "zhaoyanjun", val age: Int ?= 10)
 \end{minted}
-
-\includegraphics[width=.9\linewidth]{./pic/eg8.png}
+\begin{itemize}
+\item 出来的java码：
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class A {
+    @Nullable
+        private final String name;
+    @Nullable
+        private final Integer age;
+    @Nullable
+        public final String getName() {
+        return this.name;
+    }
+    @Nullable
+        public final Integer getAge() {
+        return this.age;
+    }
+    public A(@Nullable String name, @Nullable Integer age) {
+        this.name = name;
+        this.age = age;
+    }
+    // $FF: synthetic method
+    public A(String var1, Integer var2, int var3, DefaultConstructorMarker var4) {
+        if ((var3 & 1) != 0) 
+            var1 = "zhaoyanjun";
+        if ((var3 & 2) != 0) 
+            var2 = 10;
+        this(var1, var2);
+    }
+}
+\end{minted}
+\end{itemize}
 
 \subsection{构造函数}
-\label{sec-5-5}
+\label{sec-6-5}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class A(val name: String, val age: Int)
 var a1 =  A("zhaoyanjun",10)  //编译正常
 var a =  A()  //编译失败，因为没有无参构造函数
 \end{minted}
-
-\includegraphics[width=.9\linewidth]{./pic/eg9.png}
-
-
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class A {
+    @NotNull
+        private final String name;
+    private final int age;
+    @NotNull
+        public final String getName() {
+        return this.name;
+    }
+    public final int getAge() {
+        return this.age;
+    }
+    public A(@NotNull String name, int age) {
+        Intrinsics.checkNotNullParameter(name, "name");
+        super();
+        this.name = name;
+        this.age = age;
+    }
+}
+\end{minted}
 \begin{itemize}
 \item 如何才能调用无参构造函数呢？其实很简单，给每个参数添加一个默认值就可以了
 \end{itemize}
@@ -812,12 +1110,38 @@ class A(val name: String? = "", val age: Int? = 0)
 \end{minted}
 \begin{itemize}
 \item 只要参数都有默认值，就会默认生成 无参构造函数
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class A {
+    @Nullable
+        private final String name;
+    @Nullable
+        private final Integer age;
+    @Nullable
+        public final String getName() {
+        return this.name;
+    }
+    @Nullable
+        public final Integer getAge() {
+        return this.age;
+    }
+    public A(@Nullable String name, @Nullable Integer age) {
+        this.name = name;
+        this.age = age;
+    }
+    // $FF: synthetic method
+    public A(String var1, Integer var2, int var3, DefaultConstructorMarker var4) {
+        if ((var3 & 1) != 0) 
+            var1 = "";
+        if ((var3 & 2) != 0) 
+            var2 = 0;
+        this(var1, var2);
+    }
+}
+\end{minted}
 \end{itemize}
 
-\includegraphics[width=.9\linewidth]{./pic/eg10.png}
-
 \subsection{重载函数 @JvmOverloads}
-\label{sec-5-6}
+\label{sec-6-6}
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class A(val name: String, val age: Int)
 var a1 =  A("zhaoyanjun",10)   //编译正常
@@ -832,7 +1156,45 @@ var a2 =  A("123")    //编译失败，没有只有一个参数的构造函数
 \begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
 class A @JvmOverloads constructor(val name: String? = "", val age: Int? = 0)
 \end{minted}
-
-\includegraphics[width=.9\linewidth]{./pic/eg11.png}
+\begin{itemize}
+\item 生成的java码如下：
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public static final class A {
+    @Nullable
+        private final String name;
+    @Nullable
+        private final Integer age;
+    @Nullable
+        public final String getName() {
+        return this.name;
+    }
+    @Nullable
+        public final Integer getAge() {
+        return this.age;
+    }
+    @JvmOverloads
+        public A(@Nullable String name, @Nullable Integer age) {
+        this.name = name;
+        this.age = age;
+    }
+    // $FF: synthetic method
+    public A(String var1, Integer var2, int var3, DefaultConstructorMarker var4) {
+        if ((var3 & 1) != 0) 
+            var1 = "";
+        if ((var3 & 2) != 0) 
+            var2 = 0;
+        this(var1, var2);
+    }
+    @JvmOverloads
+        public A(@Nullable String name) {
+        this(name, (Integer)null, 2, (DefaultConstructorMarker)null);
+    }
+    @JvmOverloads
+        public A() {
+        this((String)null, (Integer)null, 3, (DefaultConstructorMarker)null);
+    }
+}
+\end{minted}
+\end{itemize}
 % Emacs 27.1 (Org mode 8.2.7c)
 \end{document}

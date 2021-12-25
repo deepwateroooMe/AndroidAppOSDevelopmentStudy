@@ -1,0 +1,8 @@
+#+latex_class: cn-article
+#+title: Android Gradle
+#+author: deepwaterooo
+
+* 【Android 修炼手册】Gradle 篇 -- Gradle 的基本使用
+- https://zhuanlan.zhihu.com/p/65249493
+- https://newtonker.github.io/2019/12/23/%E8%AF%A6%E8%A7%A3Android-Gradle%E7%94%9F%E6%88%90%E5%AD%97%E8%8A%82%E7%A0%81%E6%B5%81%E7%A8%8B/
+
