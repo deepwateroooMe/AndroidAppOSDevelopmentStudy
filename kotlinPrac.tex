@@ -1,4 +1,4 @@
-% Created 2021-12-24 Fri 21:48
+% Created 2021-12-24 Fri 23:08
 \documentclass[9pt, b5paper]{article}
 \usepackage[UTF8]{ctex}
 \usepackage{xltxtra}
@@ -611,5 +611,228 @@ fun MyObject.Companion.someExtension() {}//定义扩展函数
 \item \url{https://cloud.tencent.com/developer/article/1381584} 这个某天上午的时候再读一遍就可以了
 \item \url{http://www.4k8k.xyz/article/u013064109/89199478} 这个没读，扫一眼
 \end{itemize}
+
+
+\section{Synchronized、Volatile}
+\label{sec-5}
+\subsection{如何创建线程 Thread}
+\label{sec-5-1}
+在Kotlin 中，我们仍然可以使用 java 的语法创建一个线程
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+Thread(Runnable { 
+}).start()
+// 或者使用 Lambda 表达式
+Thread {
+}.start()
+\end{minted}
+事实上，kotlin 为我们提供了一个简单写法：
+Kotlin中可以使用thread()方法创建新的线程，指定的语句块将在新线程中运行。语法简单，十分易用。
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+fun main() {
+    thread {
+        Log.d("yanjun", "开启一个线程")
+    }
+}
+\end{minted}
+用法够简单吧。你会好奇thread \{\}到底是什么黑科技，其实很简单，语法糖而已。 其实是一个 thread() \{\} 函数
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+public fun thread(start: Boolean = true,
+                  isDaemon: Boolean = false,
+                  contextClassLoader: ClassLoader? = null,
+                  name: String? = null,
+                  priority: Int = -1,
+                  block: () -> Unit
+): Thread {
+    val thread = object : Thread() {
+        public override fun run() {
+            block()
+        }
+    }
+    if (isDaemon) thread.isDaemon = true
+    if (priority > 0) thread.priority = priority
+    if (name != null) thread.name = name
+    if (contextClassLoader != null) thread.contextClassLoader = contextClassLoader
+    if (start) thread.start()   
+    return thread
+}
+\end{minted}
+\begin{itemize}
+\item 可以看到 start 参数默认为 true ，自动执行线程。当然也可以通过 name 字段指定线程的名字：
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+fun main() {
+    //指定线程的名字，是否自动执行
+    thread(start = true, name = "my_thread") {
+    }
+}
+\end{minted}
+\subsection{如何使用 Synchronized 同步锁}
+\label{sec-5-2}
+\begin{itemize}
+\item 在Java中，给一个方法加锁 ，需要给方法加 synchronized 关键字
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public synchronized void run() {
+}
+\end{minted}
+\begin{itemize}
+\item kotlin 中没有 synchronized 关键之，取而代之的是 @Synchronized 注解
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class Util {
+    @Synchronized
+    fun main() {
+    }
+}
+\end{minted}
+\begin{itemize}
+\item 我们把 kotlin 代码反编译一下看看，
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{java}
+public final class Util {
+    public final synchronized void main() {
+    }
+}
+\end{minted}
+\begin{itemize}
+\item 可以看到 @Synchronized 注解 可以达到 Java synchronized 关键字的作用。
+\item 除此之外，kotlin 在方法内，可以使用 block 块
+\end{itemize}
+\subsubsection{例子1}
+\label{sec-5-2-1}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class Util {
+    val lock = Any()
+    fun main() {
+        synchronized(this) {
+        }
+    }
+}
+\end{minted}
+\begin{itemize}
+\item 编译成 java 如下
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/eg1.png}
+\subsubsection{例子2}
+\label{sec-5-2-2}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class Util {
+    val lock = Any()
+    fun main() {
+        synchronized(lock) {
+        }
+    }
+}
+\end{minted}
+\begin{itemize}
+\item 编译成 java 如下
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/eg2.png}
+
+\subsection{Volatile 关键字}
+\label{sec-5-3}
+\begin{itemize}
+\item 在kotlin中没有volatile关键字，但是有 @Volatile 注解
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class Util {
+    @Volatile
+    var lock = Any()
+}
+\end{minted}
+\begin{itemize}
+\item 编译成 java 如下
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/eg3.png}
+
+\subsection{默认赋值}
+\label{sec-5-4}
+\subsubsection{默认不为空}
+\label{sec-5-4-1}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A(val name: String, val age: Int)
+\end{minted}
+\begin{itemize}
+\item 代表 name、age 不能为 null ， 转换成 java , 会看到在构造函数中会对 name 字段做 空校验。
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/eg4.png}
+
+\includegraphics[width=.9\linewidth]{./pic/eg5.png}
+
+\subsubsection{可以为空}
+\label{sec-5-4-2}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A(val name: String?, val age: Int)
+\end{minted}
+\begin{itemize}
+\item 代表 name 可为 null ， 转换成 java , 会看到在构造函数中没有对 name 字段做 空校验。
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/eg6.png}
+
+\subsubsection{默认值}
+\label{sec-5-4-3}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A(val name: String? = "zhaoyanjun", val age: Int)
+\end{minted}
+\begin{itemize}
+\item name 可为空，如果name 为null， 使用默认值 “zhaoyanjun”
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/eg7.png}
+
+\subsubsection{两个默认值}
+\label{sec-5-4-4}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A(val name: String? = "zhaoyanjun", val age: Int ?= 10)
+\end{minted}
+
+\includegraphics[width=.9\linewidth]{./pic/eg8.png}
+
+\subsection{构造函数}
+\label{sec-5-5}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A(val name: String, val age: Int)
+var a1 =  A("zhaoyanjun",10)  //编译正常
+var a =  A()  //编译失败，因为没有无参构造函数
+\end{minted}
+
+\includegraphics[width=.9\linewidth]{./pic/eg9.png}
+
+
+\begin{itemize}
+\item 如何才能调用无参构造函数呢？其实很简单，给每个参数添加一个默认值就可以了
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A(val name: String? = "", val age: Int? = 0)
+\end{minted}
+\begin{itemize}
+\item 只要参数都有默认值，就会默认生成 无参构造函数
+\end{itemize}
+
+\includegraphics[width=.9\linewidth]{./pic/eg10.png}
+
+\subsection{重载函数 @JvmOverloads}
+\label{sec-5-6}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A(val name: String, val age: Int)
+var a1 =  A("zhaoyanjun",10)   //编译正常
+var a2 =  A("123")    //编译失败，没有只有一个参数的构造函数
+\end{minted}
+\begin{itemize}
+\item 如何才能自动生成重载函数呢？其实很简单
+\item 给每个参数添加默认值
+\item 标记 constructor 关键字
+\item 标记 @JvmOverloads 关键字
+\end{itemize}
+\begin{minted}[frame=lines,fontsize=\scriptsize,linenos=false]{kotlin}
+class A @JvmOverloads constructor(val name: String? = "", val age: Int? = 0)
+\end{minted}
+
+\includegraphics[width=.9\linewidth]{./pic/eg11.png}
 % Emacs 27.1 (Org mode 8.2.7c)
 \end{document}

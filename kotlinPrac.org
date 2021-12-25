@@ -463,29 +463,59 @@ fun main() {
 #+END_SRC
 用法够简单吧。你会好奇thread {}到底是什么黑科技，其实很简单，语法糖而已。 其实是一个 thread() {} 函数
 #+BEGIN_SRC kotlin
+public fun thread(start: Boolean = true,
+                  isDaemon: Boolean = false,
+                  contextClassLoader: ClassLoader? = null,
+                  name: String? = null,
+                  priority: Int = -1,
+                  block: () -> Unit
+): Thread {
+    val thread = object : Thread() {
+        public override fun run() {
+            block()
+        }
+    }
+    if (isDaemon) thread.isDaemon = true
+    if (priority > 0) thread.priority = priority
+    if (name != null) thread.name = name
+    if (contextClassLoader != null) thread.contextClassLoader = contextClassLoader
+    if (start) thread.start()   
+    return thread
+}
 #+END_SRC
-可以看到 start 参数默认为 true ，自动执行线程。当然也可以通过 name 字段指定线程的名字：
+- 可以看到 start 参数默认为 true ，自动执行线程。当然也可以通过 name 字段指定线程的名字：
+#+BEGIN_SRC kotlin
 fun main() {
-   
-   //指定线程的名字，是否自动执行
+    //指定线程的名字，是否自动执行
     thread(start = true, name = "my_thread") {
     }
 }
+#+END_SRC
 ** 如何使用 Synchronized 同步锁
-在Java中，给一个方法加锁 ，需要给方法加 synchronized 关键字
+- 在Java中，给一个方法加锁 ，需要给方法加 synchronized 关键字
+#+BEGIN_SRC java
 public synchronized void run() {
 }
-kotlin 中没有 synchronized 关键之，取而代之的是 @Synchronized 注解
+#+END_SRC
+- kotlin 中没有 synchronized 关键之，取而代之的是 @Synchronized 注解
+#+BEGIN_SRC kotlin
 class Util {
     @Synchronized
     fun main() {
     }
 }
-我们把 kotlin 代码反编译一下看看，
-
-可以看到 @Synchronized 注解 可以达到 Java synchronized 关键字的作用。
-除此之外，kotlin 在方法内，可以使用 block 块
+#+END_SRC
+- 我们把 kotlin 代码反编译一下看看，
+#+BEGIN_SRC java
+public final class Util {
+    public final synchronized void main() {
+    }
+}
+#+END_SRC
+- 可以看到 @Synchronized 注解 可以达到 Java synchronized 关键字的作用。
+- 除此之外，kotlin 在方法内，可以使用 block 块
 *** 例子1
+    #+BEGIN_SRC kotlin
 class Util {
     val lock = Any()
     fun main() {
@@ -493,9 +523,12 @@ class Util {
         }
     }
 }
-编译成 java 如下
-
+    #+END_SRC
+- 编译成 java 如下
+  
+[[./pic/eg1.png]]
 *** 例子2
+    #+BEGIN_SRC kotlin
 class Util {
     val lock = Any()
     fun main() {
@@ -503,45 +536,89 @@ class Util {
         }
     }
 }
-编译成 java 如下
+    #+END_SRC
+- 编译成 java 如下
+  
+[[./pic/eg2.png]]
+
 ** Volatile 关键字
-在kotlin中没有volatile关键字，但是有 @Volatile 注解
+- 在kotlin中没有volatile关键字，但是有 @Volatile 注解
+#+BEGIN_SRC kotlin
 class Util {
     @Volatile
     var lock = Any()
 }
-编译成 java 如下
+#+END_SRC
+- 编译成 java 如下
+  
+[[./pic/eg3.png]]
 
 ** 默认赋值
 *** 默认不为空
+    #+BEGIN_SRC kotlin
 class A(val name: String, val age: Int)
-代表 name、age 不能为 null ， 转换成 java , 会看到在构造函数中会对 name 字段做 空校验。
+    #+END_SRC
+- 代表 name、age 不能为 null ， 转换成 java , 会看到在构造函数中会对 name 字段做 空校验。
+  
+[[./pic/eg4.png]]
+
+[[./pic/eg5.png]]
 
 *** 可以为空
+    #+BEGIN_SRC kotlin
 class A(val name: String?, val age: Int)
-代表 name 可为 null ， 转换成 java , 会看到在构造函数中没有对 name 字段做 空校验。
+    #+END_SRC
+- 代表 name 可为 null ， 转换成 java , 会看到在构造函数中没有对 name 字段做 空校验。
+  
+[[./pic/eg6.png]]
 
 *** 默认值
+    #+BEGIN_SRC kotlin
 class A(val name: String? = "zhaoyanjun", val age: Int)
-name 可为空，如果name 为null， 使用默认值 “zhaoyanjun”
+    #+END_SRC
+- name 可为空，如果name 为null， 使用默认值 “zhaoyanjun”
+  
+[[./pic/eg7.png]]
 
 *** 两个默认值
+    #+BEGIN_SRC kotlin
 class A(val name: String? = "zhaoyanjun", val age: Int ?= 10)
-
+    #+END_SRC
+    
+    [[./pic/eg8.png]]
+    
 ** 构造函数
+   #+BEGIN_SRC kotlin
 class A(val name: String, val age: Int)
 var a1 =  A("zhaoyanjun",10)  //编译正常
 var a =  A()  //编译失败，因为没有无参构造函数
-如何才能调用无参构造函数呢？其实很简单，给每个参数添加一个默认值就可以了
+   #+END_SRC
+   
+   [[./pic/eg9.png]]
+   
+
+- 如何才能调用无参构造函数呢？其实很简单，给每个参数添加一个默认值就可以了
+#+BEGIN_SRC kotlin
 class A(val name: String? = "", val age: Int? = 0)
-只要参数都有默认值，就会默认生成 无参构造函数
+#+END_SRC
+- 只要参数都有默认值，就会默认生成 无参构造函数
+  
+[[./pic/eg10.png]]
 
 ** 重载函数 @JvmOverloads
+   #+BEGIN_SRC kotlin
 class A(val name: String, val age: Int)
 var a1 =  A("zhaoyanjun",10)   //编译正常
 var a2 =  A("123")    //编译失败，没有只有一个参数的构造函数
-如何才能自动生成重载函数呢？其实很简单
-给每个参数添加默认值
-标记 constructor 关键字
-标记 @JvmOverloads 关键字
+   #+END_SRC
+- 如何才能自动生成重载函数呢？其实很简单
+- 给每个参数添加默认值
+- 标记 constructor 关键字
+- 标记 @JvmOverloads 关键字
+#+BEGIN_SRC kotlin
 class A @JvmOverloads constructor(val name: String? = "", val age: Int? = 0)
+#+END_SRC
+
+[[./pic/eg11.png]]
+
+
