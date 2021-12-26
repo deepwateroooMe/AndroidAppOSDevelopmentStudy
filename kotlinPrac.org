@@ -949,3 +949,873 @@ public static final class A {
 }
     #+END_SRC    
 
+
+* Kotlin compiler errors and corrections
+** Function declaration must have a name
+- 下文java代码因为在Android Studio里反编译，出来的都是scratch里的static类，但它们原本应该不是static的才对。特此标注。
+- 下现这段代码完全没有问题,安卓中我们常这样
+#+BEGIN_SRC java
+public class CustomView extends View {
+    public CustomView(Context context) {
+        super(context);
+        init();
+    }
+    public CustomView(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        init();
+    }
+    public CustomView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        init();
+    }
+    public void init() {
+        //do something
+    }
+}
+#+END_SRC
+- 然后照葫芦画飘
+#+BEGIN_SRC kotlin
+class CustomView : View {
+    init {
+        //do something
+    }
+    constructor(ctx: Context) : super(ctx)
+    constructor(ctx: Context, attrs: AttributeSet) : super(ctx, attrs)
+    constructor(ctx: Context, attrs: AttributeSet, defStyleAttr: Int) : super(ctx, attrs, defStyleAttr)
+}
+#+END_SRC
+- 但是接下来这段，问题就来了：
+   #+BEGIN_SRC kotlin
+class Person {
+    init () { // Function declaration must have a name
+        print("Person initialized ${firstName}")
+    }
+    constructor(firstName: String) {
+        print("constructor1: ${firstName}")    
+    }
+    constructor(firstName: String,secondName: String) {
+        print("constructor2 ${firstName} ${secondName}")
+    }
+}
+   #+END_SRC
+- 怎么改正呢？
+** This type (BaseActivity) has a constructor, and thus must be initialized here
+- kotlin的继承是通过冒号:操作符来完成的，相当于java中的extends，所有被继承的类定义时需要加open操作符
+   #+BEGIN_SRC kotlin
+open class BaseActivity {
+}
+class LoginActivity : BaseActivity { // This type (BaseActivity) has a constructor, and thus must be initialized here
+}
+   #+END_SRC
+- 改下的方法是： 
+  - error agains: BaseActivity: Supertype initialization is impossible without primary constructor
+#+BEGIN_SRC kotlin
+open class BaseActivity {
+}
+class LoginActivity : BaseActivity() { // BaseActivity: Supertype initialization is impossible without primary constructor
+    constructor() : super()
+}
+#+END_SRC
+- 改下的方法是： 
+#+BEGIN_SRC kotlin
+open class BaseActivity {
+}
+class LoginActivity : BaseActivity { // BaseActivity
+    constructor() : super()
+}
+#+END_SRC
+- or 
+#+BEGIN_SRC kotlin
+open class BaseActivity {
+}
+class LoginActivity() : BaseActivity() {
+    constructor() : this () { // this: Overload resolution ambiguity. All these functions match.
+                              // public constructor LoginActivity() defined in Scratch.LoginActivity
+                              // public constructor LoginActivity() defined in Scratch.LoginActivity
+    }
+}
+#+END_SRC
+- 不过上面的this仍然报错了
+- 编译成的java文件版本为：
+#+BEGIN_SRC java
+public static class BaseActivity {
+}
+public static final class LoginActivity extends Scratch.BaseActivity {
+}
+#+END_SRC
+** @override
+- 在kotlin中只允许覆写父类中加了open描述符的方法，这一点与类继承比较相似(类定义时只有加了open操作符才允许被继承);
+- java中覆写方法时一般会加@override注解不加也可以通过编译，
+- 但是在kotlin中并且子类必须在覆写的方法上加上override，类似于java的@override
+#+BEGIN_SRC kotlin
+open class Base {
+    open fun v() {}
+    fun nv() {}
+}
+class Derived() : Base() {
+    // 覆盖
+    fun v() {} // v: 'v' hides member of supertype 'Base' and needs 'override' modifier
+}
+#+END_SRC
+- 加上override就可以正常编译了
+ #+BEGIN_SRC kotlin
+open class Base {
+    open fun v() {}
+    fun nv() {}
+}
+class Derived() : Base() {
+    override fun v() {} // 覆盖
+}
+#+END_SRC
+- kotlinc =>
+#+BEGIN_SRC java
+public class Base {
+    public void v() {
+    }
+    public final void nv() {
+    }
+}
+public final class Derived extends Base {
+    public void v() {
+    }
+}
+#+END_SRC
+
+** 类中var与val, set get幕后字段与field
+- Kotlin的类中声明可变的属性使用var关键字， 如果声明java中final的属性使用val关键字，kotlin编译的时候会为带var关键字的属性自动生成get和set方法，带val关键字的属性只会生成get方法
+#+BEGIN_SRC kotlin
+class Address {
+    val name: String = "typ0520"
+    var phone: String? = null
+    var city: String = "sh"
+
+    fun copyAddress(address: Address): Address {
+        val result = Address()       // Kotlin 中没有“new”关键字
+        result.phone = address.phone // 将调用访问器
+        result.city = address.city
+
+        print("origin: ${this.name} current: ${address.name}")
+        return result
+    }
+}
+#+END_SRC
+- kotlinc =>
+#+BEGIN_SRC java
+public final class Address {
+    @NotNull
+        private final String name = "typ0520";
+    @Nullable
+        private String phone;
+    @NotNull
+        private String city = "sh";
+
+    @NotNull
+        public final String getName() {
+        return this.name;
+    }
+
+    @Nullable
+        public final String getPhone() {
+        return this.phone;
+    }
+    public final void setPhone(@Nullable String var1) {
+        this.phone = var1;
+    }
+
+    @NotNull
+        public final String getCity() {
+        return this.city;
+    }
+    public final void setCity(@NotNull String var1) {
+        Intrinsics.checkNotNullParameter(var1, "<set-?>");
+        this.city = var1;
+    }
+
+    @NotNull
+        public final Scratch.Address copyAddress(@NotNull Scratch.Address address) {
+        Intrinsics.checkNotNullParameter(address, "address");
+        Scratch.Address result = new Scratch.Address();
+        result.phone = address.phone;
+        result.city = address.city; // <<<======
+        String var3 = "origin: " + this.name + " current: " + address.name;
+        System.out.print(var3);
+        return result;
+    }
+}
+#+END_SRC
+- 这里有两个细节
+  - setCity方法里第一行里会检查city是否为null Intrinsics.checkParameterIsNotNull(<set-?>, "<set-?>");是因为kotlin的属性默认是不允许为null的，如果某个属性允许为null，定义属性的时候需要在类型后面加上问号? swift也有可选这个特性不知道它俩谁抄谁的
+#+BEGIN_SRC kotlin
+    var phone: String? = null
+#+END_SRC    
+  - copyAddress方法里对常量name的引用依然是this.name、address.name，如果在java中对常量的引用编译以后就会被优化成值copy，也就是说
+  #+BEGIN_SRC java
+String str = address.name + " " + this.name
+  #+END_SRC
+这段会被编译成
+#+BEGIN_SRC java
+String str = "typ0520" + " " + "typ0520";
+#+END_SRC
+- 如果对默认的get方法和set方法实现不满意，kotlin也提供了机制可以干预
+#+BEGIN_SRC kotlin
+class Address {
+    var city: String = ""
+        get() {
+            return "city: ${field}"
+        }
+        set (_city) {
+            field = _city // 先别管field是啥玩意，后面会介绍
+            print("city: ${field}")
+        }
+    fun copyAddress(address: Address): Address {
+        val result = Address()      // Kotlin 中没有“new”关键字
+        result.city = address.city
+        //print("origin: ${this.name} current: ${address.name}") // 会报错：两个name
+        return result
+    }
+}
+#+END_SRC
+- kotlinc =>
+#+BEGIN_SRC java
+public static final class Address {
+    @NotNull
+        private String city = "";
+    @NotNull
+        public final String getCity() {
+        return "city: " + this.city;
+    }
+    public final void setCity(@NotNull String _city) {
+        Intrinsics.checkNotNullParameter(_city, "_city");
+        this.city = _city;
+        String var2 = "city: " + this.city;
+        System.out.print(var2);
+    }
+    @NotNull
+        public final Scratch.Address copyAddress(@NotNull Scratch.Address address) {
+        Intrinsics.checkNotNullParameter(address, "address");
+        Scratch.Address result = new Scratch.Address();
+        result.setCity(address.getCity());  // <<<======
+        return result;
+    }
+}
+#+END_SRC
+- 对比这两次编译出来的copyAddress方法中的内容，第一次对city的赋值使用的是
+#+BEGIN_SRC java
+    result.city = address.city;
+#+END_SRC
+-    第二次对city的赋值使用的是
+#+BEGIN_SRC java
+    result.setCity(address.getCity());
+#+END_SRC
+- 这点kotlin还是很严谨的，如果发现自定义了get和set的逻辑就会把直接引用属性的地方替换成调用get set方法,
+- 但是如果set{}和get{}代码块中引用了对应的属性这个替换就会出问题，我们来看下如果在set{}和get{}直接使用city字段会被编译成什么
+#+BEGIN_SRC kotlin
+class Address {
+    var city: String
+        get() {
+            return "city: ${city}"
+        }
+        set (_city) {
+            city = _city
+            print("city: ${city}")
+        }
+    fun copyAddress(address: Address): Address {
+        val result = Address()      // Kotlin 中没有“new”关键字
+        result.city = address.city
+        //print("origin: ${this.name} current: ${address.name}") // 会报错：两个name
+        return result
+    }
+}
+#+END_SRC
+- kotlinc =>
+#+BEGIN_SRC java
+public static final class Address {
+    @NotNull
+        public final String getCity() {
+        return "city: " + this.getCity(); // <<==
+    }
+    public final void setCity(@NotNull String _city) {
+        Intrinsics.checkNotNullParameter(_city, "_city");
+        this.setCity(_city); // <<==
+        String var2 = "city: " + this.getCity();
+        System.out.print(var2);
+    }
+    @NotNull
+        public final Scratch.Address copyAddress(@NotNull Scratch.Address address) {
+        Intrinsics.checkNotNullParameter(address, "address");
+        Scratch.Address result = new Scratch.Address();
+        result.setCity(address.getCity());
+        return result;
+    }
+}
+#+END_SRC
+- 很明显setCity和getCity中都出现了死循环，kotlin为了解决这个问题提供了一个叫做field的幕后字段,仅在set{} get{}代码块中代替当前的属性
+** 幕后字段和field
+*** 什么是幕后字段？
+- 要理解这个概念，我们得再深一步探究：getter 和 setter 一定要与某个属性相关联吗？ 答案当然是否定的。getter 是从对象中获取特定的值，这个值完全可能是每次访问时临时计算的，也可能是从其他对象那里得到的；setter 也可能是在设置其他对象的属性。事实上，Kotlin 只会为满足特定条件的类属性添加 JVM 意义上的类属性。
+- 我们为 Person 添加一个 nameHash 属性：
+#+BEGIN_SRC kotlin
+class Person(val name: String) {
+  val nameHash get() = name.hashCode()
+}
+#+END_SRC
+- 这个 nameHash 属性并没有初始化，只定义了一个 getter 方法。这个属性在编译之后就会消失，只留下一个 getNameHash() 方法：
+#+BEGIN_SRC kotlin
+public final int getNameHash() {
+    return name.hashCode();
+}
+#+END_SRC
+- 我们可以这样说：「nameHash 是一个没有幕后字段的属性」，它作为类属性只存在于 Kotlin 代码中，并没有一个真正的 JVM 类属性与之对应。怎么给 nameHash 添加一个幕后字段呢？Kotlin 并不允许我们手动添加，但会自动为满足条件的类属性添加幕后字段：
+- 使用默认 getter / setter 的属性，一定有幕后字段。对于 var 属性来说，只要 getter / setter 中有一个使用默认实现，就会生成幕后字段；
+- 在自定义 getter / setter 中使用了 field 的属性，一定有幕后字段。这个 field 就是我们访问幕后字段的「关键字」，它与 Lambda 表达式中的 it 类似，并不是一个真正的关键字，只在特定的语句内有特殊的意思，在其他语句内都不是关键字。
+- 比如，我们可以写：
+#+BEGIN_SRC kotlin
+class Person(val name: String, val gender: Gender, age: Int) {
+    val age = age
+        get() = when (gender) {
+            Gender.FEMALE -> (field * 0.8).toInt()
+            Gender.MALE -> field
+        }
+}
+enum class Gender {
+    MALE, FEMALE
+}
+#+END_SRC
+- 我们这里通过幕后字段实现了 age 属性根据性别的不同行为。(´･ω･`)
+- 虽然我们为 age 属性自定义了 getter，但因为在 getter 中用了 field 关键字，Kotlin 就会为我们生成一个 private final int age 属性作为幕后字段。这个幕后字段同时需要初始化，我们就用主构造函数中传入的 age 来初始化它。
+*** 幕后属性大用处
+- 很多时候，我们希望定义这样的属性：
+- 对外表现为 val 属性，只能读不能写；
+- 在类内部表现为 var 属性，也就是说只能在类内部改变它的值。
+- 这在 Kotlin 集合框架中应用十分广泛。比如 Collection 接口定义的 size 属性就是一个 val 属性，对外只读；但对于一个 MutableCollection 来说，size 的值在内部一定是能改变的，也只允许内部修改它。我们可以这样设计：
+#+BEGIN_SRC kotlin
+override val size get() = _size
+private var _size: Int = 0
+#+END_SRC
+- 我们在内部增删元素时，改动的就是 _size 属性的值；外部只能访问到 size 属性，不能修改 _size 的值。这里的 _size 就叫做「幕后属性」。
+- kotlin.collections.AbstractMap.kt 中也用到了幕后属性，我们看一下:
+#+BEGIN_SRC kotlin
+private @Volatile var _keys: Set<K>? = null
+override val keys: Set<K> get() {
+    if (_keys == null) {
+        _keys = object : AbstractSet<K>() {
+            override operator fun contains(element: K): Boolean = containsKey(element)
+            override operator fun iterator(): Iterator<K> {
+                val entryIterator = entries.iterator()
+                return object : Iterator<K> {
+                    override fun hasNext(): Boolean = entryIterator.hasNext()
+                    override fun next(): K = entryIterator.next().key
+                }
+            }
+            override val size: Int get() = this@AbstractMap.size
+        }
+    }
+    return _keys!!
+}
+#+END_SRC
+- keys 是对外的 API，只读且非空，每次访问都被委托到访问 _keys 属性上，_keys 属性在内部可以改动也可以为 null，给我们带来方便。
+- 在设计类属性时，可以通过幕后属性灵活地实现功能。
+** 接口
+- kotlin中接口的方法是允许有默认实现的，但是java从1.8才开始支持接口默认实现，那么kotlin编译出来的class只能在1.8上运行？显然不太可能，我们来看下kotlin是怎么处理这个事情的
+#+BEGIN_SRC kotlin
+interface MyInterface {
+    fun bar()
+    fun foo() {
+        // 可选的方法体
+        print("MyInterface foo")
+        this.bar()
+    }
+}
+class Child : MyInterface {
+    override fun bar() {
+        // 方法体
+    }
+}
+#+END_SRC
+-  执行kotlinc以后会生成三个class文件
+#+BEGIN_SRC java
+ Child.class  'MyInterface$DefaultImpls.class'   MyInterface.class
+#+END_SRC
+- 编成java
+#+BEGIN_SRC java
+public interface MyInterface {
+    void bar();
+    void foo();
+    public static final class DefaultImpls { // static
+        public static void foo(@NotNull Scratch.MyInterface $this) {
+            String var1 = "MyInterface foo";
+            System.out.print(var1);
+            $this.bar();
+        }
+    }
+}
+public static final class Child implements Scratch.MyInterface {
+    public void bar() {
+    }
+    public void foo() {
+        Scratch.MyInterface.DefaultImpls.foo(this);
+    }
+}
+#+END_SRC
+- kotlinc编译的时候如果发现接口中的某个方法有默认实现，就会生成一个以接口名+$+DefaultImpls方式命名的类，然后会创建一个同名的静态方法以容纳接口中对应方法的code，并且这个静态方法的参数列表中会多加一个名字叫$this类型是相应接口的变量，这样子类中这个方法的实现就可以直接调用这个静态方法了
+- 如果一个类实现了多个接口，就有可能出现接口中方法冲突的问题，可以通过super<XXX>语法来选择对应父类的方法
+#+BEGIN_SRC kotlin
+interface A {
+    fun foo() { print("A") }
+    fun bar()
+}
+interface B {
+    fun foo() { print("B") }
+    fun bar() { print("bar") }
+}
+class D : A, B {
+    override fun foo() {
+        super<A>.foo()
+        super<B>.foo()
+    }
+    override fun bar() {
+        super<B>.bar()
+    }
+}
+#+END_SRC
+- kotlinc =>
+#+BEGIN_SRC java
+public interface A {
+    void foo();
+    void bar();
+    public static final class DefaultImpls {
+        public static void foo(@NotNull Scratch.A $this) {
+            String var1 = "A";
+            System.out.print(var1);
+        }
+    }
+}
+public interface B {
+    void foo();
+    void bar();
+    public static final class DefaultImpls {
+        public static void foo(@NotNull Scratch.B $this) {
+            String var1 = "B";
+            System.out.print(var1);
+        }
+        public static void bar(@NotNull Scratch.B $this) {
+            String var1 = "bar";
+            System.out.print(var1);
+        }
+    }
+}
+public static final class D implements Scratch.A, Scratch.B {
+    public void foo() {
+        Scratch.A.DefaultImpls.foo(this);
+        Scratch.B.DefaultImpls.foo(this);
+    }
+    public void bar() {
+        Scratch.B.DefaultImpls.bar(this);
+    }
+}
+#+END_SRC    
+** 扩展
+- kotlin提供了一种类似于objective-c category的扩展功能,是继承的一个有力补充，作用主要有下面这两点
+*** 1、代替一些在java中需要util类辅助来完成的操作举个例子我们需要对ArrayList中的元素按位置做交换，在java中通常我们会写一个静态方法放在某个util类中
+    #+BEGIN_SRC java
+//Utils.java
+public class Utils {
+    public static void swap(List<Integer> list,int index1,int index2) {
+        int idx1Val = list.get(idx1);
+        int idx2Val = list.get(idx2);
+        list.remove(idx1);
+        list.add(idx1, idx2Val);
+        list.remove(idx2);
+        list.add(idx2, idx1Val);
+    }
+}
+    #+END_SRC
+- 在kotlin中可以这样写
+#+BEGIN_SRC kotlin
+// extension.kt
+fun MutableList<Int>.swap(idx1: Int, idx2: Int) {
+    val tmp = this[idx1]
+    this[idx1] = this[idx2]
+    this[idx2] = tmp
+}
+fun hello() {
+    val list = mutableListOf(1, 2, 3)
+    list.swap(0, 2) // “swap()”内部的“this”得到“l”的值
+}
+#+END_SRC
+- 可以当做MutableList直接有这个swap这个方法，这样比Util类用起来更加符合面向对象的思维
+- 我们来编译下这段kotlin代码
+#+BEGIN_SRC kotlin
+public final void swap(@NotNull List $this$swap, int idx1, int idx2) {
+    Intrinsics.checkNotNullParameter($this$swap, "$this$swap");
+    int tmp = ((Number)$this$swap.get(idx1)).intValue();
+    $this$swap.set(idx1, $this$swap.get(idx2));
+    $this$swap.set(idx2, tmp);
+}
+public final void hello() {
+    List list = CollectionsKt.mutableListOf(new Integer[]{1, 2, 3});
+    ((Scratch)this).swap(list, 0, 2);
+}
+#+END_SRC
+- 可以看出编译成class后还是使用静态方法实现的，并不是真正的改变了List的类结构(如果改变了类结构应该是list.swap(0, 2))
+*** 2、给一些方法设置别名
+- 玩过java的肯定都知道Object中的toString方法，如果你以前是玩objective-c的应该还是习惯叫description，那么你就可以通过扩展来给toString设置别名
+#+BEGIN_SRC kotlin
+fun Any.description() : String {
+    return this.toString()
+}
+fun hello() {
+    val str = "xxxx"
+    str.description()
+}
+#+END_SRC
+- 处于安全性的考虑扩展的方法是不允许和类中已有的方法冲突的，同时也不允许多个跟对同一个类的扩展中包含相同的方法，来看下两个例子
+#+BEGIN_SRC java
+class C {
+    fun foo() { println("member") }
+}
+fun C.foo() { // foo: Extension is shadowed by a member: public final fun foo(): Unit
+    println("extension") 
+}
+#+END_SRC
+- kotlin =>
+#+BEGIN_SRC java
+tmp.kt:4:7: warning: extension is shadowed by a member: public final fun foo(): Unit
+fun C.foo() { println("extension") }
+#+END_SRC
+#+BEGIN_SRC kotlin
+class C {
+    fun foo() { println("member") }
+}
+fun C.foo2() { println("foo2") }
+fun C.foo2() { println("foo2-2") }
+#+END_SRC
+- kotlin =>
+  #+BEGIN_SRC java
+kotlinc -version
+info: kotlinc-jvm 1.6.0 (JRE 16.0.2+7-67)
+tmp.kt:4:1: error: conflicting overloads: public fun C.foo2(): Unit defined in root package in file tmp.kt, public fun C.foo2(): Unit defined in root package in file tmp.kt
+fun C.foo2() { println("foo2") }
+^
+tmp.kt:5:1: error: conflicting overloads: public fun C.foo2(): Unit defined in root package in file tmp.kt, public fun C.foo2(): Unit defined in root package in file tmp.kt
+fun C.foo2() { println("foo2-2") }
+^
+  #+END_SRC
+- 上面应该是旧版上才会出现这种问题，比如我的ubuntu 18 kotlin -version 1.6.0
+#+BEGIN_SRC java
+#+END_SRC
+- 用新版的Android studio 1.6.10就不会再报错
+- kotlin允许在一个类内部为另一个类声明扩展
+#+BEGIN_SRC kotlin
+class D {
+    fun bar() {
+        println("D.bar")
+    }
+    fun hello() {
+        println("D hello")
+    }
+}
+class C {
+    fun baz() {
+        println("C.baz")    
+    }
+    fun hello() {
+        println("C hello")
+    }
+    fun D.foo() {
+        bar()   // 调用 D.bar
+        baz()   // 调用 C.baz
+        // 重点看这个这里
+        hello()
+    }
+    fun caller(d: D) {
+        d.foo()   // 调用扩展函数
+    }
+}
+fun main() {
+    val d = D()
+    val c = C()
+    c.caller(d)
+}
+#+END_SRC
+- 在D.foo扩展方法的作用域里存在两个this，一个是扩展声明所在的类C、一个是被扩展类D的。调用bar方法和baz方法没什么问题，但是hello方法既存在于C又存在于D，那么kotlin会选择调用那个hello方法呢(这段代码是可以通过编译的)？我们来编译运行下看下输出
+#+BEGIN_SRC java
+kotlinc extension5.kt -include-runtime -d extension5.jar;java -jar extension5.jar=>
+D.bar
+C.baz
+D hello // <<<====
+#+END_SRC
+- 从输出的日志上可以看出调用的是被扩展类D的hello方法，我们再看下extension5.jar里的class内容
+#+BEGIN_SRC java
+public static final class C {
+    public final void baz() {
+        String var1 = "C.baz";
+        System.out.println(var1);
+    }
+    public final void hello() {
+        String var1 = "C hello";
+        System.out.println(var1);
+    }
+    public final void foo(@NotNull Scratch.D $this$foo) {
+        Intrinsics.checkNotNullParameter($this$foo, "$this$foo");
+        $this$foo.bar();
+        this.baz();
+        $this$foo.hello();
+    }
+    public final void caller(@NotNull Scratch.D d) {
+        Intrinsics.checkNotNullParameter(d, "d");
+        this.foo(d);
+    }
+}
+#+END_SRC
+- 如果想调用C类的hello方法，可以使用this@C.hello()
+#+BEGIN_SRC kotlin
+class D {
+    fun hello() {
+        println("D hello")
+    }
+}
+class C {
+    fun hello() { println("C hello") }
+    fun D.foo() {
+        this@C.hello() 
+    }
+    fun caller(d: D) { d.foo() }
+}
+fun main(args: Array<String>) {
+    val d = D()
+    val c = C()
+    c.caller(d)
+}
+#+END_SRC
+- =>
+#+BEGIN_SRC java
+public static final class C {
+    public final void hello() {
+        String var1 = "C hello";
+        System.out.println(var1);
+    }
+    public final void foo(@NotNull Scratch.D $this$foo) {
+        Intrinsics.checkNotNullParameter($this$foo, "$this$foo");
+        this.hello();
+    }
+    public final void caller(@NotNull Scratch.D d) {
+        Intrinsics.checkNotNullParameter(d, "d");
+        this.foo(d);
+    }
+}
+#+END_SRC
+- 除了可以扩展方法，kotlin还允许扩展属性
+#+BEGIN_SRC kotlin
+val <T> List<T>.lastIndex: Int
+    get() = size - 1
+fun main(args: Array<String>) {
+    val list = listOf(1,2,3,4)
+    println(list.lastIndex)
+}
+#+END_SRC
+- =>
+#+BEGIN_SRC java
+kotlinc extension7.kt -include-runtime -d extension7.jar;java -jar extension7.jar
+3
+public final int getLastIndex(@NotNull List $this$lastIndex) {
+    Intrinsics.checkNotNullParameter($this$lastIndex, "$this$lastIndex");
+    return $this$lastIndex.size() - 1;
+}
+public final void main(@NotNull String[] args) {
+    Intrinsics.checkNotNullParameter(args, "args");
+    List list = CollectionsKt.listOf(new Integer[]{1, 2, 3, 4});
+    int var3 = ((Scratch)this).getLastIndex(list);
+    System.out.println(var3);
+}
+#+END_SRC
+- 可以看出所谓的属性扩展和方法扩展一样都是用静态方法实现的
+** 数据类
+- 在java开发中充斥着大量的model类，除了属性定义其它的基本上都是一些模板代码，虽然ide能帮我们生成这些代码，看着还是很不爽的，kotlin提供了一中叫数据类的玩意，编译器自动从主构造函数中声明的所有属性导出以下成员：
+  - equals()/hashCode()
+  - toString() 格式是 "User(name=John, age=42)"
+  - componentN() 函数 按声明顺序对应于所有属性
+  - copy() 函数
+#+BEGIN_SRC kotlin
+data class User(val name: String, val age: Int)
+#+END_SRC
+- kotlinc =>
+#+BEGIN_SRC java
+public static final class User {
+    @NotNull
+        private final String name;
+    private final int age;
+    @NotNull
+        public final String getName() {
+        return this.name;
+    }
+    public final int getAge() {
+        return this.age;
+    }
+    public User(@NotNull String name, int age) {
+        Intrinsics.checkNotNullParameter(name, "name");
+        super();
+        this.name = name;
+        this.age = age;
+    }
+    @NotNull
+        public final String component1() {
+        return this.name;
+    }
+    public final int component2() {
+        return this.age;
+    }
+    @NotNull
+        public final Scratch.User copy(@NotNull String name, int age) {
+        Intrinsics.checkNotNullParameter(name, "name");
+        return new Scratch.User(name, age);
+    }
+    // $FF: synthetic method
+    public static Scratch.User copy$default(Scratch.User var0, String var1, int var2, int var3, Object var4) {
+        if ((var3 & 1) != 0) 
+            var1 = var0.name;
+        if ((var3 & 2) != 0) 
+            var2 = var0.age;
+        return var0.copy(var1, var2);
+    }
+    @NotNull
+        public String toString() {
+        return "User(name=" + this.name + ", age=" + this.age + ")";
+    }
+    public int hashCode() {
+        String var10000 = this.name;
+        return (var10000 != null ? var10000.hashCode() : 0) * 31 + Integer.hashCode(this.age);
+    }
+    public boolean equals(@Nullable Object var1) {
+        if (this != var1) {
+            if (var1 instanceof Scratch.User) {
+                Scratch.User var2 = (Scratch.User)var1;
+                if (Intrinsics.areEqual(this.name, var2.name) && this.age == var2.age) {
+                    return true;
+                }
+            }
+            return false;
+        } else 
+            return true;
+    }
+}
+#+END_SRC
+** 嵌套类
+- 与java类似kotlin的类定义也是允许嵌套的，我们分别看下java中的静态内部类、内部类、匿名内部类对应kotlin的语法
+*** 静态内部类
+    #+BEGIN_SRC kotlin
+class Outer {
+    private val bar: Int = 1
+    class Nested {
+        fun foo() = 2
+    }
+}
+val demo = Outer.Nested().foo() // == 2
+    #+END_SRC
+- java
+#+BEGIN_SRC java
+private final int demo = (new Scratch.Outer.Nested()).foo();
+public final int getDemo() {
+    return this.demo;
+}
+public final class Outer {
+    private final int bar = 1;
+    public static final class Nested {
+        public final int foo() {
+            return 2;
+        }
+    }
+}
+#+END_SRC
+*** 内部类
+    #+BEGIN_SRC kotlin
+class Outer {
+    private val bar: Int = 1
+    fun hello() {
+        print("hello")
+    }
+    inner class Inner {
+        // fun foo() -> Int { // 这里lambda表达式不知道哪里出错了，报错
+        fun foo(): Int {
+            return bar
+        }
+        fun callHello() {
+            hello()
+        }
+    }
+}
+val demo = Outer().Inner().foo() // == 1
+    #+END_SRC
+- kotlinc =>
+#+BEGIN_SRC java
+private final int demo = (new Scratch.Outer().new Inner()).foo();
+public final int getDemo() {
+    return this.demo;
+}
+public static final class Outer {
+    private final int bar = 1;
+    public final void hello() {
+        String var1 = "hello";
+        System.out.print(var1);
+    }
+    public final class Inner {
+        public final int foo() {
+            return Outer.this.bar;
+        }
+        public final void callHello() {
+            Outer.this.hello();
+        }
+    }
+}
+#+END_SRC
+*** 匿名内部类
+    #+BEGIN_SRC kotlin
+class View {
+    fun setOnClickListener(listener: OnClickListener) {
+        print("${listener}")
+    }
+    class OnClickListener {
+        fun onClick(view: View) {
+        }
+    }
+}
+fun hello() {
+    val v = View()
+    v.setOnClickListener(object: View.OnClickListener() {
+                             override fun onClick(view: View) {
+                             }
+    })
+}
+    #+END_SRC
+- kotlinc => 这个应该是需要放到一个安卓项目环境里去反编，暂时抄一下版主的代码，改天再验证一下
+#+BEGIN_SRC java
+//View.class
+public class View {
+    public final void setOnClickListener(@NotNull View.OnClickListener listener) {
+        Intrinsics.checkParameterIsNotNull(listener, "listener");
+        String str = String.valueOf(listener);
+        System.out.print(str);
+    }
+    public static class OnClickListener {
+        public void onClick(@NotNull View view) {
+            Intrinsics.checkParameterIsNotNull(view, "view");
+        }
+    }
+}
+public final class Nested_classes3Kt {
+    public static final void hello() {
+        View v = new View();
+        v.setOnClickListener((View.OnClickListener)new View.OnClickListener() {
+                public void onClick(@NotNull View view) {
+                    Intrinsics.checkParameterIsNotNull(view, "view");
+                }
+            });
+    }
+}
+public final class Nested_classes3Kt$hello$1 extends View.OnClickListener {
+    public void onClick(@NotNull View view) {
+        Intrinsics.checkParameterIsNotNull(view, "view");
+    }
+}
+#+END_SRC
+- 匿名类编译的时候会生成一个子类容纳被覆盖的方法以及增加的属性，因此类定义的时候必须要加上open。
