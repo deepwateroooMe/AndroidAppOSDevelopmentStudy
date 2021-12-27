@@ -1,0 +1,725 @@
+#+latex_class: cn-article
+#+title: MVVM
+#+author: deepwaterooo
+
+* view binding vs data binding
+** 使用viewBinding能为我们带来什么好处
+*** 使用viewBinding比传统findViewById的好处
+- 1.类型安全：不用担心出现类型转换的错误
+- 2.写法方便，不用写很多声明的代码，使得Activity里面的代码更加整洁
+*** 使用viewBinding比synthetic的好处
+- synthetic算法是android提供的一个插件实现的。通过在build.gradle添加 apply plugin: 'kotlin-android-extensions'就可以引用。
+#+BEGIN_SRC kotlin
+ import androidx.appcompat.app.AppCompatActivity
+ import android.os.Bundle
+ import kotlinx.android.synthetic.main.activity_synthetic.*
+ class SyntheticActivity : AppCompatActivity() {
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         setContentView(R.layout.activity_synthetic)
+         //直接使用synthetic_button就可以使用控件
+         synthetic_button.text = "hello"
+     }
+ }
+#+END_SRC
+- 但是这个插件已经不被推荐使用了。
+- 既然这个插件这么好用，为什么会被谷歌不推荐使用呢？谷歌也没有写明。我们直接将上面的代码反编译成java代码看看。得到如下代码
+#+BEGIN_SRC java
+package com.eebbk.mvvmlearn;
+import android.os.Bundle;
+import android.view.View;
+import android.widget.Button;
+import androidx.appcompat.app.AppCompatActivity;
+import com.eebbk.mvvmlearn.R.id;
+import java.util.HashMap;
+import kotlin.Metadata;
+import kotlin.jvm.internal.Intrinsics;
+import org.jetbrains.annotations.Nullable;
+
+public final class SyntheticActivity extends AppCompatActivity {
+    // 新增一个成员变量
+    private HashMap _$_findViewCache;
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        this.setContentView(1300109);
+        Button var10000 = (Button)this._$_findCachedViewById(id.synthetic_button);
+        Intrinsics.checkExpressionValueIsNotNull(var10000, "synthetic_button");
+        var10000.setText((CharSequence)"hello");
+    }
+    // 通过命名一个奇怪的函数名来避免与用户声明的函数重复，并通过这个函数找到我们的view
+    public View _$_findCachedViewById(int var1) {
+        if (this._$_findViewCache == null) 
+            this._$_findViewCache = new HashMap();
+        View var2 = (View)this._$_findViewCache.get(var1);
+        if (var2 == null) {
+            var2 = this.findViewById(var1);
+            this._$_findViewCache.put(var1, var2);
+        }
+ ​        return var2;
+    }
+ ​    public void _$_clearFindViewByIdCache() {
+         if (this._$_findViewCache != null) 
+             this._$_findViewCache.clear();
+     }
+}
+#+END_SRC
+- 可以看到这里是新增一个成员变量来帮助我们实现findViewById的功能。这无形中增加了我们的内存开销。这是其中一点，还有一点就是它提高了我们程序的不稳定性。使用过这个控件的同事都知道。
+- 他通过引入import kotlinx.android.synthetic.main.activity_synthetic.* 来直接使用控件id使用控件。那么就会存在一个问题，如果不小心引入其他布局，使用了其他布局的控件，那么这个错误不会在编译时期被发现。是一个运行时的错误。这种运行时的错误就使得我们的程序变得不稳定。特别是一旦项目复杂起来，存在很多命名一样的控件，这更加会增大我们程序的不稳定性。
+
+
+** data binding
+- 要想再项目中使用databinding，还是需要在模块的build.gradle进行如下配置
+#+BEGIN_SRC groovy
+android {
+    dataBinding {
+        enabled = true
+    }
+}
+#+END_SRC
+*** 基础入门
+首先布局文件修改做一定的更改。布局文件以layout为根标签。其中data标签就是我们的数据元素，接着就是我们的视图元素。
+#+BEGIN_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--数据元素-->
+  <data>
+    <variable
+        name="user"
+        type="com.eebbk.mvvmlearn.bean.User" />
+  </data>
+
+  <!--视图元素-->
+  <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="match_parent">
+    <TextView
+        android:id="@+id/user_name"
+        android:text="@{user.userName}"
+        android:layout_width="200px"
+        android:layout_height="70px"/>
+  </LinearLayout>
+</layout>
+#+END_SRC
+- 可以使用快捷键的方式快速创建databinding布局。在布局文件中使用Alt+Enter快捷键，然后弹出下面弹窗，点击Convert to data binding layout就可以快速实现转换。
+#+BEGIN_SRC kotlin
+ data class User(var userName:String = "") {
+ }
+ class DataActivity : AppCompatActivity() {
+     lateinit var dataBindingActivity:ActivityDataBinding
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         // 使用DataBindingUtil将布局与activity进行绑定
+         dataBindingActivity = DataBindingUtil.setContentView(this,R.layout.activity_data)
+         val user = User("hello")
+         // 给布局文件中的数据元素赋值
+         dataBindingActivity.user = user
+         // user.userName = "hello world"
+     }
+ }
+#+END_SRC
+- 以上就是databinding的最基本的使用。看到这里有人就会有疑问了，如果我改变了user变量的userName属性，那么控件的属性值会不会变呢？答案是：不会变。
+- 那如果要控件的属性值发生变化，我们应该怎么做呢？下面我们就来讲讲单向数据绑定。
+*** 单向数据绑定
+**** BaseObservable
+- 我们希望数据变更之后，UI会即时刷新，这时候就需要借助Observable来实现这个功能了。我们直接通过一个例子一步步讲解这个单向数据绑定。
+#+BEGIN_SRC kotlin
+// 我们的实体类继承了BaseObservable
+class User():BaseObservable() {
+    @get:Bindable
+    var userName:String = ""
+        set(value) {
+            field = value
+            // BR 是编译阶段生成的一个类，功能与 R.java 类似,我们可以通过notifyPropertyChanged来更新这个属性关联的视图。这一步一定要执行。
+            notifyPropertyChanged(BR.userName)
+        }
+}
+#+END_SRC
+- BaseObservable为我们提供了两个方法，一个是notifyPropertyChanged(int fieldId) 另一个是notifyChange()
+- notifyPropertyChanged(int fieldId)这个值是刷新我们这个类实体类的某一个属性，notifyChange()会刷新我们这个实体类的所有属性。
+#+BEGIN_SRC xml
+ <?xml version="1.0" encoding="utf-8"?>
+ <layout xmlns:android="http:// schemas.android.com/apk/res/android">
+     <data>
+         <variable
+             name="user"
+             type="com.eebbk.mvvmlearn.bean.User" />
+     </data>
+ ​
+     <LinearLayout
+         android:layout_width="match_parent"
+         android:layout_height="match_parent">
+         <TextView
+             android:id="@+id/user_name"
+             android:text="@{user.userName}"
+             android:layout_width="200px"
+             android:layout_height="70px"/>
+         <Button
+             android:text="换名字"
+             android:id="@+id/change_name"
+             android:layout_width="wrap_content"
+             android:layout_height="wrap_content"/>
+ ​
+     </LinearLayout>
+ </layout>
+#+END_SRC
+- kotlin中
+#+BEGIN_SRC kotlin
+ class DataActivity : AppCompatActivity() {
+     lateinit var dataBindingActivity:ActivityDataBinding
+     override fun onCreate(savedInstanceState: Bundle?) {
+         super.onCreate(savedInstanceState)
+         dataBindingActivity = DataBindingUtil.setContentView(this,R.layout.activity_data)
+         val user = User()
+         user.userName = "hello"
+         dataBindingActivity.user = user
+         dataBindingActivity.changeName.setOnClickListener{
+             // 通过重新设置user的userName，这时候UI也会及时刷新。
+             user.userName = "hello world"
+         }
+     }
+ }
+#+END_SRC
+**** ObservableField
+- 以上就是BaseObservable的用法，这种用法步骤确实比较繁琐。所以我们还有一个ObservableField类。这个类的也是基于BaseObservable封装的一个类，只不过他的用法比较简单。
+#+BEGIN_SRC kotlin
+ class User2 {
+     var userName:ObservableField<String> = ObservableField("")
+ }
+ dataBindingActivity.changeName.setOnClickListener {
+     // 注意，这里需用通过set函数来更改userName的值。通过user2.userName = ObservableField("")这种方式是不能更新UI的，具体原因就是ObservableField只有执行了set函数，才会去执行notifyChange()函数。
+     user2.userName.set("你好世界")
+ }
+#+END_SRC
+*** 双向绑定
+- 单向绑定就是数据改变了，所绑定的ui视图也会及时刷新。那么有没有UI里面的数据变化了，我们的数据也会随即发生变化呢？答案肯定是有的。那怎么实现这种视图里面的数据变化，我们的程序的数据也会发生变化呢？这时候就需要使用双向绑定了。我们知道单向绑定的xml文件中是通过android:text="@{user.userName}"来进行赋值的。那么双向绑定需要改变一下赋值方式，变为android:text="@={user.userName}"就可以实现双向绑定。当然在JetPack中会有LiveData这种数据结构帮助我们更加实现简单实现Databinding。
+- MVVM是一种设计思想，实现了数据的双向绑定，当改变了model的数据，view会自动更新；改变view时，model的数据也会自动更新。（它是在单向绑定的基础上，给可输入元素input、textare等添加了input/change事件，通过触发事件来动态修改model）【v-model语法糖】
+- ViewModel的实现原理是通过数据劫持（Object.defineProperty）【响应式】
+**** 事件绑定
+- 事件绑定就是设置变量绑定的是回调接口。一般用于事件绑定的有
+#+BEGIN_SRC java
+onClick，
+onLongClick
+afterTextChanged
+onTextChanged
+#+END_SRC
+- 一下是一个登陆的例子
+#+BEGIN_SRC xml
+ <?xml version="1.0" encoding="utf-8"?>
+ <layout  xmlns:android="http:// schemas.android.com/apk/res/android">
+     <data>
+         <variable
+             name="userInfo"
+             type="com.eebbk.mvvmlearn.bean.UserInfo" />
+ ​
+         <variable
+             name="loginPresenter"
+             type="com.eebbk.mvvmlearn.LoginPresenter" />
+     </data>
+     <LinearLayout
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
+     android:orientation="vertical">
+         <EditText
+             android:afterTextChanged = "@{loginPresenter.setLoginName}"
+             android:id="@+id/login_name"
+             android:layout_width="match_parent"
+             android:layout_height="100px"/>
+         <EditText
+             android:afterTextChanged = "@{loginPresenter.setLoginPassword}"
+             android:id="@+id/login_password"
+             android:layout_width="match_parent"
+             android:layout_height="100px"/>
+         <Button
+             android:onClick="@{()->loginPresenter.login(userInfo)}"
+             android:text="登录"
+             android:id="@+id/login_button"
+             android:layout_width="match_parent"
+             android:layout_height="100px"/>
+ ​
+     </LinearLayout>
+ </layout>
+#+END_SRC
+- kotlin中
+#+BEGIN_SRC kotlin
+class LoginPresenter(private val userInfo: UserInfo,
+                     private val binding: ActivityLoginBinding) {
+    // 处理登录的回调，点击登录会回调到这里
+    fun login(userInfo: UserInfo){
+        Log.d("hch",userInfo.toString())
+    }
+    // 处理回调，用户名发生变化时会回调到这里
+    fun setLoginName(loginName:Editable){
+        userInfo.loginName = loginName.toString()
+        binding.userInfo = userInfo
+    }
+    // 处理回调，密码发生变化时候会回调到这里
+    fun setLoginPassword(loginPassword:Editable){
+        userInfo.loginPassword = loginPassword.toString()
+        binding.userInfo = userInfo
+    }
+}
+#+END_SRC
+- 以上就是事件绑定了，当然这个登录的例子也可以通过双向绑定的方式实现，而且实现起来更加的简单。
+
+*** 使用data binding
+- 通过对源码的分析可以得知，无论是使用ObservableField还是使用LivaData 最终都会在本地属性观察者mLocalFieldObservers中注册监听，其实数据绑定库的使用非常的灵活，除了在上面提到的使用方式，还有更多的使用方式，甚至可以在布局XML中进行逻辑判断，事件绑定，布局管理器设定，列表子布局设定等，可以说是无所不能。
+- 其实正是这种灵活，也遭受了很多使用者的诟病，说很多逻辑写在XML中，调试困难，维护麻烦，更有甚者，跳出来直接得出DataBinding不能用的结论，这就好比说菜刀能伤人就说菜刀不好一样。
+- 有问题的不是工具，而是使用工具的方式！
+- 为了给DataBinding正名，因此总结一些使用原则，分享如下。
+  - 原则一：能不用可观察变量尽量不要用。
+  - 原则二：多个变量会同时改变的情况尽量使用一个可观察变量进行包装。
+  - 原则三：data标签能少导入一个变量尽量少导入。
+  - 原则四：XML布局尽量少或者不使用过多的逻辑判断。
+  - 原则五：避免对一个数据进行多次绑定（有人通过这种方式刷新界面，这个其实和DataBinding的初衷违背了）。
+  - 原则六：严格遵守上述五条。
+- 基于以上六条使用原则，目前经过多次迭代，总结出了满足绝大多数场景的MVVM。
+- 第一步，整个XML使用统一的格式，无论是普通的布局，还是列表的Item布局，抑或是include的布局，都是使用同样的方式，这样就可以使用AndroidStudio的File Templates模版功能创建布局文件了。
+#+BEGIN_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android">
+   <data>
+<!-- 用于控制显示隐藏导入此类-->
+       <import type="android.view.View" />
+<!-- 用于点击事件绑定-->
+       <variable name="onClickListener" type="android.view.View.OnClickListener" />
+<!-- 用于视图数据绑定-->
+       <variable name="viewData" type="com.example.UserViewData"/>
+   </data>
+<!-- 原布局开始-->
+     <LinearLayout 
+       android:orientation="vertical"
+       android:layout_width="match_parent"
+       android:layout_height="match_parent">
+       <TextView android:id="@+id/helloSomeOne"
+           android:layout_width="wrap_content"
+           android:layout_height="wrap_content"
+           android:onClick="@{onClickListener::onClick}"
+           android:text="@{viewData.firstName}"/>
+       <TextView android:layout_width="wrap_content"
+           android:layout_height="wrap_content"
+           android:visibility="@{viewData.noLastName?View.GONE:View.VISIBLE}"
+           android:text="@{viewData.lastName, default=default_value}"/>
+<!-- 包含另一个布局 并传递事件绑定和视图数据绑定-->
+        <include
+            android:id="@+id/includeViewId"
+            layout="@layout/include_view_layout"
+            bind:onClickListener="@{onClickListener}"
+            bind:viewData="@{viewData}" />
+   </LinearLayout>
+<!-- 原布局结束-->
+</layout>
+#+END_SRC
+- 第二步，创建BaseBindActivity和BaseBindFragment，实现底层的数据绑定，以及生命周期设定，以及事件绑定。
+#+BEGIN_SRC java
+public abstract class BaseBindActivity<B extends ViewDataBinding> extends Activity implements  View.OnClickListener {
+    private B mBinding;
+     // * 数据绑定
+     protected abstract <ViewData> ViewData getViewData();
+     // * 子类提供有binding的资源ID
+     @LayoutRes
+        protected abstract int getLayoutID();
+    @Override
+        protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mBinding = DataBindingUtil.setContentView(this, getLayoutID());
+        if (mBinding != null) {
+            mBinding.setLifecycleOwner(this);
+            mBinding.setVariable(BR.onClickListener, this);
+            mBinding.setVariable(BR.viewData, getViewData());
+        } else 
+            setContentView(getLayoutID());
+    }
+    @Override
+        public B getBinding() {
+        return mBinding;
+    }
+}
+#+END_SRC
+- 这样子页面只需要实现简单的逻辑处理就可以了。BaseBindFragment逻辑类似就不贴代码了。
+- 第三步，在具体业务Activity中通过 ViewModelProviders获取ViewModel，并从ViewModel中获取ViewData，将ViewData绑定到视图中，子类通过实现 getViewData()，进行绑定操作。
+#+BEGIN_SRC java
+ViewModelProviders.of(this, factory).get(viewModelClass)
+#+END_SRC
+- 第四步,当用户操作（比如点击）导致一个事件产生，在具体业务Activity中，通过ViewModel的方法调用业务数据提供方，并实现业务逻辑，业务处理完成后，操作ViewData中的属性，实现动态更新界面的功能。
+- 很多逻辑具有通用性，我们可以抽取很多模版代码作为基类使用，比如说列表的ListAdapter、数据库Room、数据差分类DiffUtil.ItemCallback、RecyclerView的ViewHolder都可以进行很好的封装，使用时就会变得很简单，以后再也不用处理那么多的Adapter和ViewHolder了。
+
+** 与数据绑定的对比(databinding)
+视图绑定和数据绑定均会生成可用于直接引用视图的绑定类。但是，视图绑定旨在处理更简单的用例，与数据绑定相比，具有以下优势：
+更快的编译速度：视图绑定不需要处理注释，因此编译时间更短。
+易于使用：视图绑定不需要特别标记的 XML 布局文件，因此在应用中采用速度更快。在模块中启用视图绑定后，它会自动应用于该模块的所有布局。
+反过来，与数据绑定相比，视图绑定也具有以下限制：
+视图绑定不支持布局变量或布局表达式，因此不能用于直接在 XML 布局文件中声明动态界面内容。
+视图绑定不支持双向数据绑定。
+** 使用
+ - 目前我们的项目一般都是分模块的，视图绑定功能也支持按模块启用，想在哪个模块启用就直接在该模块的build.gradle 文件中添加以下代码
+ #+BEGIN_SRC groovy
+android {
+    viewBinding { //  android 块下添加
+        enabled = true
+    }
+}
+ #+END_SRC
+如果您希望在生成绑定类时忽略某个布局文件，请将 tools:viewBindingIgnore="true" 属性添加到相应布局文件的根视图中：
+#+BEGIN_SRC groovy
+<LinearLayout
+tools:viewBindingIgnore="true" >
+</LinearLayout>
+#+END_SRC
+- 为某个模块启用视图绑定功能后，系统会为该模块中包含的每个 XML 布局文件生成一个绑定类。每个绑定类均包含对根视图以及具有 ID 的所有视图的引用。
+- 系统会通过以下方式生成绑定类的名称：将 XML 文件的名称转换为驼峰式大小写，并在末尾添加“Binding”一词。
+- 例如，假设某个布局文件的名称为 result_profile.xml：
+#+BEGIN_SRC xml
+<LinearLayout  >
+  <TextView android:id="@+id/name" />
+  <ImageView android:cropToPadding="true" />
+  <Button android:id="@+id/button"
+          android:background="@drawable/rounded_button" />
+</LinearLayout>
+#+END_SRC
+- 所生成的绑定类的名称就为 ResultProfileBinding。此类具有两个字段：一个是名为 name 的 TextView，另一个是名为 button 的 Button。
+- 该布局中的 ImageView 没有 ID，因此绑定类中不存在对它的引用。
+- 每个绑定类还包含一个 getRoot() 方法，用于为相应布局文件的根视图提供直接引用。
+- 在此示例中，ResultProfileBinding 类中的 getRoot() 方法会返回 LinearLayout 根视图。
+- 以下几个部分介绍了生成的绑定类在 Activity 和 Fragment 中的使用。
+*** 在 Activity 中使用视图绑定
+如需设置绑定类的实例以供 Activity 使用，请在 Activity 的 onCreate() 方法中执行以下步骤：
+- 调用生成的绑定类中包含的静态 inflate() 方法。此操作会创建该绑定类的实例以供 Activity 使用。
+- 通过调用 getRoot() 方法或使用 Kotlin 属性语法获取对根视图的引用。
+- 将根视图传递到 setContentView()，使其成为屏幕上的活动视图。
+#+BEGIN_SRC java
+class ResultProfileActivity extends AppCompatActivity {
+    private ResultProfileBinding binding;
+    @Override
+        protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        binding = ResultProfileBinding.inflate(getLayoutInflater());
+        View view = binding.getRoot();
+        setContentView(view);
+    }     
+}
+#+END_SRC
+- Kotlin
+#+BEGIN_SRC kotlin
+class ResultProfileActivity : AppCompatActivity() {
+    private lateinit var binding: ResultProfileBinding
+    override fun onCreate(savedInstanceState: Bundle) {
+        super.onCreate(savedInstanceState)
+        binding = ResultProfileBinding.inflate(layoutInflater)
+        val view = binding.root
+        setContentView(view)
+    }
+} 
+#+END_SRC
+- 您现在即可使用该绑定类的实例来引用任何视图：
+#+BEGIN_SRC kotlin
+binding.getName().setText(viewModel.getName());
+binding.button.setOnClickListener(new View.OnClickListener() {
+                                      viewModel.userClicked()
+});
+binding.name.text = viewModel.name
+binding.button.setOnClickListener { viewModel.userClicked() }
+#+END_SRC
+*** 在 Fragment 中使用视图绑定
+- 如需设置绑定类的实例以供 Fragment 使用，请在 Fragment 的 onCreateView() 方法中执行以下步骤：
+  - 调用生成的绑定类中包含的静态 inflate() 方法。此操作会创建该绑定类的实例以供 Fragment 使用。
+  - 通过调用 getRoot() 方法或使用 Kotlin 属性语法获取对根视图的引用。
+  - 从 onCreateView() 方法返回根视图，使其成为屏幕上的活动视图。
+#+BEGIN_SRC java
+class ResultProfileFragment extends Fragment {
+    private ResultProfileBinding binding;
+    @Override
+        public View onCreateView (LayoutInflater inflater,
+                                  ViewGroup container,
+                                  Bundle savedInstanceState) {
+        binding = ResultProfileBinding.inflate(inflater, container, false);
+        View view = binding.getRoot();
+        return view;
+    }
+    @Override
+        public void onDestroyView() {
+        super.onDestroyView();
+        binding = null;
+    }
+}
+#+END_SRC
+- Kotlin
+#+BEGIN_SRC kotlin
+class ResultProfileFragment : Fragment() {
+    private var _binding: ResultProfileBinding? = null
+    //  This property is only valid between onCreateView and onDestroyView.
+    private val binding get() = _binding!!
+    override fun onCreateView(inflater: LayoutInflater,
+                              container: ViewGroup?,
+                              savedInstanceState: Bundle?
+    ): View? {
+        _binding = ResultProfileBinding.inflate(inflater, container, false)
+        val view = binding.root
+        return view
+    }
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
+} 
+#+END_SRC
+- 您现在即可使用该绑定类的实例来引用任何视图：
+#+BEGIN_SRC kotlin
+    binding.getName().setText(viewModel.getName());
+    binding.button.setOnClickListener(new View.OnClickListener() {
+        viewModel.userClicked()
+    });
+    binding.name.text = viewModel.name
+    binding.button.setOnClickListener { viewModel.userClicked() }
+#+END_SRC
+- 以上简单介绍了应用，细心的小伙伴说了，我应用中多个Activity和Fragment都需要写一遍这个吗，那不是炸了吗。
+- 不要着急，你要的封装在下面。
+- 思考一下我们能不能直接在BaseXXX中将binding给初始化出来，然后在对应的子界面可以直接使用，安排。
+- 因为项目中使用的是kotlin，懒得转换成java了，参考kotlin的实现，java手到擒来，如果没调通可以留言，后续更新。
+*** 针对BaseActivity
+    #+BEGIN_SRC kotlin
+abstract class BaseActivity<VB : ViewBinding> : AppCompatActivity() {
+    protected lateinit var binding: VB
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val type = javaClass.genericSuperclass
+        if (type is ParameterizedType) {
+            val clazz = type.actualTypeArguments[0] as Class<VB>
+            val method = clazz.getMethod("inflate", LayoutInflater::class.java)
+            binding = method.invoke(null, layoutInflater) as VB
+            setContentView(binding.root)
+        }
+        onCreated(savedInstanceState)
+    }
+    abstract fun onCreated(savedInstanceState: Bundle?)
+}
+    #+END_SRC
+- 那么在具体的Activity中可以直接使用：
+#+BEGIN_SRC kotlin
+class MainActivity : FullActivity<ActivityMainBinding>() {
+    override fun onCreated(savedInstanceState: Bundle?) {
+        //  xxx就是你在activity_main布局中定义的属性名
+        binding.xxx.text = "123"        
+    }
+}
+#+END_SRC
+*** 针对BaseFragment
+    #+BEGIN_SRC kotlin
+abstract class BaseFragment<out VB : ViewBinding> : Fragment {
+    private var _binding: VB? = null
+    val binding: VB get() = _binding!!
+    constructor() : super()
+    @ContentView
+    constructor(@LayoutRes contentLayoutId: Int) : super(contentLayoutId)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        // 利用反射，调用指定ViewBinding中的inflate方法填充视图
+        val type = javaClass.genericSuperclass
+        val clazz = (type as ParameterizedType).actualTypeArguments[0] as Class<VB>
+        val method = clazz.getMethod(
+            "inflate",
+            LayoutInflater::class.java,
+            ViewGroup::class.java,
+            Boolean::class.java
+        )
+        _binding = method.invoke(null, layoutInflater, container, false) as VB
+        return _binding!!.root
+    }
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
+    }
+}
+    #+END_SRC
+*** 针对BaseAdapter
+    #+BEGIN_SRC kotlin
+abstract class BaseRecyclerviewAdapter<VB : ViewBinding, M> :
+RecyclerView.Adapter<BaseRecyclerviewAdapter.ViewHolder>() {
+    protected var data: List<M>? = null
+    protected lateinit var binding: VB
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+        val type = javaClass.genericSuperclass
+        val clazz = (type as ParameterizedType).actualTypeArguments[0] as Class<VB>
+        val method = clazz.getMethod("inflate",
+                                     LayoutInflater::class.java,
+                                     ViewGroup::class.java,
+                                     Boolean::class.java)
+        binding = method.invoke(null, LayoutInflater.from(parent.context), parent, false) as VB
+        return ViewHolder(binding.root)
+    }
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+        holder.setIsRecyclable(false)
+        bindData(binding, data!![position],position)
+    }
+    override fun getItemCount(): Int {
+        return data?.size ?: 0
+    }
+    fun setMoreData(newData: List<M>) {
+        data = newData
+        notifyDataSetChanged()
+    }
+    abstract fun bindData(binding: VB, item: M,position: Int)
+    class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)    
+}
+    #+END_SRC
+*** 针对BaseViewGroup
+    #+BEGIN_SRC kotlin
+abstract class BaseViewGroup<out VB : ViewBinding>(
+    context: Context,
+    attr: AttributeSet? = null,
+    def: Int = 0
+) : FrameLayout(context, attr, def) {
+    protected val binding: VB by lazy {
+        val type = javaClass.genericSuperclass
+        val clazz = (type as ParameterizedType).actualTypeArguments[0] as Class<VB>
+        val method = clazz.getMethod("inflate",
+            LayoutInflater::class.java,
+            ViewGroup::class.java,
+            Boolean::class.java)
+        method.invoke(null, LayoutInflater.from(context), this, true) as VB
+    }
+    init {
+        binding.root
+    }
+}
+    #+END_SRC
+
+* LiveData 的 postValue ？与SetValue有什么区别？连续调用会有什么问题？为什么
+- postValue 与 setValue
+  - postValue 与 setValue 一样都是用来更新 LiveData 数据的方法：
+    - setValue 只能在主线程调用，同步更新数据
+    - postValue 可在后台线程调用，其内部会切换到主线程调用 setValue
+#+BEGIN_SRC java
+liveData.postValue("a");
+liveData.setValue("b");
+#+END_SRC
+- 上面代码，a 在 b 之后才被更新。
+** postValue 收不到通知
+- postValue 使用不当，可能发生接收到数据变更的通知：
+  - If you called this method multiple times before a main thread executed a posted task, only the last value would be dispatched.
+- 如上，源码的注释中明确记载了，当连续调用 postValue 时，有可能只会收到最后一次数据更新通知。
+- 梳理源码可以了解其中原由：
+#+BEGIN_SRC java
+protected void postValue(T value) {
+    boolean postTask;
+    synchronized (mDataLock) {
+        postTask = mPendingData == NOT_SET;
+        mPendingData = value;
+    }
+    if (!postTask) 
+        return;
+    ArchTaskExecutor.getInstance().postToMainThread(mPostValueRunnable);
+}
+#+END_SRC
+- mPendingData 被成功赋值 value 后，post 了一个 Runnable
+- mPostValueRunnable 的实现如下：
+#+BEGIN_SRC java
+private final Runnable mPostValueRunnable = new Runnable() {
+    @SuppressWarnings("unchecked")
+    @Override
+    public void run() {
+        Object newValue;
+        synchronized (mDataLock) {
+            newValue = mPendingData;
+            mPendingData = NOT_SET;
+        }
+        setValue((T) newValue);
+    }
+};
+#+END_SRC
+- postValue 将数据存入 mPendingData，mPostValueRunnable 在UI线程消费mPendingData。
+- 在 Runnable 中 mPendingData 值还没有被消费之前，即使连续 postValue ， 也不会 post 新的 Runnable
+- mPendingData 的生产 (赋值) 和消费（赋 NOT_SET） 需要加锁
+- 这也就是当连续 postValue 时只会收到最后一次通知的原因。
+- 源码梳理过了，但是为什么要这样设计呢？
+** 为什么 Runnable 只 post 一次？
+- 当 mPenddingData 中有数据不断更新时，为什么 Runnable 不是每次都 post，而是等待到最后只 post 一次？
+- 一种理解是为了兼顾性能，UI只需显示最终状态即可，省略中间态造成的频发刷新。这或许是设计目的之一，但是一个更为合理的解释是： _即使 post 多次也没有意义，所以只 post 一次即可_
+- 我们知道，对于 setValue 来说，连续调用多次，数据会依次更新：
+- 如下，订阅方一次收到 a b 的通知
+#+BEGIN_SRC java
+liveData.setValue("a");
+liveData.setValue("b");
+#+END_SRC
+- 通过源码可知，dispatchingValue() 中同步调用 Observer#onChanged()，依次通知订阅方：
+#+BEGIN_SRC java
+// setValue源码
+@MainThread
+protected void setValue(T value) {
+    assertMainThread("setValue"); //  确保目前是主线程
+    mVersion++;
+    mData = value;
+    dispatchingValue(null);
+}
+#+END_SRC
+- 但对于 postValue，如果当 value 变化时，我们立即post，而不进行阻塞
+#+BEGIN_SRC java
+protected void postValue(T value) {
+    mPendingData = value;
+    ArchTaskExecutor.getInstance().postToMainThread(mPostValueRunnable);
+}
+private final Runnable mPostValueRunnable = new Runnable() {
+    public void run() {
+        setValue((T) mPendingData);
+    }
+};
+liveData.postValue("a")
+liveData.postValue("b")
+#+END_SRC
+- 由于线程切换的开销，连续调用 postValue，收到通知只能是b、b，无法收到a。
+- 因此，post 多次已无意义，一次即可。
+** 为什么要加读写锁？
+- 前面已经知道，是否 post 取决于对 mPendingData 的判断（是否为 NOT_SET）。因为要在多线程环境中访问 mPendingData ，不加读写锁无法保证其线程安全。
+#+BEGIN_SRC java
+protected void postValue(T value) {
+    boolean postTask = mPendingData == NOT_SET; //  --1
+    mPendingData = value; //  --2
+    if (!postTask) {
+        return;
+    }
+    ArchTaskExecutor.getInstance().postToMainThread(mPostValueRunnable);
+}
+private final Runnable mPostValueRunnable = new Runnable() {
+    public void run() {
+        Object newValue = mPendingData;
+        mPendingData = NOT_SET; //  --3
+        setValue((T) newValue);
+    }
+};
+#+END_SRC
+- 如上，如果在 1 和 2 之间，执行了 3，则 2 中设置的值将无法得到更新
+** 使用RxJava替换LiveData
+- 如何避免在多线程环境下不漏掉任何一个通知？ 比较好的思路是借助 RxJava 这样的流式框架，任何数据更新都以数据流的形式发射出来，这样就不会丢失了。
+#+BEGIN_SRC kotlin
+fun <T> Observable<T>.toLiveData(): LiveData<T> = RxLiveData(this)
+class RxLiveData<T>(
+    private val observable: Observable<T>
+) : LiveData<T>() {
+    private var disposable: Disposable? = null
+    override fun onActive() {
+        disposable = observable
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe({
+                setValue(it)
+            }, {
+                setValue(null)
+            })
+    }
+    override fun onInactive() {
+        disposable?.dispose()
+    }
+}
+#+END_SRC
+** 最后
+- 想要保证事件在线程切换过程中的顺序性和完整性，需要使用RxJava这样的流式框架。
+- 有时候面试官会使用追问的形式来挖掘候选人的技术深度，所以大家在准备面试时要多问自己几个问什么，知其然并知其所以然。
+- 当然，我也不赞同这种刨根问底式的拷问方式，尤其是揪着一些没有实用价值的细枝末节不放。所以本文也是提醒广大面试官，挖掘深度的同时要注意分寸，不能以将候选人难倒为目标来问问题。
+* mvvm有几点要注意：
+- 1、官方的ViewModel库并不是实现MVVM架构的必备，MVVM的重点是解藕，通过一定方式解除View和Model的耦合，比如使用数据绑定库DataBinding。
+- 2、也有不使用DataBinding实现的MVVM吗？其实也有，比如说第三版的《第一行代码》中的方式，利用LiveData实现View和Model的解藕，且ViewModel不依赖View和Context，这里把Activity和Fragment当作View的主体，而我更倾向于把XML当作View的主体，所见即所得，看得到的当成View，会更直观一点。Activity和Fragment只是当作一个粘合剂，比如进行事件绑定和一些复杂动画的处理等。所以DataBinding更多的是服务于XML这种View的。
+- 3、ViewModel库是在DadaBinding库之后才有的，ViewModel类旨在以注重生命周期的方式存储和管理界面相关的数据。ViewModel 类让数据可在发生屏幕旋转等配置更改后继续留存，这样可以更好的提升用户体验和提高应用性能。
+  - 上图说明了Activity经历屏幕旋转而后结束的过程中所处的各种生命周期状态。该图还在关联的 Activity生命周期的旁边显示了ViewModel的生命周期。此图表说明了 Activity 的各种状态。这些基本状态同样适用于 Fragment 的生命周期。
+- 4、其实可以从官方的介绍中看出来，官方的ViewModel库和我们所说的MVVM架构中的ViewModel层并不是等价的东西，ViewModel层不止包含ViewModel数据（我更愿意称为ViewData），还应该包含视图模型的逻辑处理。
+- 总的来说，为了提高开发效率，为了更好的在大型团队中协调开发，MVVM是一个不错的选择！目前为止，个人认为DataBinding、ViewModel，再加上LiveData，是搭建MVVM架构最完美的组合。

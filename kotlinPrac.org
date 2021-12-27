@@ -1819,3 +1819,5 @@ public final class Nested_classes3Kt$hello$1 extends View.OnClickListener {
 }
 #+END_SRC
 - 匿名类编译的时候会生成一个子类容纳被覆盖的方法以及增加的属性，因此类定义的时候必须要加上open。
+
+
