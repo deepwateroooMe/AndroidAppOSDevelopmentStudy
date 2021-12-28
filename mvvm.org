@@ -344,12 +344,12 @@ ViewModelProviders.of(this, factory).get(viewModelClass)
 - 很多逻辑具有通用性，我们可以抽取很多模版代码作为基类使用，比如说列表的ListAdapter、数据库Room、数据差分类DiffUtil.ItemCallback、RecyclerView的ViewHolder都可以进行很好的封装，使用时就会变得很简单，以后再也不用处理那么多的Adapter和ViewHolder了。
 
 ** 与数据绑定的对比(databinding)
-视图绑定和数据绑定均会生成可用于直接引用视图的绑定类。但是，视图绑定旨在处理更简单的用例，与数据绑定相比，具有以下优势：
-更快的编译速度：视图绑定不需要处理注释，因此编译时间更短。
-易于使用：视图绑定不需要特别标记的 XML 布局文件，因此在应用中采用速度更快。在模块中启用视图绑定后，它会自动应用于该模块的所有布局。
-反过来，与数据绑定相比，视图绑定也具有以下限制：
-视图绑定不支持布局变量或布局表达式，因此不能用于直接在 XML 布局文件中声明动态界面内容。
-视图绑定不支持双向数据绑定。
+- 视图绑定和数据绑定均会生成可用于直接引用视图的绑定类。但是，视图绑定旨在处理更简单的用例，与数据绑定相比，具有以下优势：
+  - 更快的编译速度：视图绑定不需要处理注释，因此编译时间更短。
+  - 易于使用：视图绑定不需要特别标记的 XML 布局文件，因此在应用中采用速度更快。在模块中启用视图绑定后，它会自动应用于该模块的所有布局。
+- 反过来，与数据绑定相比，视图绑定也具有以下限制：
+  - 视图绑定不支持布局变量或布局表达式，因此不能用于直接在 XML 布局文件中声明动态界面内容。
+  - 视图绑定不支持双向数据绑定。
 ** 使用
  - 目前我们的项目一般都是分模块的，视图绑定功能也支持按模块启用，想在哪个模块启用就直接在该模块的build.gradle 文件中添加以下代码
  #+BEGIN_SRC groovy
@@ -716,10 +716,1056 @@ class RxLiveData<T>(
 - 想要保证事件在线程切换过程中的顺序性和完整性，需要使用RxJava这样的流式框架。
 - 有时候面试官会使用追问的形式来挖掘候选人的技术深度，所以大家在准备面试时要多问自己几个问什么，知其然并知其所以然。
 - 当然，我也不赞同这种刨根问底式的拷问方式，尤其是揪着一些没有实用价值的细枝末节不放。所以本文也是提醒广大面试官，挖掘深度的同时要注意分寸，不能以将候选人难倒为目标来问问题。
-* mvvm有几点要注意：
+** mvvm有几点要注意：
 - 1、官方的ViewModel库并不是实现MVVM架构的必备，MVVM的重点是解藕，通过一定方式解除View和Model的耦合，比如使用数据绑定库DataBinding。
 - 2、也有不使用DataBinding实现的MVVM吗？其实也有，比如说第三版的《第一行代码》中的方式，利用LiveData实现View和Model的解藕，且ViewModel不依赖View和Context，这里把Activity和Fragment当作View的主体，而我更倾向于把XML当作View的主体，所见即所得，看得到的当成View，会更直观一点。Activity和Fragment只是当作一个粘合剂，比如进行事件绑定和一些复杂动画的处理等。所以DataBinding更多的是服务于XML这种View的。
 - 3、ViewModel库是在DadaBinding库之后才有的，ViewModel类旨在以注重生命周期的方式存储和管理界面相关的数据。ViewModel 类让数据可在发生屏幕旋转等配置更改后继续留存，这样可以更好的提升用户体验和提高应用性能。
   - 上图说明了Activity经历屏幕旋转而后结束的过程中所处的各种生命周期状态。该图还在关联的 Activity生命周期的旁边显示了ViewModel的生命周期。此图表说明了 Activity 的各种状态。这些基本状态同样适用于 Fragment 的生命周期。
-- 4、其实可以从官方的介绍中看出来，官方的ViewModel库和我们所说的MVVM架构中的ViewModel层并不是等价的东西，ViewModel层不止包含ViewModel数据（我更愿意称为ViewData），还应该包含视图模型的逻辑处理。
+- 4、其实可以从官方的介绍中看出来，官方的ViewModel库和我们所说的MVVM架构中的ViewModel层并不是等价的东西，ViewModel层不止包含ViewModel数据（我更愿意称为ViewData），还应该包含视图模型( _view表现层模型与逻辑处理_ )的逻辑处理。
 - 总的来说，为了提高开发效率，为了更好的在大型团队中协调开发，MVVM是一个不错的选择！目前为止，个人认为DataBinding、ViewModel，再加上LiveData，是搭建MVVM架构最完美的组合。
+
+* 深入理解MVP
+** 1. MVP的基本结构
+- MVP里强调的是M、V、P三层都是抽象的概念，因此如果严格按照抽象定义，一个完整的MVP应该至少包含三个接口与三个实现类，而按照谷歌的推荐，这三个接口会通过一个Contract的概念放在一起，以更直观地了解到MVP的全部面目（不管是谁的推荐，使代码变得直观就是一个很好的 idea），所以一个最完善的MVP大致和下面的示例一致，以简单使用用户名和密码进行登录为例。
+#+BEGIN_SRC java
+public interface LoginContract {
+    public interface LoginModel {
+        User login(String userName, String userPwd);
+    }
+    public interface LoginPresenter{
+        void login(String userName, String userPwd);
+    }
+    public interface LoginView {
+        void loginSuccess();
+        void loginFailed(String cause);
+        void invalidUserName();
+        void invalidUserPwd();
+    }
+}
+#+END_SRC
+- 以上就是抽象层的全部代码，使用Contract可以让我们在一个文件中了解到MVP的全部行为，这不是架构本身的意图，但它对我们是有利的。然后分别定义LoginModelImpl、LoginPresenterImpl，以及实现了LoginView的Activity或Fragment，一个和登录行为相关的MVP就实现好了。
+- 显而易见，未使用任何架构时我们只要写一个Activity就能搞定，使用MVP后类的数量飙升至六个，如果Contract也算在内的话就有七个类了，这样的话我们使用MVP的代价是不是过于沉重？即使它有数不清的优点，但就这一点就足够劝退一大批人。可是我们没有注意的是，抽象是一种思想，而不是一种格式。Activity由系统控制，所以我们不得不借助抽象来实现V的行为，但是M和P完全是我们自己造就的，抽象与否我们有绝对的掌控权。拿P来说，定义接口有两个好处：一是可以支持多实现，二是可以更轻易看到它的所有方法（类肯定比接口长很多），不定义接口也没什么坏处，毕竟很少会需要多个实现类的。因此在极简情况下，只定义V的抽象，四个类就可以实现MVP了，而在最坏情况下才是六个或七个类。所以最好的方式是，根据需求，合理选择是否定义M和P的接口。
+- 为了说明后续的问题，贴一下现有的Presenter实现类。
+#+BEGIN_SRC java
+public class LoginPresenterImpl implements LoginContract.LoginPresenter {
+    private LoginContract.LoginView mLoginView;
+    private LoginContract.LoginModel mLoginModel;
+    public LoginPresenterImpl() {
+        mLoginModel = new LoginModelImpl();
+    }
+    public void attach(@NonNull LoginContract.LoginView loginView) {
+        mLoginView = loginView;
+    }
+    public void detach() {
+        mLoginView = null;
+    }
+    @Override
+        public void login(String userName, String userPwd) {
+        if (TextUtils.isEmpty(userName)) {
+            if (mLoginView != null)
+                mLoginView.invalidUserName();
+            return;
+        }
+        if (TextUtils.isEmpty(userPwd)) {
+            if (mLoginView != null)
+                mLoginView.invalidUserPwd();
+            return;
+        }
+        User user = mLoginModel.login(userName, userPwd);
+        if (user == null) {
+            if (mLoginView != null)
+                mLoginView.loginFailed("some error");
+            return;
+        }
+        if (mLoginView != null)
+            mLoginView.loginSuccess();
+    }
+}
+#+END_SRC
+** 2. P的体积暴涨和可重用性问题
+- 以上示例虽然写了好几个类，但整体而言结构清晰，看起来很简洁舒爽，但是实际项目中大多页面的功能都是极其复杂的，从模块化的角度去看也是多个模块耦合在一起，如此一来P的整洁就很难保持了，很可能随着业务的堆积体积暴涨，在一个P中实现了多个模块的功能也使得P的可重用性大大降低。让我们凭空捏造一个复杂场景，在某个页面除了本身的功能之外，我们希望根据用户会员身份决定是否推荐一些促销信息，会以弹窗的方式展示给用户，同时在Toolbar上想要轮播当前的热搜词，诱导用户进入搜索以购买商品，然后还希望在页面上加一个类似广告的小浮窗，对不同的用户给予不同的折扣活动推荐。P的结构可能会像这样：
+#+BEGIN_SRC java
+public interface GoodsPresenter {
+    // 页面本身的核心内容
+    void getGoodsByPage(int page);
+    void getBanner();
+
+    // 用户会员相关
+    void getUserVip(String userId);
+    void getVipSales(String vipId);
+
+    // 搜索的诱导
+    void getHotSearchKeywords();
+
+    // 给予不同用户不同的折扣活动推荐
+    void getGoodsSaleForUser(String userId);
+
+    // 其他更多模块更多的功能
+}
+#+END_SRC
+- 随着业务变繁重，P的暴涨是必然的，但也是可以接受的，因此P的接口变长并没有问题，问题在于P的实现类。可以肯定的是，在很多页面都会有会员相关的卡点，搜索的热搜词也不一定只在当前页面展示，APP里也可能到处在推广某个活动…，这时候P的重用性问题就暴露出来了，一模一样的逻辑要在无数个Presenter里写无数遍，我们会很快掉入可怕的重复“地狱”。
+- 解决问题的办法似乎只有一个，那就是按照模块拆分成多个P，当前的GoodsPresenter只处理当前页面的内容，VipPresenter处理会员的内容，SearchPresenter处理搜索的内容…，同样的M和V也做此拆分，MVP框架就转成 MM..VV..PP.. 框架，对每个MVP单元来说都是独立的、可模块化的。
+- 但是MVP单元化了，并不代表复杂性真正降低了，在原有的结构下每个Activity只需要实现一个V，持有一个P就可以完成工作，只是这个P格外大，而现在每个Activity要实现多个V，持有多个P，还要了解在什么场景下使用什么P来工作，这样一来只是把问题从P转移到了Activity而已。
+- P的拆分势在必行，不然无法重用，Activity也应该仅实现一个V，持有一个P才能保持单纯，这看起来是矛盾的，难道真的鱼与熊掌不可兼得了吗？别忘了我们MVP的全部概念都是抽象的，对应于Java就是一个个接口，而接口是可以多继承的，利用这一点就可以让矛盾化为无形。我们可以再建一个P，它同时继承GoodsPresenter、VipPresenter、SearchPresenter…，对V也进行同样的处理，然后在实现层组合多个P和V一起实现功能。改进后的P如下所示：
+#+BEGIN_SRC java
+public interface GoodsPresenter {
+    // 页面本身的核心内容
+    void getGoodsByPage(int page);
+    void getBanner();
+}
+public interface VipPresenter {
+    // 用户会员相关
+    void getUserVip(String userId);
+    void getVipSales(String vipId);
+}
+public interface SearchPresenter {
+    // 搜索的诱导
+    void getHotSearchKeywords();
+}
+public interface GoodsProxyPresenter extends GoodsPresenter, VipPresenter, SearchPresenter {
+}
+
+public class GoodsProxyPresenterImpl implements GoodsProxyPresenter {
+    private GoodsPresenter mGoodsPresenter;
+    private VipPresenter mVipPresenter;
+    private SearchPresenter mSearchPresenter;
+    public GoodsProxyPresenterImpl() {
+        mGoodsPresenter = new GoodsPresenterImpl();     
+        mVipPresenter = new VipPresenterImpl(); 
+        mSearchPresenter = new SearchPresenterImpl(); 
+    }
+    @Override
+        public void attach(GoodsProxyView view) {
+        mGoodsPresenter.attach(view);
+        mVipPresenter.attach(view);
+        mSearchPresenter.attach(view);
+    }
+    @Override
+        public void getGoodsByPage(int page) {
+        mGoodsPresenter.getGoodsByPage(page);
+    }
+    @Override
+        public void getUserVip(String userId) {
+        mVipPresenter.getUserVip(userId);
+    }
+}
+#+END_SRC
+- 我们解决了以上的问题，又增加了一个类，当然这也不算增加类，因为本身这些Presenter是必然存在的，把它们组合起来使用也是必然的。但我们还是引入了一个问题，或者说是触犯了一条规则：最少知道原则，简单说就是只知道需要知道的事情。按照这样的设计，模块与模块之间的P、V是可以互相调用的，它们不得不暴露在模块之外，把自己的全部细节展示出来。在当前的模块下我们只需要知道用户的会员状态，也就是VipPresenter的一个功能，但却一股脑的拥有了VipPresenter的全部。而且V的继承也会使Activity里增加很多冗余的实现，例如VipView中有一个upgradeVip的功能，我们的Activity不需要这个能力，但不得不增加一个空实现。
+- 所以在这种复杂的场景下，MVP还要进一步改造，才能更合理、更有效。接下来我们继续研究如何利用最少知道原则来优化MVP的能力。
+** 3. 最少知道原则
+- 现在我们既希望能够跨模块调用，又不想暴露全部细节，即满足最少知道原则，就只能另辟蹊径找到更好的办法。我们先从V的组合说起，一个V继承了多个V会变得极其庞大，而且大部分都是冗余的，那我们不让它冗余不就好了吗？从这一点出发可以有两种方案，一是不继承，把需要的方法重新写一遍，二是只继承需要的部分，这就需要被继承的V本身也是多继承的。方案一没什么可说的，它和其他任何模块都不关联，这是优点也是缺点，好在够独立，坏在不能复用，而且重复定义一样的接口不利于后期管理，当然这都不是什么大事。方案二会好一些，它的做法是将V分成可共享与不可共享两部分，通过继承来连接，例如VipView中有两个方法会被其他模块引用，其他方法不会被引用，就可以定义成这样：
+#+BEGIN_SRC java
+public interface SharedVipView {
+    void getUserVip(String vipId);
+    void getVipSales(VipSales sales);
+}
+public interface VipView extends SharedVipView {
+    void upgradeVip(boolean isSuccessful);
+}
+#+END_SRC
+- 这样做的好处是只需要暴露SharedVipView即可，可重用性的问题也解决了，但是书写起来会更复杂一些，对代码审查要求也更严格，因为太容易写成方案一那种形式了。
+- 回过头来再看看P，我们也可以按照V的方式处理，但针对接口和实现类有些不同，接口只要继承即可，但是实现类因为不支持多继承，只能通过依赖其他模块的P来实现功能，如此一来就要求每个模块的P也分成两层，整体结构如下所示：
+
+[[./pic/pvvp.jpg]]
+
+- 看起来通过这样的方式解决了问题，但是每个MVP单元其实变成了MVVPP，复杂度大大增加了，这给实际工作造成很大麻烦，因此我们还需要进一步寻找更合适的方案。
+** 4. MVVPP到MVP-VP
+- 我们已经解决了好几个棘手的问题，但现在的这个问题比之前的都要棘手很多倍，一方面我们不希望增加每个MVP单元的复杂度，另一方面也希望能够保持最少知道原则，同时减少重复性。尝试多种方案而不可得，给我们带来了沉痛的打击，但是也不全是坏消息，因为当极致的黑暗到来时，黎明也就不远了。
+- 我们在P和V之间盘旋太久了，以致于都忘记了MVP其实是三部分组成的，M被遗忘是我们的过失，但也给我们提供了一个完全不同的思路。M不起眼的原因就是独立性，那么我们在多模块使用时，是不是也可以提供一个独立的V和P，既不增加MVP单元的复杂度，又能提高复用性呢？
+- 为了管理上的便利，我们还是通过继承来定义P和V的接口层，当然也可以完全另写一个接口，这不会造成多大的影响。我们定义的接口如下：
+#+BEGIN_SRC java
+public interface SharedVipView {
+    void getUserVip(String vipId);
+    void getVipSales(VipSales sales);
+}
+public interface VipView extends SharedVipView {
+    void upgradeVip(boolean isSuccessful);
+}
+public interface SharedVipPresenter {
+    void getUserVip(String userId);
+    void getVipSales(String vipId);
+}
+public interface VipPresenter extends SharedVipPresenter {
+    void upgradeVip();
+}
+#+END_SRC
+- 主要的差别在于P的实现，我们要让两个P之间毫无关联，即使功能是完全一致的，也要各自有自己的实现。它们可以定义如下：
+#+BEGIN_SRC java
+public class SharedVipPresenterImpl implements SharedVipPresenter {
+    @Override
+        public void getUserVip(String userId) {
+        VipInfo vipInfo = mVipModel.getUserVip(userId);
+        if (vipInfo != null) 
+            mSharedVipView.getUserVip(vipInfo.getVipId());
+    }
+}
+public class VipPresenterImpl implements VipPresenter {
+    @Override
+        public void getUserVip(String userId) {
+        VipInfo vipInfo = mVipModel.getUserVip(userId);
+        if (vipInfo != null) 
+            mVipView.getUserVip(vipInfo.getVipId());
+    }
+    @Override
+        public void upgradeVip() {
+    }
+}
+#+END_SRC
+- 暂时忽略两个实现中几乎一致的代码，我们也感受到了明显的区别，通过共用一个M，跨模块与非跨模块形成了两个独立的MVP单元，也就是从MVVPP转变成了MVP-VP结构，VP的耦合与复杂度问题都不见了。另外还有一个重要的改变是问题被压缩在了两个P的实现里，整体的结构却是简洁而优雅的，仅这一点便足够我们长舒一口气了。接下来只要搞定这两段类似的代码就大功告成了。
+** 5. P职责的再划分
+- 让我们把这两段代码单独拿出来看，它们是不是已经没有可优化的空间了呢？
+#+BEGIN_SRC java
+@Override
+public void getUserVip(String userId) {
+    VipInfo vipInfo = mVipModel.getUserVip(userId);
+    if (vipInfo != null) 
+        mSharedVipView.getUserVip(vipInfo.getVipId());
+}
+@Override
+public void getUserVip(String userId) {
+    VipInfo vipInfo = mVipModel.getUserVip(userId);
+    if (vipInfo != null) 
+        mVipView.getUserVip(vipInfo.getVipId());
+}
+#+END_SRC
+- 这两段代码除了依赖的V不同，其余部分完全一致，我们是不是会率先想到抽取一下，把V当成变量传递进来，就像这样：
+#+BEGIN_SRC java
+// 含义尚不明确，不知道如何取名字
+public class VipPresenterXxx<V extends SharedVipView> {
+    private V mView;
+    public VipPresenterXxx(V view) {
+        mView = view;
+    }
+    public void getUserVip(String userId) {
+        VipInfo vipInfo = mVipModel.getUserVip(userId);
+        if (vipInfo != null) 
+            mView.getUserVip(vipInfo.getVipId());
+    }
+}
+#+END_SRC
+- 看似没有问题，但实际上出了大问题，我们知道VipPresenter包含了更多的方法，而VipPresenterXxx只实现公共方法的话，它就必然对VipPresenter造成了侵入，你需要知道何时调用VipPresenterXxx来实现，何时需要自己实现。而如果VipPresenterXxx实现了VipPresenter的全部方法，它就必须时刻知道V是SharedVipView还是VipView的实例，把两个不同的V糅合在一起明显不是一个聪明的决策。
+- 现实逼迫着我们进行抽取，又不能混合着两个V使用，所以我们只能抽取，但是留下V。我们把例子举的稍微复杂一点，这样可以看得更清楚：
+#+BEGIN_SRC java
+@Override
+public void getUserVipId(String userId) {
+    VipInfo vipInfo = mVipModel.getUserVip(userId);
+    // 要根据用户ID和当前的VIP信息，经过复杂的计算得到一个当前需要的vipId
+    String vipId = mVipModel.calculateVipIdForUser(userId, vipInfo);
+    if (vipId != null) {
+        mVipView.getUserVipId(vipId);
+        // mSharedVipView.getUserVipId(vipId);
+    }
+}
+#+END_SRC
+- 最开始我们就说过C的作用不仅是传递数据到V，它还要中间负责对数据的加工，P是C的升级版，自然也有一样的职责。如果我们只抽取部分，而留下V，可以发现它们被完美的拆分成了数据加工和页面渲染两部分：
+#+BEGIN_SRC java
+// 数据加工部分
+VipInfo vipInfo = mVipModel.getUserVip(userId);
+// 要根据用户ID和当前的VIP信息，经过复杂的计算得到一个当前需要的vipId
+String vipId = mVipModel.calculateVipIdForUser(userId, vipInfo);
+ // 页面渲染部分
+mVipView.getUserVipId(vipId);
+// mSharedVipView.getUserVipId(vipId);
+#+END_SRC
+- 我们从一个P里拆出了两个完全不相干的概念，这说明P是多职责的，我们可以依据单一职责原则优化它！页面渲染很好理解，它是V的部分，但是对数据加工算什么呢？严格来说它不是纯粹的业务，它是根据需要改造过的业务，但无论如何改变不了它操作的是数据的事实。所以我们可以总结，P由两部分组成，一是作为M和V的桥梁，二是处理业务，身兼多职是它得以膨胀和傲视他人的根源。而我们接下来要做的就是斩断它的“左膀右臂”之一，只让它做桥梁就好了。
+- 我们要给M重新下定义，把原有的M，也就是纯粹的业务，称为NSM(narrow sense model )，把包含了业务加工的M，称为BSM(broad sense model)，NSM是BSM不需要加工时的特例。现在我们的M更像一个工厂，它不仅生产业务，还加工业务，或许叫M Factory更合适，但是Factory容易被误解未工厂模式，所以我们换个名字，就叫M Repository吧（是的，我们也叫Repository，但是和你看到的谷歌的Repository还不太一样，我们的Repository更强大）。
+** 6. Repository——M的东山再起
+- 我们给M升级，自然会减轻P的负担，使得M、V、P三部分可以“三足鼎立”，再不是P一个说了算。升级后的M依然可以保持独立性，因此也不会破坏任一个MVP单元。一个Repository由纯粹的业务和对业务加工两部分组成，因为NSM是BSM的特例，因此外界对这两部分是零感知的。还是以Vip为例，我们的Repository定义如下：
+#+BEGIN_SRC java
+public interface VipModel {
+    VipInfo getUserVip(String userId);
+    VipSales getVipSales(String vipId);
+    String calculateVipIdForUser(String userId, VipInfo vipInfo);
+    boolean upgradeVip();
+}
+// VipRepository 拥有 VipModel 的全部能力，还拥有加工的能力
+public interface VipRepository extends VipModel {
+    String calculateVipIdForUserByUserId(String userId);
+}
+#+END_SRC
+- 其中，NSM部分的能力依然由原始的M完成，而BSM的能力则由Repository来完成，所以Repository的实例会依赖M，实现如下：
+#+BEGIN_SRC java
+public class VipRepositoryImpl implements VipRepository {
+    private VipModel mVipModel;
+    public VipRepositoryImpl() {
+        mVipModel = new VipModelImpl();
+    }
+    @Override
+        public VipInfo getUserVip(String userId) {
+        return mVipModel.getUserVip(userId);
+    }
+    @Override
+        public String calculateVipIdForUserByUserId(String userId) {
+        VipInfo vipInfo = mVipModel.getUserVip(userId);
+        // 要根据用户ID和当前的VIP信息，经过复杂的计算得到一个当前需要的vipId
+        String vipId = mVipModel.calculateVipIdForUser(userId, vipInfo);
+        return vipId;
+    }
+}
+#+END_SRC
+- VipRepository完全有能力同时为VipPresenter和SharedVipPresenter提供服务，它们只需要分别调用Repository的方法，分发给各自的View即可。听起来是不是还是有些小瑕疵，这两个P做的事情还是极其相似的？但是我们已经尽力了，如果真的十全十美，想来也是一种遗憾吧。
+- 最后看下我们现在的模型吧，它一定比之前好了太多太多：
+
+[[./pic/mvp.jpg]]
+
+** 7. MVP的生命周期
+- 生命周期是Android平台的特性，MVP虽然是架构思想，也要适应这种特性，这里我们暂不展开叙述如何解决生命周期的问题，在下一篇文章分析Jetpack时会对此进行详尽的阐述，现在只要知道问题的具体情况就好了。
+- MVP在生命周期中遇到问题的主要是P，我们都知道Activity有一段从onCreate到onDestory的生命周期，一般情况下，只要在onCreate时生成P，在onDestory时销毁P，就可以保证P不会引发内存泄漏的问题。但是Activity会在很多情况下，例如屏幕旋转时重走一次onCreate到onDestory的过程，此时我们的P也会跟着销毁并重建。
+- P销毁并重建，就意味着业务逻辑要重新执行一遍，如果是从网络加载就需要再次请求一次网络，不仅浪费用户流量，还有可能因请求失败导致页面显示错误的信息。当然我们有很多方式避免这一情况的发生，也可以简单地对此视而不见，毕竟这种情况在所有操作中所占据的比例不会太高。后续我们会介绍每种处理方式，并比较它们的优缺点，但现在让我们加快脚步，因为架构中还有另一道迷人的景色等待我们欣赏呢。
+* MVVM
+- MVP已经足够应对任何场景了，但是它终究只解决了MVC的一个缺点，P和V依然无法无天地炫耀他们的关系。而且当我们把业务加工也归并到M后，P的唯一职责就是保持M和V的通讯，而这个通讯要是仅仅P通知V还好，实际却是V要主动调用P，P再主动回调V，双方都深受其苦。V要喊P干活貌似是必须的，但是如果V可以做一个“监工”，时刻盯着P干活，等结束后自己拿着结果走人，岂不是双方都省事？不然P在那边“埋头苦干”，V在一边“晒太阳”，如此压榨劳动力也许某天P就造反了。
+好在有个设计模式叫观察者模式，简直就是为“监工”量身定做，而且监工也不需要时刻盯着，这边完成工作后自己就会发出信号，就像水烧开了自己会响一样，V收到P发的信号就过来收作业，真是皆大欢喜呀。在Android中，MVVM架构做的就是这样的事情。
+- MVVM，并不是四个单词的组合，前面的MV和MVC、MVP中的概念都是一致的，最后一个VM是ViewModel的意思，和C、P属于同一层级，VM可以理解为为V服务的M，它对应的就是我们刚刚提取出的Repository的概念，用来对纯粹业务进行加工的。那么P哪去了呢？奥秘就在于VM虽然和Repository同概念，但是它是可以被观察的，V可以通过观察VM自动更新自己，所以P就可以退出历史舞台了。V观察VM，所以VM并不知晓V的存在，这是一个单向的依赖关系。MVVM的事件流向是这样的：
+  
+[[./pic/mvpmvvm.jpg]]
+
+- 可以看到，MVVM和MVP最大的区别就是PV是互相引用的，而VM和V是单向引用的，整体结构更为简洁，没有一点冗余，VM不再依赖V，它的复用就更简单了。
+- V是如何观察VM的，这里我们就不再展开了，简单来说通过回调就可以实现。但是在Android上V的实现由Activity+xml组合完成，因此通过回调只能通知到Activity层，再由Activity来更新xml，而想要更进一步直接更新xml，就要借助databinding这一招大杀器了，它的出现使得MVVM在Android平台上以星火燎原之势迅速发展起来。
+- 让我们还是以简单的登录为例，感受一下MVVM给我们带来的新惊喜。首先书写VM，为了简洁说明问题，全部操作都是模拟的：
+#+BEGIN_SRC java
+public class LoginViewModel extends BaseObservable {
+    public final ObservableField<String> mLoginResultState = new ObservableField<>();
+    public final ObservableField<Boolean> mIsLoading = new ObservableField<>();
+    public void login(final String username, final String password) {
+        new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    mIsLoading.set(true);
+                    if (!isUserNameValid(username)) {
+                        mIsLoading.set(false);
+                        mLoginResultState.set("username is not valid.");
+                        return;
+                    }
+                    if (!isPasswordValid(password)) {
+                        mIsLoading.set(false);
+                        mLoginResultState.set("password is not valid.");
+                        return;
+                    }
+                    // 模拟耗时操作
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ignored) {
+                    }
+                    mLoginResultState.set("login succeed!");
+                    mIsLoading.set(false);
+                }
+            }).start();
+    }
+}
+#+END_SRC
+- 在VM中只要给ObservableField赋值，通过databinding工具就会自动通知订阅者（Activity或xml）。我们希望xml可以自己感知是否正在加载中和加载结果，所以xml大致是这样的：
+#+BEGIN_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        xmlns:tools="http://schemas.android.com/tools">
+  <data>
+    <import type="android.view.View" />
+    <variable
+        name="viewmodel"
+        type="com.common.mvvmsample.ui.login.LoginViewModel" />
+  </data>
+  <androidx.constraintlayout.widget.ConstraintLayout>
+    <EditText
+        android:id="@+id/username"/>
+    <EditText
+        android:id="@+id/password"/>
+    <Button
+        android:id="@+id/login"/>
+    <ProgressBar
+        android:id="@+id/loading"
+        android:visibility="@ {viewmodel.mIsLoading ? View.VISIBLE : View.GONE}"/>
+    <TextView
+        android:id="@+id/result"
+        android:text="@ {viewmodel.mLoginResultState}"/>
+  </androidx.constraintlayout.widget.ConstraintLayout>
+</layout>
+#+END_SRC
+- 虽然和我们平时写的不大一样，但也只是加了一层而已，整体还是很好理解的，接下来是Activity部分：
+#+BEGIN_SRC java
+public class LoginActivity extends AppCompatActivity {
+    private LoginViewModel loginViewModel;
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        ActivityLoginBinding activityLoginBinding = DataBindingUtil.setContentView(this, R.layout.activity_login);
+        loginViewModel = new LoginViewModel();
+        activityLoginBinding.setViewmodel(loginViewModel);
+        // ...
+        loginButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                loginViewModel.login(usernameEditText.getText().toString(), passwordEditText.getText().toString());
+            }
+        });
+    }
+}
+#+END_SRC
+- 好了，示例到此结束，我们只是展示了databinding最基础的用法，databinding的实现原理其实就是回调，在build下有自动生成的代码，感兴趣可以自行查看。我们演示的主要目的其实不是说明databinding的原理，而是展现它不好的一面。
+- 结合上述示例，可以发现databinding一个显著的问题，那就是它使得xml无法复用，因为每个view都和model绑定在一起了。还有一个问题比较隐晦，由于V和VM自动同时更新的原因（V和VM是双向绑定的，VM可以更新V，V也可以更新VM，感兴趣的话可以多用用databinding，自己去发现哈），这时候如果出现了bug，到底先从VM看还是先从V看就成了“玄学”的问题了。
+- 诚然，MVVM并不是一定得结合databinding使用，但是若只是单纯的将P替换成VM，相当于去掉了原有的PV互相引用的问题，却又加入了观察者回调，等于是换汤不换药，所产生的提升是极其有限的。也许等某一天有了更好的工具可以取代databinding，MVVM就会遥遥领先，成为Android中的“架构之王”。
+** 总结一
+- 经过了对MVC、MVP、MVVM的分析，我们发现三层结构是架构的基石，将业务与界面分离，并提供一个中转站似乎是目前最好的途径。MVC开创了时代，MVP解决了M和V的微弱联系，MVVM则是把P和V的联系也减弱了，它们都是站在MVC的肩膀上发展起来的，并且在Android这个平台上发光发热。让我们对这一段历程做一个简要的总结吧。
+*** MVC的优缺点
+- 优点
+  - 使用三层结构，分离了业务与UI，使得业务保持独立性，可以进行单元测试，大大提高了可复用性，大大降低了耦合性；
+- 缺点
+  - M和V依然保持一定的联系；
+  - C和V联系紧密，无法单独复用；
+*** MVP的优缺点
+- 优点
+  - 彻底分离了M和V，且M、V、P三层均为抽象，将单元测试的范围大大扩展；
+  - 通过对P的优化，可以极好地支持模块化，满足最少知道原则、单一职责原则；
+- 缺点
+  - 将MV分离后，加重了P和V的联系，造成了和则生分则死的局面；
+  - P和V之间需要大量的接口，书写困难，复杂性提高；
+*** MVVM的优缺点
+- 优点
+  - 在MVP的基础上，减弱了VM和V之间的联系，从而解开PV“生死相依”的局面；
+  - VM不再需要V，复用性较P而言大大提高；
+- 缺点
+  - VM和V双向绑定，数据从一处传到了另一处，给debug增加了难度；
+  - 由于Activity+xml的模式，databinding工具使xml无法复用；
+  - 代码不如MVP直观，人往往对可见的信息更敏感，如此会增加出错的概率；
+- MVVM还有进一步发展的空间，如果能够解决它的缺点，它将可能是史上最强架构，在未来很长的时间里发光发热，真是叫人期待呢。
+** 总结二
+- 架构是一种思想，一种对代码的设计，永远不应该是一种束缚，一种条条框框的东西。例如并不是一定要定义MVP的三层接口，也不一定非要使用MVP，比方说某个页面只有一个功能，就是检查一下当前APP是不是最新版本，而且这是一个次级功能，很可能长时间不会有改动，使用MVP和直接自上而下写代码能有多少区别呢？这个页面有没有问题一眼就可以看出来，这种情况下还硬是要套模式，就是自讨苦吃了。当然同样的问题在核心流程上还是有一定必要使用优秀设计的，比方说登录的功能，它一旦出问题会产生不可估量的损失，老老实实地做分层架构并进行全方位的测试，才是更稳妥的方案。
+- 总之在使用架构上，一定要灵活，结合每个页面每个功能点量身定做，不要搞出一套“官僚主义”来，处处走形式。当类变得很大，就拆分，很小就不需要拆分，不需要复用就直接定义实现类，等需要复用了再抽象…，只有使用合适的方式做合适的事情，才是真正的优秀的架构。
+
+
+* Jetpack 架构组件/Lifecycle （这个讲得稍微深一点儿）
+** 使用此架构能带来什么好处？
+- UI和业务逻辑解耦。
+- 有效避免生命周期组件内存泄漏。
+- 提高模块可测试性。
+- 提高应用稳定性，有效降低以下异常发生概率。
+  - Can not perform this action after onSaveInstanceState
+  - WindowManager$BadTokenException, is your activity running?
+  - OOM 、 NullPointerException
+** 测试每个组件
+- 界面和交互：使用 Android 界面插桩测试。基于此架构只需mock 一个ViewModel即可完成界面测试。
+- ViewModel：使用 JUnit 测试。只需mock一个类，即 Repository。
+- Repository：使用 JUnit 测试。只需mock两个类，XxxDao，XxxService；由于XxxDao，XxxService都是接口，还可以创建虚拟实现来完成复杂测试用例。
+- XxxDao：可以使用插桩测试来测试 DAO 类。这里注意对于每个测试，都请创建内存中数据库以确保测试没有任何副作用（例如更改磁盘上的数据库文件）。
+- XxxService：就Retrofit而言可以使用MockWebServer模拟本地服务器。
+** Lifecycle
+- Lifecycle是一个类，它包含组件(Activity或Fragment)生命周期状态的信息，并允许其他对象观察此状态。
+** 跟踪组件生命周期
+- lifecycle-states
+  - Lifecycle内部使用两个主要枚举(Event、State)来跟踪其关联组件的生命周期状态。
+  - Event：对应Activity或Fragment组件的生命周期回调事件。
+  - State：表示被跟踪组件的当前状态，其中 STARTED 和 RESUMED 为活跃状态，可接受到liveData的数据更新。
+- LifecycleOwner和LifecycleRegistry
+  - LifecycleOwner ： 是一个单一的方法接口，表示该类具有生命周期。support包从26.1.0版本开始，Fragment和Activity就默认实现了该接口。
+  - LifecycleRegistry : Lifecycle接口的实现类，协助组件处理生命周期，可处理多个观察者。如果你想自定义LifecyclerOwner请参考support包中Fragment和Activity实现。
+- ViewModel
+  - ViewModel 是用来保存应用UI数据的类，它会在配置变更（Configuration Change）后继续存在。
+- 生命周期
+
+[[./pic/lifecycle.png]]
+
+  - 关于ViewModel的生命周期就一句话：在Activity/Fragment等组件整个生命周期过程中，ViewModel的实例有且只有一个。
+- 这样设计好处在哪呢？
+  - 可用ViewModel存储数据，它能安全度过手机旋转等配置变更场景。
+  - ViewModel能很好的实现多个Fragment之间的数据共享。
+** 单一责任原则
+- Actvity或Fragment只显示UI和接收互动。
+- 为避免ViewModel臃肿，可创建presenter处理UI数据。（比如从数据列表中获取某个item的属性）
+- Repository 数据源操作入口。（便于单元测试）
+- 配合其它架构组件使用。
+** 最佳实践
+- 任何时候都不要将Context传入ViewModel。
+- 如果要在ViewModel中使用Application实例，请使用AndroidViewModel子类。
+- ViewModel+LiveData+Databinding 可构建反应式UI。（请查看文末提供的参考资料）
+- ViewModel与onSaveInstanceState要配合使用。
+|----------------+--------------------------|
+| ViewModel      | onSaveInstanceState      |
+|----------------+--------------------------|
+| 能度过配置变更 | 能度过配置变更和进程关闭 |
+| 存储大量数据   | 存储少量数据             |
+| 可序列化       |    ?                     |
+  - ViewModel和onSaveInstanceState是相辅相成的，当进程被关闭时，ViewModel会被销毁，而onSaveInstanceState不会受影响。所以用onSaveInstanceState存储少量关键数据(如xxxId)，并在该场景恢复后用来加载页面数据。
+
+** ViewModel和View之间通信
+- Communication between ViewModel and View
+- UserProfileActivity引用UserViewModel，可观察其提供的UserLiveData、StatusLiveData、PageStateLiveData数据源变更来刷新UI。
+- 响应用户事件，比如更新用户信息。Activity将更新事件传递给ViewModel，ViewModel有将其委托给Presenter处理，Presenter处理过程及结果通过LiveData与Activity交互。
+- 注意Activity和ViewModel之间是单向引用。为避免内存泄漏，ViewModel不能持有任何Context引用。
+- viewmodel
+  - The ViewModel class is designed to store and manage UI-related data in a lifecycle conscious way. The ViewModel class allows data to survive configuration changes such as screen rotations.
+  - ViewModel同样具有生命周期意识的处理跟UI相关的数据，并且，当设备的一些配置信息改变（例如屏幕旋转）它的数据不会消失。
+  - 通常情况下，如果我们不做特殊处理，当屏幕旋转的时候，数据会消失，那ViewModel管理的数据为什么不会消失呢，是因为ViewModel的生命周期：(参见上面lifecycle.png)
+  - ViewModel的另一个特点就是同一个Activity的Fragment之间可以使用ViewModel实现共享数据。
+** LiveData
+- LiveData是一个具有生命周期感知特性的可观察的数据保持类。
+  - LiveData只通知活跃状态( STARTED or RESUMED )的Observer更新，并在 DESTROYED状态时自动移除Observer，避免内存泄漏。
+  - 始终保持最新数据。举例：
+    - 1.退后台的Activity在返回前台后会立即收到最新数据。
+    - 2. 配置变更导致Activity重建后也会立即收到最新数据。
+  - 共享资源。单例模式共享同一个LiveData。
+- 那么LiveData有什么优点呢？简单地说，就是：数据变更的时候更新UI；没有内存泄漏；不会因为停止Activity崩溃；无需手动处理生命周期；共享资源
+- 使用方式
+  - LiveData常用的方法也就如下几个：
+|----------------------------------------+------------------------------------------------------|
+| 方法名                                 | 作用                                                 |
+|----------------------------------------+------------------------------------------------------|
+| observe(@NonNull LifecycleOwner owner, | 最常用的方法，需要提供Observer处理数据变更后的处理。 |
+| @NonNull Observer<? super T> observer) | LifecycleOwner则是我们能够正确处理声明周期的关键！   |
+|----------------------------------------+------------------------------------------------------|
+| setValue(T value)                      | 设置数据                                             |
+| getValue():T                           | 获取数据                                             |
+| postValue(T value)                     | 在主线程中更新数据                                   |
+|----------------------------------------+------------------------------------------------------|
+
+** LiveData、MutableLiveData、MediatorLiveData区别?
+- 继承关系：MediatorLiveData -> MutableLiveData -> LiveData。 所以MediatorLiveData功能最强大。
+- LiveData 是一个具有生命周期感知的可观察的数据保持类。
+- MutableLiveData 在LiveData基础上打开了修改Value的方法权限。
+- MediatorLiveData 可管理多个LiveData。
+** Transformations
+- map : 将一种数据类型的转换为另一种类型 ```LiveData```
+#+BEGIN_SRC java
+// 观察将被转换LiveData，待其数据源变更后转换为LiveData并通知订阅者。
+// 内部使用的MediatorLiveData实现。
+LiveData userLiveData = …;
+LiveData<String> userName = Transformations.map(userLiveData, user -> {
+  user.name + " " + user.lastName
+});
+#+END_SRC
+- **switchMap** : 和map类似。差别在于triggerLiveData变更后，会触发和等待另外一个LiveData获取数据。
+#+BEGIN_SRC java
+// 实例代码：将addressInputLiveData转换为postalCodeLiveData.
+class MyViewModel extends ViewModel {
+private final PostalCodeRepository repository;
+private final MutableLiveData addressInput = new MutableLiveData();
+public final LiveData postalCode =
+      Transformations.switchMap(addressInput, (address) -> {
+          return repository.getPostCode(address);
+       });
+public MyViewModel(PostalCodeRepository repository) {
+this.repository = repository
+}
+// addressInputLiveData变更时触发repository.getPostCode，
+// 待其回去成功后，再将数据设置给postalCodeLiveData。
+private void setInput(String address) {
+        addressInput.setValue(address);
+    }
+}
+#+END_SRC
+- 几个问题
+** LifecycleOwner组件是如何与liveData通信的？
+- SupportActivity 通过添加一个空的ReportFragment来处理生命周期状态变更回调；Fragment则在自身生命周期函数中处理。
+- LifecycleOwner组件，通过LifecycleRegistry类中handleLifecycleEvent -> dispatchEvent方法与liveData通信，从而是liveData具有自动感知组件生命周期的能力。
+- 组件销毁时，LifecycleRegistry会通知liveData移除observer。
+** ViewModel如何做到一直在内存中，直到Activity销毁或Fragment被移除时才被清除的？
+- 1.x.x版本实现
+  - Activity或Fragment会添加一个空的HolderFragment，而ViewModelStore实例被HolderFragment持有，所以就保证了整个生命周期中ViewModelStore实例始终唯一，也就保证了其缓存的ViewModel实例会一直存在直到组件销毁（在onDestroy中会调用ViewModelStore.clear()方法清除其缓存的ViewModel实例）。
+  - 由于这个HolderFragment设置了setRetainInstance(true)， 这样在Activity重建时它不会执行onDestroy回调，这就是它能度过配置变更的原因。
+- 2.x.x版本实现
+  - Activity
+    - 缓存：onRetainNonConfigurationInstance()回调方法中将ViewModelStore实例缓存到NonConfigurationInstances中。
+    - 恢复：在onCreate中通过getLastNonConfigurationInstance()获取重建前的状态并回复ViewModelStore。
+  - Fragment
+    - 缓存：FragmentActivity.onSaveInstanceState -> Fragment.saveAllState -> Fragment.saveNonConfig，将ViewModelStore实例缓存到了FragmentManagerNonConfig中，最终通过FragmentActivity将其缓存到NonConfigurationInstances中。
+    - 恢复：FragmentActivity.onCreate -> FragmentManager.restoreAllState(arg1, nonConfig) -> FragmentState.instantiate(x,x,x,nonConfig, viewModelStore)此方法会创建一个新的Fragment并将ViewModelStore变量赋值。
+
+* Android Jetpack - ViewModel & LiveData使用步骤重点讲述
+** 第一步：添加依赖
+- 添加进module下面的build.gradle：
+#+BEGIN_SRC groovy
+ext.lifecycleVersion = '2.2.0-alpha01'
+dependencies {
+    //...
+    // liveData
+    implementation "androidx.lifecycle:lifecycle-livedata-ktx:$rootProject.lifecycleVersion"
+    // viewModel
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:$rootProject.lifecycleVersion"
+    implementation "androidx.lifecycle:lifecycle-extensions:$rootProject.lifecycleVersion"
+}
+#+END_SRC
+** 第二步：创建ShoeModel
+- 继承ViewModel类，分别创建对品牌名的观察对象brand:MutableLiveData<String>和对鞋子集合的观察对象shoes: LiveData<List<Shoe>>：
+#+BEGIN_SRC kotlin
+class ShoeModel constructor(shoeRepository: ShoeRepository) : ViewModel() { // 继承自ViewModel, 这里 ViewModel()
+    // 品牌的观察对象 默认观察所有的品牌
+    private val brand = MutableLiveData<String>().apply {
+        value = ALL
+    }
+    // 鞋子集合的观察类
+    val shoes: LiveData<List<Shoe>> = brand.switchMap {
+        // Room数据库查询，只要知道返回的是LiveData<List<Shoe>>即可
+        if (it == ALL) {
+            shoeRepository.getAllShoes()
+        } else {
+            shoeRepository.getShoesByBrand(it)
+        }
+    }
+    //... 不重要的函数省略
+    companion object {
+        private const val ALL = "所有"
+    }
+}
+#+END_SRC
+** 第三步：获取ViewModel
+*** 无构造参数获取：
+- 构造函数没有参数的情况下，获取ShoeModel很简单，
+#+BEGIN_SRC kotlin
+ViewModelProviders.of(this).get(ShoeModel::class.java)
+#+END_SRC
+  - 这样就可以返回一个我们需要的ShoeModel了。
+*** 有构造参数获取
+- 不过，上面的ShoeModel中我们在构造函数中需要一个ShoeRepository参数，上述方法是显然行不通的，这种情况下我们需要自定义实现Factory：
+#+BEGIN_SRC kotlin
+class ShoeModelFactory(
+    private val repository: ShoeRepository
+) : ViewModelProvider.NewInstanceFactory() {
+    override fun <T : ViewModel?> create(modelClass: Class<T>): T {
+        return ShoeModel(repository) as T
+    }
+}
+#+END_SRC
+- 为了使用方便，又写了一个工具类CustomViewModelProvider：
+#+BEGIN_SRC kotlin
+object CustomViewModelProvider {
+    fun providerShoeModel(context: Context):ShoeModelFactory{
+        val repository:ShoeRepository = RepositoryProvider.providerShoeRepository(context)
+        return ShoeModelFactory(repository)
+    }
+}
+#+END_SRC
+- 最后在ShoeFragment中获取：
+#+BEGIN_SRC kotlin
+    // by viewModels 需要依赖 "androidx.navigation:navigation-ui-ktx:$rootProject.navigationVersion"
+    private val viewModel: ShoeModel by viewModels {
+        CustomViewModelProvider.providerShoeModel(requireContext())
+    }
+#+END_SRC
+** 第四步：使用ViewModel
+- ViewModel的使用需要结合具体的业务，比如我这里的ShoeModel，因为ShoeFragment的代码不多，我直接贴出来：
+#+BEGIN_SRC kotlin
+// 鞋子集合的Fragment
+class ShoeFragment : Fragment() {
+    // by viewModels 需要依赖 "androidx.navigation:navigation-ui-ktx:$rootProject.navigationVersion"
+    private val viewModel: ShoeModel by viewModels {
+        CustomViewModelProvider.providerShoeModel(requireContext())
+    }
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        val binding: FragmentShoeBinding = FragmentShoeBinding.inflate(inflater, container, false)
+        context ?: return binding.root
+        ViewModelProviders.of(this).get(ShoeModel::class.java)
+        // RecyclerView 的适配器 ShoeAdapter
+        val adapter = ShoeAdapter()
+        binding.recycler.adapter = adapter
+        onSubscribeUi(adapter)
+        return binding.root
+    }
+    // 鞋子数据更新的通知
+    private fun onSubscribeUi(adapter: ShoeAdapter) {
+        viewModel.shoes.observe(viewLifecycleOwner, Observer {
+            if (it != null) {
+                adapter.submitList(it)
+            }
+        })
+    }
+}
+#+END_SRC
+- 在onSubscribeUi方法中，我们使用ShoeModel的LiveData进行了观察通知，当鞋子集合更新的时候，会更新到当前RecyclerView中的适配器。
+- 布局文件fragment_shoe.xml很简单，虽使用了Data Binding，但是没有变量，且只有一个RecyclerView，这里不再赘述。ShoeAdapter的实现同样简单，感兴趣的可以查看源码，这里同样不再赘述。
+- 这样写完之后，本文一开始的图的效果就出现了~
+** LiveData数据变换
+- LiveData中数据变换方法有map()和switchMap()，关于switchMap()，我在上面实战的ShoeModel已经实践过了：
+#+BEGIN_SRC kotlin
+// 本地数据仓库
+class ShoeRepository private constructor(private val shoeDao: ShoeDao) {
+    fun getAllShoes() = shoeDao.getAllShoes()
+    /**
+     * 通过品牌查询鞋子 返回 LiveData<List<Shoe>>
+     */
+    fun getShoesByBrand(brand:String) = shoeDao.findShoeByBrand(brand)
+    /**
+     * 插入鞋子的集合 返回 LiveData<List<Shoe>>
+     */
+    fun insertShoes(shoes: List<Shoe>) = shoeDao.insertShoes(shoes)
+    // ... 单例省略
+}
+class ShoeModel constructor(shoeRepository: ShoeRepository) : ViewModel() {
+    // 品牌的观察对象 默认观察所有的品牌
+    private val brand = MutableLiveData<String>().apply {
+        value = ALL
+    }
+    // 鞋子集合的观察类
+    val shoes: LiveData<List<Shoe>> = brand.switchMap { // <<<====== switchMap()
+        // Room数据库查询，只要知道返回的是LiveData<List<Shoe>>即可
+        if (it == ALL) {
+            shoeRepository.getAllShoes()
+        } else {
+            shoeRepository.getShoesByBrand(it)
+        }
+    }
+}
+#+END_SRC
+- map()的使用我们借用官方的例子：
+#+BEGIN_SRC kotlin
+val userLiveData: LiveData<User> = UserLiveData()
+val userName: LiveData<String> = Transformations.map(userLiveData) {
+    user -> "${user.name} ${user.lastName}"
+}
+#+END_SRC
+  - 可以看到，map()同样可以实现将A变成B，那么switchMap()和map()的区别是什么？
+    - map()中只有一个LiveData<A>，他是在LiveData<A>发送数据的时候把A变成B，
+    - 而switchMap()中同时存在LiveData<A>和LiveData<B>，LiveData<A>更新之后通知LiveData<B>更新。
+** LiveData如何共享数据
+- 假设我们有这样的需求：注册页需要记录信息，注册完成跳转到登录页，并将账号和密码显示在登录页。这种情况下，我们可以定义一个类然后继承LiveData，并使用单例模式即可：
+#+BEGIN_SRC kotlin
+// 登录信息
+data class LoginInfo constructor(val account: String, val pwd: String, val email: String)
+/**
+ * 自定义单例LiveData
+ */
+class LoginLiveData: LiveData<LoginInfo>() {
+    companion object {
+        private lateinit var sInstance: LoginLiveData
+        @MainThread
+        fun get(): LoginLiveData {
+            sInstance = if (::sInstance.isInitialized) sInstance else LoginLiveData() // 非空：：
+            return sInstance
+        }
+    }
+}
+#+END_SRC
+  - 需要实例的时候用单例创建即可。
+** 使用ViewModel在同一个Activity中的Fragment之间共享数据
+想要利用ViewModel实现Fragment之间数据共享，前提是Fragment中的FragmentActivity得相同，这里直接贴上官方的代码：
+#+BEGIN_SRC kotlin
+class SharedViewModel : ViewModel() {
+    val selected = MutableLiveData<Item>()
+    fun select(item: Item) {
+        selected.value = item // .value = 
+    }
+}
+class MasterFragment : Fragment() {
+    private lateinit var itemSelector: Selector
+    private lateinit var model: SharedViewModel //
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        model = activity?.run {
+            ViewModelProviders.of(this).get(SharedViewModel::class.java)
+        } ?: throw Exception("Invalid Activity") // 先做空检测判断
+        itemSelector.setOnClickListener { item ->
+                                              // Update the UI
+        }
+    }
+}
+class DetailFragment : Fragment() {
+    private lateinit var model: SharedViewModel // 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        model = activity?.run {
+            ViewModelProviders.of(this).get(SharedViewModel::class.java)
+        } ?: throw Exception("Invalid Activity")
+        model.selected.observe(this, Observer<Item> { item ->
+                                                          // Update the UI
+        })
+    }
+}
+#+END_SRC
+
+* paging
+-  Paging 的出现，就是用作列表的分页加载。其实现在已经有非常多成熟高效的开源列表加载控件了,比如：Smartrefreshlayout等。但Google推出的，必然有它的有点，当然也有它的局限性。
+- 先说优点吧，Paging 的使用，需要配合ViewModle，LiveData等控件，数据的请求感知并绑定页面的生命周期，避免了内存泄漏。还需要绑定DataSource和DataSource的Factory，能无痕加载更多数据，一定程度上提高用户体验。
+- 主要流程是：
+  - 1：自定义 PositionalDataSource，里面的功能是进行数据分页请求。
+  - 2：自定义 DataSource.Factory，把 PositionalDataSource 绑定 LiveData
+  - 3：Activity 自定义 ViewModel，把 PositionalDataSource 和 Factory 绑定，让 ViewModel 感知数据的变化 
+  - 4：ViewModel感知数据的变更，并更新  PagedListAdapter 的 submitList。
+- _DataSource_ 它就像是一个抽水泵，而不是真正的水源，它负责从数据源加载数据，可以看成是Paging Library与数据源之间的接口。Datasource 是数据源相关的类，Key是加载数据的条件信息，Value是返回结果， 针对不同场景我们需要用不同的Datasource，Paging提供了三个子类来供我们选择。
+  - PageKeyedDataSource:：适用于目标数据根据页信息请求数据的场景，即Key 字段是页相关的信息。比如请求的数据的参数中包含类似next/previous的信息。
+  - ItemKeyedDataSource：适用于目标数据的加载依赖特定item的信息， 即Key字段包含的是Item中的信息，比如需要根据第N项的信息加载第N+1项的数据，传参中需要传入第N项的ID时，该场景多出现于论坛类应用评论信息的请求。
+  - PositionalDataSource：适用于目标数据总数固定，通过特定的位置加载数据，这里Key是Integer类型的位置信息，T即Value。 比如从数据库中的1200条开始加在20条数据。
+- _PagedList_ 它就像是一个蓄水池，DataSource抽的水放到PagedList中。它是List的子类，它包含着我们的数据并告诉数据源何时加载数据。我们也可以配置一次加载多少数据，以及应该预取多少数据。它提供适配器的更新作为页面中加载的数据。PagedList有五个重要的参数：
+  - mMainThreadExecutor: 主线程的Excutor, 用于将结果post到主线程。
+  - mBackgroundThreadExecutor: 后台线程的Excutor.
+  - BoundaryCallback:加载Datasource中的数据加载到边界时的回调.
+  - Config: 配置PagedList从Datasource加载数据的方式， 其中包含以下属性：
+    - pageSize：设置每页加载的数量
+    - prefetchDistance：预加载的数量
+    - initialLoadSizeHint：初始化数据时加载的数量
+    - enablePlaceholders：当item为null是否使用PlaceHolder展示
+    - PagedStorage: 用于存储加载到的数据，它是真正的蓄水池所在，它包含一个ArrayList对象mPages，按页存储数据
+- _PagedListAdapter_ 这个类是RecyclerView.adapter的实现，它提供来自PagedList的数据并以DiffUtil作为参数来计算数据的差异并为你做所有的更新工作。
+- 完成以上步骤，涉及到几个类分别为：
+  - RecyclerView 负责列表展示；
+  - PagedListAdapter RecyclerView的适配器 同时负责通知PagedList何时加载更多数据
+  - PagedList 控制分页加载的逻辑，比如加载的数量，每页的大小，是否显示 item PlaceHolder等等；
+  - DataSource 执行数据获取的逻辑，它本身并不存储数据，获取到数据丢给PagedList存储。
+- 以上的四个核心类理解完成之后，大致流程如下：
+  - RecyclerView对应的Adapter为PagedListAdapter，通知PagedList需要获取数据，此时PagedList通过DataSource真正执行获取数据的逻辑，返回的数据给PagedList，然后PagedList将数据传递给PagedListAdapter，最后在RecyclerView中显示。
+  - 简述一下使用 pageing 组件分页加载数据的过程，DataSource 负责从网络或数据库加载数据，将数据存储在 PagedList 中，使用 submitList 提交数据到 PagedListAdapter,当数据发生变化时会在后台线程中计算数据差异，最后 PagedListAdapter 通知 RecyclerView 更新数据。
+** paging 3
+- 相比Paging2，Paging3有如下一些优点。
+  - 在内存中缓存分页数据，确保 App 在使用分页数据时有效地使用系统资源。
+  - 内置删除重复数据的请求，确保 App 有效地使用网络带宽和系统资源。
+  - 可配置 RecyclerView 的 Adapters，当用户滚动到加载数据的末尾时自动请求数据。
+  - 支持 Kotlin 协程和 Flow, 以及 LiveData 和 RxJava。
+  - 内置的错误处理支持，包括刷新和重试等功能。
+*** 主要变化
+- 在 Paging3 之前，Paging提供了 ItemKeyedDataSource、PageKeyedDataSource、PositionalDataSource 这三个类来进行数据获取的操作。
+  - PositionalDataSource：用于加载数据有限的数据，比如加载本地数据库。
+  - PageKeyedDataSource：用来请求网络数据，适用于通过页码分页来请求数据。
+  - ItemKeyedDataSource：用来请求网络数据，它适用于通过当前页面最后一条数据的 id作为下一页的数据的开始的位置的场景。
+- 在 Paging3 之后，ItemKeyedDataSource、PageKeyedDataSource、PositionalDataSource 合并为一个 PagingSource，所有旧 API 加载方法被合并到 PagingSource 中的单个 load() 方法中，如下所示。
+#+BEGIN_SRC kotlin
+abstract suspend fun load(params: LoadParams<Key>): LoadResult<Key, Value>
+#+END_SRC
+- 除此之外，变化的内容还包括：
+  - LivePagedListBuilder 和 RxPagedListBuilder 合并为了 Pager。
+  - 使用 PagedList.Config 替换 PagingConfig。
+  - 使用 RemoteMediator 替换了 PagedList.BoundaryCallback 去加载网络和本地数据库的数据。
+*** 重要概念
+- 在正式学习Paging3之前，我们需要弄清楚几个重要的概念：
+- PagingSource：单一的数据源，可以表示数据库请求得到的数据，也可以是网络请求得到的数据。
+- RemoteMediator：单一的数据源，它会在 PagingSource 没有数据的时候，再使用 RemoteMediator 提供的数据，如果既存在数据库请求又存在网络请求，通常 PagingSource 用于进行数据库请求，RemoteMediator 进行网络请求。
+- PagingData：单次分页数据的容器。
+- Pager：用来构建 Flow<PagingData> 的类，实现数据加载完成的回调。
+- PagingDataAdapter：分页加载数据的 RecyclerView 的适配器。
+- 总的来说，使用Paging3加载网络数据的流程是：PagingSource 和 RemoteMediator 充当数据源的角色，ViewModel 使用 Pager 中提供的 Flow<PagingData> 监听数据刷新，每当 RecyclerView 即将滚动到底部的时候，就会加载新的数据，最后再使用PagingAdapter 展示数据。
+*** Paging3应用架构
+- 下面是Android官方推荐的接入 Paging3的应用架构图。
+
+[[./pic/page3.png]]
+
+- 可以发现，使用Paging3实现数据分页时主要包含3个对象：
+**** 数据仓库层Repository
+- Repository层主要使用PagingSource这个分页组件来实现，每个PagingSource对象都对应一个数据源，以及该如何从该数据源中查找数据，PagingSource可以从任何单个数据源比如网络或者数据库中查找数据。
+- Repository层还有另一个分页组件可以使用RemoteMediator，它是一个分层数据源，比如有本地数据库缓存的网络数据源。
+**** ViewModel层
+- Repository最终返回一个异步流包裹的PagingDataFlow<PagingData<Value>>，PagingData存储了数据结果，最终可以使用它将数据跟UI界面关联起来。ViewModel一般都使用LiveData来跟UI层交互，Flow的扩展函数可以直接转换成一个LiveData可观察对象。
+**** UI层
+- UI层其实就是Activity/Fragment等视图层，主要的作用是给RecycleView设置Adapter，给Adater设置数据。
+** Paging支持的架构类型：
+*** 网络数据
+- 对网络数据进行分页加载，是最常见的一种分页需求，也是我们学习的重点。不同的公司针对分页机制所设计的API接口通常也不太一样，但总体而言可以归纳为3种。
+- Paging组件提供了3种不同的方案，以应对不同的分页机制。
+  - 分别是：PositionDataSource、PageKeyedDataSource、ItemKeyedDataSource
+*** 数据库
+- 掌握了网络数据分页之后，数据库数据分页将会容易很多，无非就是数据源的替换
+*** 网络+数据库
+- 出于用户体验的考虑，我们通常会对网络数据进行缓存，以便用户在下次打开应用程序时，应用程序可以先展示缓存数据。
+- 我们通常会利用数据库对网络数据进行缓存，这意味着我们需要同时处理好网络和数据库这两个数据源。
+- 多数据源会让业务逻辑变得更为复杂，所以！我们通常采用单一数据源作为解决方案。
+- 既从网络获取的数据，直接缓存进数据库，列表只从数据库这个唯一的数据源获取数据，这里我们会学习到BoundaryCallback
+
+** Paging支持的三种分页方式
+*** PositionalDataSource
+- 支持从任意位置开始，取多少条数据的方式，类似SQL中 " XX > id limit 100"， 又类似 "start=100&count=20" , 意味着从第100的位置开始，向后取20条数据。
+*** PageKeyedDataSource
+- 这是我们最熟悉的模式，即"pageIndex=1 & pageSize=20"的模式。使用以”页“的方式请求数据。
+*** ItemKeyedDataSource
+- ”maxId=nextId&count=200“模式，此次请求依赖上一次的的数据。这种请求方式一般在社交评论中用得比较多，只有这一次请求成功了，下一次请求才能依赖本次的某种参数继续请求。
+- 当然，这只是Google设计的三种用得比较多的请求方式，最终需要你选择的是你的服务器适合哪种方式，然后你再去采用这种方式。
+- 三种方式使用java语言设计编写示范可以参考：https://blog.csdn.net/u013762572/article/details/107452801
+
+- 最先看看导入那些依赖：
+#+BEGIN_SRC groovy
+implementation "androidx.paging:paging-runtime:3.0.0-alpha04"
+ implementation 'androidx.recyclerview:recyclerview:1.1.0'
+ implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+ implementation "android.arch.lifecycle:extensions:1.1.1"
+#+END_SRC
+- 参考项目PagingDemo,使用kotlin语言编写
+  - 参考项目 https://juejin.cn/post/6997708252901277709 稍微复杂和更深入一点儿的网络数据请求，分有网络的时候网络请求，和无网络的时候数据库提取, 使用到了RemoteMediator or BoundaryCallback https://cdmana.com/2021/12/202112210714446797.html json parse网络数据，用本地数据库测试
+** RemoteMediator
+- RemoteMediator 和 PagingSource 的区别：
+  - PagingSource：实现单一数据源以及如何从该数据源中查找数据，推荐用于加载有限的数据集（本地数据库），例如 Room，数据源的变动会直接映射到 UI 上；
+  - RemoteMediator：实现加载网络分页数据并更新到数据库中，但是数据源的变动不能直接映射到 UI 上；
+  - 可以使用 RemoteMediator 实现从网络加载分页数据更新到数据库中，使用 PagingSource 从数据库中查找数据并显示在 UI 上
+- 最开始说Paging有缺点，其实Paging是没有下拉刷新的，只有上拉加载更多功能。这个并不满足很多列表场合。
+- 但是如果只需要上拉加载更多的话，Paging还是推荐使用的，毕竟是Google提供的。
+
+** coroutines
+- 理解协程、LiveData 和 Flow
+  - liveData 协程构造方法提供了一个协程代码块，这个块就是 LiveData 的作用域，当 LiveData 被观察的时候，里面的操作就会被执行，当 LiveData 不再被使用时，里面的操作就会取消。 而且该协程构造方法产生的是一个不可变的LiveData，可以直接暴露给对应的视图使用。而 emit() 方法则用来更新 LiveData 的数据。
+  - 一个常见用例，比如当用户在 UI 中选中一些元素，然后将这些选中的内容显示出来。一个常见的做法是，把被选中的项目的 ID 保存在一个 MutableLiveData 里，然后运行 switchMap。现在在 switchMap 里，您也可以使用协程构造方法:
+#+BEGIN_SRC kotlin
+    private val itemId = MutableLiveData<String>()
+    val result = itemId.switchMap {
+        liveData { emit(fetchItem(it)) }
+    }
+#+END_SRC
+- Google 推荐在 MVVM 架构中使用 Kotlin Flow
+- 图解协程原理
+ 
+* Paging - https://www.shuzhiduo.com/A/8Bz8Nk6k5x/
+Paging 库 3.0.0正式版已发布，普天同庆！Paging 库可帮助您加载和显示来自本地存储或网络中更大的数据集中的数据页面。此方法可让您的应用更高效地利用网络带宽和系统资源。Paging 库的组件旨在契合推荐的 Android 应用架构，流畅集成其他 Jetpack 组件，并提供一流的 Kotlin 支持。
+PagingSample ： 本地数据库的demo
+PagingWithNetworkSample ： 网络数据的demo
+Paging 库包含以下功能：
+分页数据的内存中缓存。该功能可确保您的应用在处理分页数据时高效利用系统资源。
+内置的请求重复信息删除功能，可确保您的应用高效利用网络带宽和系统资源。
+可配置的 RecyclerView 适配器，会在用户滚动到已加载数据的末尾时自动请求数据。
+对 Kotlin 协程和 Flow 以及 LiveData 和 RxJava 的一流支持。
+内置对错误处理功能的支持，包括刷新和重试功能。
+定义数据源 ： 数据源的定义取决于您从哪里加载数据。您仅需实现 PagingSource 或者 PagingSource 与 RemoteMediator 的组合:
+如果您从单个源加载数据，例如网络、本地数据、文件、内存缓存等（不只是网络和数据库，其他如文件也可以使用Paging），实现 PagingSource 即可，如果您使用了 Room，从 2.3.0-alpha 开始，它将默认为您实现 PagingSource。
+如果您从一个多层级数据源加载数据，就像带有本地数据库缓存的网络数据源那样。那么您需要实现 RemoteMediator 来合并两个数据源到一个本地数据库缓存的 PagingSource 中。
+PagingSource ：
+PagingSource 可以定义一个分页数据的数据源，以及从该数据源获取数据的方式。
+LoadParams：PagingSource 的 密封类（sealed），包含有关要执行的加载操作的信息，其中包括要加载的键和要加载的项数。作为load()函数的参数使用
+LoadResult：PagingSource 的 密封类（sealed），包含加载操作的结果。LoadResult 是一个密封的类，根据 load() 调用是否成功。作为load()函数的返回值
+getRefreshKey()： 该方法接受 PagingState 对象作为参数，并且当数据在初始加载后刷新或失效时，该方法会返回要传递给 load() 方法的键。在后续刷新数据时，Paging 库会自动调用此方法。
+load()： 下图说明了load() 函数如何接收每次加载的键并为后续加载提供键：
+
+代码示例：
+    // 自定义PagingSource类
+    private const val ARTICLE_STARTING_PAGE_INDEX = 0
+    class HomeArticlePagingSource(
+        private val api: WanJetpackApi
+    ) : PagingSource<Int, ApiArticle>() {
+        override suspend fun load(params: LoadParams<Int>): LoadResult<Int, ApiArticle> {
+            val page = params.key ?: ARTICLE_STARTING_PAGE_INDEX
+            return try {
+                val response = api.getHomeArticle(page)
+                val datas = response.data.datas
+                LoadResult.Page(
+                    data = datas,
+                    prevKey = if (page == ARTICLE_STARTING_PAGE_INDEX) null else page - 1,
+                    nextKey = if (page == response.data.pageCount) null else page + 1,
+                )
+            } catch (exception: Exception) {
+                LoadResult.Error(exception)
+            }
+        }
+        override fun getRefreshKey(state: PagingState<Int, ApiArticle>): Int? {
+            return null
+        }
+    }
+PagingData ：
+
+分页数据的容器被称为 PagingData，每次刷新数据时，都会创建一个 PagingData 的实例。如果要创建 PagingData 数据流，您需要创建一个 Pager 实例，并提供一个 PagingConfig 配置对象和一个可以告诉 Pager 如何获取您实现的 PagerSource 的实例的函数，以供 Pager 使用。
+Pager 类提供的方法可显示来自 PagingSource 的 PagingData 对象的响应式流。Paging 库支持使用多种流类型，包括 Flow、LiveData 以及 RxJava 中的 Flowable 和 Observable 类型。
+通过 Pager().flow可以返回Flow<PagingData>。然后在ViewModel中.cachedIn(viewModelScope)， cachedIn()运算符使数据流可共享，并使用提供的 CoroutineScope 缓存加载的数据
+代码示例： （注：Pager 的 remoteMediator 参数可选项， RemoteMediator 是重点）
+    //Repository:
+    fun getHomeArticle(): Flow<PagingData<ApiArticle>> {
+        return Pager(
+            config = PagingConfig(enablePlaceholders = false, pageSize = HOME_ARTICLE_PAGE_SIZE),
+            pagingSourceFactory = { HomeArticlePagingSource(api) }
+        ).flow
+    }
+    //ViewModel:
+    fun getHomeArticle(): Flow<PagingData<ApiArticle>> {
+        val newResult: Flow<PagingData<ApiArticle>> =
+            repository.getHomeArticle().cachedIn(viewModelScope)
+        currentArticleResult = newResult
+        return newResult
+    }
+PagingDataAdapter ：
+
+与定义 RecyclerView 列表 Adapter 时的通常做法相同：必须定义 onCreateViewHolder() 和 onBindViewHolder() 方法；指定 ViewHoler 和 DiffUtil.ItemCallback
+Adapter 及 UI （ Activity、Fragment ）中的相关代码略。
+LoadType ： 是个 enum 类，包含三种状态：REFRESH、PREPEND、APPEND。在 PagingSource 的 LoadParams 类中用到。
+
+官方介绍：Type of load a [PagingData] can trigger a [PagingSource] to perform.
+REFRESH：[PagingData] content being refreshed, which can be a result of [PagingSource] invalidation, refresh that may contain content updates, or the initial load.
+PREPEND：Load at the start of a [PagingData].
+APPEND：Load at the end of a [PagingData].
+LoadState ： 是个 sealed（密封） 类。
+
+官方介绍：LoadState of a PagedList load - associated with a [LoadType].
+[LoadState] of any [LoadType] may be observed for UI purposes by registering a listener via [androidx.paging.PagingDataAdapter.addLoadStateListener] or [androidx.paging.AsyncPagingDataDiffer.addLoadStateListener]
+Paging 库通过 LoadState 对象公开可在界面中使用的加载状态。LoadState 根据当前的加载状态采用以下三种形式之一：
+如果没有正在执行的加载操作且没有错误，则 LoadState 为 LoadState.NotLoading 对象。
+如果有正在执行的加载操作，则 LoadState 为 LoadState.Loading 对象。
+如果出现错误，则 LoadState 为 LoadState.Error 对象。
+加载状态的三个场景：下拉刷新、上拉加载更多、首次进入页面中间的滚动条（及加载失败提醒）
+
+显示加载状态 ： 可通过两种方法在界面中使用 LoadState：使用监听器，以及使用特殊的列表适配器在 RecyclerView 列表中直接显示加载状态。
+
+方法一、 使用监听器获取加载状态： 为了获取加载状态以用于界面中的一般用途，PagingDataAdapter 中提供了 addLoadStateListener()、loadStateFlow 两种方式。来自 loadStateFlow 或 addLoadStateListener() 的更新可确保与界面的更新保持同步。这意味着，如果您收到 NotLoading.Incomplete 的 LoadState，则可以确定加载已完成，并且界面也已相应更新。
+    // addLoadStateListener 方式。
+    articleAdapter.addLoadStateListener {
+        when (it.refresh) {
+            is LoadState.NotLoading -> {
+                progressBar.visibility = View.INVISIBLE
+                recyclerView.visibility = View.VISIBLE
+            }
+            is LoadState.Loading -> {
+                progressBar.visibility = View.VISIBLE
+                recyclerView.visibility = View.INVISIBLE
+            }
+            is LoadState.Error -> {
+                val state = it.refresh as LoadState.Error
+                progressBar.visibility = View.INVISIBLE
+                Toast.makeText(this, "Load Error: ${state.error.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    // loadStateFlow 方式
+    // collectLatest 是个 suspend 函数，所以要在协程或者另一个 suspend 中调用
+    lifecycleScope.launch {
+      pagingAdapter.loadStateFlow.collectLatest {
+        progressBar.isVisible = it.refresh is LoadState.Loading
+        retry.isVisible = it.refresh !is LoadState.Loading
+        errorMsg.isVisible = it.refresh is LoadState.Error
+      }
+    }
+方法二、 使用适配器呈现加载状态： Paging 库提供了另一个名为 LoadStateAdapter 的列表适配器，用于直接在显示的分页数据列表中呈现加载状态。其实该方法就是在PagingDataAdapter中把addLoadStateListener()和ConcatAdapter封装了一下
+首先，创建一个实现 LoadStateAdapter 的类，并定义 onCreateViewHolder() 和 onBindViewHolder() 方法：
+    class LoadStateViewHolder(
+      parent: ViewGroup,
+      retry: () -> Unit
+    ) : RecyclerView.ViewHolder(
+      LayoutInflater.from(parent.context)
+        .inflate(R.layout.load_state_item, parent, false)
+    ) {
+      private val binding = LoadStateItemBinding.bind(itemView)
+      private val progressBar: ProgressBar = binding.progressBar
+      private val errorMsg: TextView = binding.errorMsg
+      private val retry: Button = binding.retryButton
+        .also {
+          it.setOnClickListener { retry() }
+        }
+      fun bind(loadState: LoadState) {
+        if (loadState is LoadState.Error) {
+          errorMsg.text = loadState.error.localizedMessage
+        }
+        progressBar.isVisible = loadState is LoadState.Loading
+        retry.isVisible = loadState is LoadState.Error
+        errorMsg.isVisible = loadState is LoadState.Error
+      }
+    }
+    // Adapter that displays a loading spinner when
+    // state = LoadState.Loading, and an error message and retry
+    // button when state is LoadState.Error.
+    class ExampleLoadStateAdapter(
+      private val retry: () -> Unit
+    ) : LoadStateAdapter<LoadStateViewHolder>() {
+      override fun onCreateViewHolder(
+        parent: ViewGroup,
+        loadState: LoadState
+      ) = LoadStateViewHolder(parent, retry)
+      override fun onBindViewHolder(
+        holder: LoadStateViewHolder,
+        loadState: LoadState
+      ) = holder.bind(loadState)
+    }
+然后，从 PagingDataAdapter 对象调用 withLoadStateHeaderAndFooter() 方法：
+    pagingAdapter
+      .withLoadStateHeaderAndFooter(
+        header = ExampleLoadStateAdapter(adapter::retry),
+        footer = ExampleLoadStateAdapter(adapter::retry)
+      )
+如果您只想让 RecyclerView 在页眉或页脚中显示加载状态，则可以调用 withLoadStateHeader() 或 withLoadStateFooter()。 关于withLoadStateHeaderAndFooter()、withLoadStateHeader() 和 withLoadStateFooter()的实现，通过源码发现，其实就是用的PagingDataAdapter.addLoadStateListener()方案，只不过是通过ConcatAdapter封装下。即：在PagingDataAdapter中把addLoadStateListener()和ConcatAdapter封装了一下，且返回值是ConcatAdapter
+注意：由于withLoadStateHeaderAndFooter()、withLoadStateHeader() 和 withLoadStateFooter()返回的是ConcatAdapter，所以如果已经用构造函数ConcatAdapter(firstAdapter, articleAdapter)的话，再用withLoadState···添加页眉页脚会失败，因为用withLoadState···返回的也是ConcatAdapter就有两个ConcatAdapter了。这个时候正确的做法是用withLoadState···创建ConcatAdapter，然后再用concatAdapter.addAdapter(0,firstAdapter)添加其它的adapter，且调用concatAdapter.addAdapter的位置在binding.articleList.adapter = concatAdapter前后都可以。
+Pager ： Pager().flow 把 PagingSource 转换为 PagingData。在Repository中用到
+
+RemoteMediator ： 在Pager()中用到。
+
+当您从一个多层级数据源加载数据时，应当实现一个 RemoteMediator。
+一般用法为从网络请求数据并存入数据库。每当数据库中没有数据可以被展示时，就会触发 load() 方法。基于 PagingState 和 LoadType，我们可以构造下一页的数据请求。
+PagingConfig ： 在Pager()中用到
+
+PagingState ： 在自定义 PagingSource 的 getRefreshKey()方法中用到，在自定义RemoteMediator的load()方法中也用到了。
