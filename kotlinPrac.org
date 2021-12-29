@@ -3552,4 +3552,4 @@ D/LogUtils: launch结束
   - 我们写的协程代码看起来是同步形式的，其实也是异步回调的，只是编译器帮我们自动生成了回调代码而已。编译器将suspend形式的同步代码，生成带有Continuation回调形式的代码。
 - 总结3：
  - 虽然说协程内部也是协助线程池和Android Handler完成子线程和UI线程的切换。但是为了充分利用线程资源和减少线程切换，内部也维护着自己的调用栈，所以出现CoroutineContext、CoroutineScope等新的概念。
-
+ - 

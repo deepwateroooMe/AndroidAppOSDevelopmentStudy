@@ -907,5 +907,5 @@ A soft Reference Object is basically a weak Reference Object that remains in mem
 On the other hand, a phantom Reference Object is useful only to know exactly when an object has been effectively removed from memory: normally they are used to fix weird finalize() revival/resurrection behavior, since they actually do not return the object itself but only help in keeping track of their memory presence.
 Weak Reference Objects are ideal to implement cache modules. In fact, a sort of automatic eviction can be implemented by allowing the GC to clean up memory areas whenever objects/values are no longer reachable by strong references chain. An example is the WeakHashMap retaining weak keys.
 - https://juejin.cn/post/7007326164268105741 这个有没有时间看再说
-
+- 
 
