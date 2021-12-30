@@ -2,4 +2,1484 @@
 #+title: 安卓开发中常用的第三方库
 #+author: deepwaterooo
 
-* 
+* RxJava
+
+** RxJava的观察者模式
+- RxJava 有四个基本概念：Observable (可观察者，即被观察者)、Observer (观察者)、 subscribe (订阅)、事件。Observable 和 Observer 通过 subscribe() 方法实现订阅关系，从而 Observable 可以在需要的时候发出事件来通知 Observer。
+- 与传统观察者模式不同， RxJava 的事件回调方法除了普通事件 onNext() （相当于 onClick() / onEvent()）之外，还定义了两个特殊的事件：onCompleted() 和 onError()。
+  - onCompleted(): 事件队列完结。RxJava 不仅把每个事件单独处理，还会把它们看做一个队列。RxJava 规定，当不会再有新的 onNext() 发出时，需要触发 onCompleted() 方法作为标志。
+  - onError(): 事件队列异常。在事件处理过程中出异常时，onError() 会被触发，同时队列自动终止，不允许再有事件发出。
+- 在一个正确运行的事件序列中, onCompleted() 和 onError() 有且只有一个，并且是事件序列中的最后一个。需要注意的是，onCompleted() 和 onError() 二者也是互斥的，即在队列中调用了其中一个，就不应该再调用另一个。
+- 备：RxJava2.0还添加了一个新的回调方法：onSubscribe()，这是为了解决RxJava1.0的backpressure问题，后面会讲到
+
+** 基本使用
+- 本文只关注 RxJava的基本使用，更深入的RxJava使用请继续关注Carson_Ho的RxJava系列
+- Rxjava的使用方式有两种：
+  - 分步骤实现：该方法主要为了深入说明Rxjava的原理 & 使用，主要用于演示说明
+  - 基于事件流的链式调用：主要用于实际使用
+*** 方式1：分步骤实现
+**** 步骤1：创建被观察者 （Observable ）& 生产事件s
+#+BEGIN_SRC java
+// 1. 创建被观察者 Observable 对象
+Observable<Integer> observable = Observable.create(new ObservableOnSubscribe<Integer>() {
+        // create() 是 RxJava 最基本的创造事件序列的方法
+        // 此处传入了一个 OnSubscribe 对象参数
+        // 当 Observable 被订阅时，OnSubscribe 的 call() 方法会自动被调用，即事件序列就会依照设定依次被触发
+        // 即观察者会依次调用对应事件的复写方法从而响应事件
+        // 从而实现被观察者调用了观察者的回调方法 & 由被观察者向观察者的事件传递，即观察者模式
+
+        // 2. 在复写的subscribe（）里定义需要发送的事件
+        @Override
+        public void subscribe(ObservableEmitter<Integer> emitter) throws Exception {
+            // 通过 ObservableEmitter类对象产生事件并通知观察者
+            // ObservableEmitter类介绍
+            // a. 定义：事件发射器
+            // b. 作用：定义需要发送的事件 & 向观察者发送事件
+            emitter.onNext(1);
+            emitter.onNext(2);
+            emitter.onNext(3);
+            emitter.onComplete();
+        }
+    });
+
+// <--扩展：RxJava 提供了其他方法用于 创建被观察者对象Observable -->
+
+// 方法1：just(T...)：直接将传入的参数依次发送出来
+    Observable observable = Observable.just("A", "B", "C");
+// 将会依次调用：
+// onNext("A");
+// onNext("B");
+// onNext("C");
+// onCompleted();
+
+// 方法2：from(T[]) / from(Iterable<? extends T>) : 将传入的数组 / Iterable 拆分成具体对象后，依次发送出来
+String[] words = {"A", "B", "C"};
+Observable observable = Observable.from(words);
+// 将会依次调用：
+// onNext("A");
+// onNext("B");
+// onNext("C");
+// onCompleted();
+#+END_SRC
+- 2.0版本的： 创建Flowable（2.0）/Observable（2.0）
+  - Observable 即被观察者，它决定什么时候触发事件以及触发怎样的事件。 RxJava 使用 create()方法来创建一个Observable，并为它定义事件触发规则
+#+BEGIN_SRC java
+Flowable<String> stringFlowable = Flowable.create(new FlowableOnSubscribe<String>() {
+        @Override
+        public void subscribe(FlowableEmitter<String> e) throws Exception {
+            Logger.i("---rxHelloFlowable---");
+        }
+    }, FlowableEmitter.BackpressureMode.BUFFER);
+Observable<String> stringObservable = Observable.create(new ObservableOnSubscribe<String>() {
+        @Override
+        public void subscribe(ObservableEmitter<String> e) throws Exception {
+            e.onNext("Hello");
+            e.onNext("Inke");
+            e.onComplete();
+        }
+    });
+#+END_SRC
+- 可以看到，这里传入了一个 ObservableOnSubscribe对象作为参数，它的作用相当于一个计划表，当 Observable被订阅的时候，ObservableOnSubscribe的subscribe()方法会自动被调用，事件序列就会依照设定依次触发（对于上面的代码，就是观察者Subscriber 将会被调用两次 onNext()和一次 onCompleted()）。这样，由被观察者调用了观察者的回调方法，就实现了由被观察者向观察者的事件传递，即观察者模式。
+- RxJava提供快捷创建事件队列的方法
+  - just()将传入的参数依次发送出来
+  - fromIterable() 将传入的Iterable 拆分成具体对象后，依次发送出来
+  - fromArray() 还没研究明白
+- 心细的朋友可以看到Flowable在create()的时候多了一个参数 BackpressureMode，是用来处理backpressure的发射器
+  - 一共有以下几种模式
+#+BEGIN_SRC java
+ enum BackpressureMode {
+        /** 
+         * OnNext events are written without any buffering or dropping. 
+         * Downstream has to deal with any overflow.
+         * <p>Useful when one applies one of the custom-parameter onBackpressureXXX operators.
+         */
+        NONE,
+        /**
+         * Signals a MissingBackpressureException in case the downstream can't keep up.
+         */
+        ERROR,
+        /**
+         * Buffers <em>all</em> onNext values until the downstream consumes it.
+         */
+        BUFFER,
+        /**
+         * Drops the most recent onNext value if the downstream can't keep up.
+         */
+        DROP,
+        /**
+         * Keeps only the latest onNext value, overwriting any previous value if the 
+         * downstream can't keep up.
+         */
+        LATEST
+    }
+#+END_SRC
+- 个人感觉BUFFER较为安全，api解释为缓冲器存有onNext值，直到下游消费它。
+- 因为Observer不支持 backpressure，所以后面的代码我们默认使用RxJava2.0的Flowable和Subscriber，但是为了便于理解，某些原理可能还会用RxJava1.0。
+
+**** 步骤2：创建观察者 （Observer ）并 定义响应事件的行为
+  - 发生的事件类型包括：Next事件、Complete事件 & Error事件。具体如下：
+
+[[./pic/observer.png]]
+
+#+BEGIN_SRC java
+// <--方式1：采用Observer 接口 -->
+// 1. 创建观察者 （Observer ）对象
+Observer<Integer> observer = new Observer<Integer>() {
+    // 2. 创建对象时通过对应复写对应事件方法 从而 响应对应事件
+
+    // 观察者接收事件前，默认最先调用复写 onSubscribe（）
+    @Override
+    public void onSubscribe(Disposable d) {
+        Log.d(TAG, "开始采用subscribe连接");
+    }
+            
+    // 当被观察者生产Next事件 & 观察者接收到时，会调用该复写方法 进行响应
+    @Override
+    public void onNext(Integer value) {
+        Log.d(TAG, "对Next事件作出响应" + value);
+    }
+
+    // 当被观察者生产Error事件& 观察者接收到时，会调用该复写方法 进行响应
+    @Override
+    public void onError(Throwable e) {
+        Log.d(TAG, "对Error事件作出响应");
+    }
+          
+    // 当被观察者生产Complete事件& 观察者接收到时，会调用该复写方法 进行响应
+    @Override
+    public void onComplete() {
+        Log.d(TAG, "对Complete事件作出响应");
+    }
+};
+
+// <--方式2：采用Subscriber 抽象类 -->
+// 说明：Subscriber类 = RxJava 内置的一个实现了 Observer 的抽象类，对 Observer 接口进行了扩展
+
+// 1. 创建观察者 （Observer ）对象
+Subscriber<String> subscriber = new Subscriber<Integer>() {
+
+    // 2. 创建对象时通过对应复写对应事件方法 从而 响应对应事件
+    // 观察者接收事件前，默认最先调用复写 onSubscribe（）
+    @Override
+    public void onSubscribe(Subscription s) {
+        Log.d(TAG, "开始采用subscribe连接");
+    }
+
+    // 当被观察者生产Next事件 & 观察者接收到时，会调用该复写方法 进行响应
+    @Override
+    public void onNext(Integer value) {
+        Log.d(TAG, "对Next事件作出响应" + value);
+    }
+
+    // 当被观察者生产Error事件& 观察者接收到时，会调用该复写方法 进行响应
+    @Override
+    public void onError(Throwable e) {
+        Log.d(TAG, "对Error事件作出响应");
+    }
+
+    // 当被观察者生产Complete事件& 观察者接收到时，会调用该复写方法 进行响应
+    @Override
+    public void onComplete() {
+        Log.d(TAG, "对Complete事件作出响应");
+    }
+};
+
+// <--特别注意：2种方法的区别，即Subscriber 抽象类与Observer 接口的区别 -->
+// 相同点：二者基本使用方式完全一致（实质上，在RxJava的 subscribe 过程中，Observer总是会先被转换成Subscriber再使用）
+// 不同点：Subscriber抽象类对 Observer 接口进行了扩展，新增了两个方法：
+// 1. onStart()：在还未响应事件前调用，用于做一些初始化工作
+// 2. unsubscribe()：用于取消订阅。在该方法被调用后，观察者将不再接收 & 响应事件
+// 调用该方法前，先使用 isUnsubscribed() 判断状态，确定被观察者Observable是否还持有观察者Subscriber的引用，如果引用不能及时释放，就会出现内存泄露
+#+END_SRC
+- 2.0版本的: 创建Subscriber(2.0)/Observer(2.0)
+#+BEGIN_SRC java
+Subscriber<String> subscriber = new Subscriber<String>() {
+    @Override
+    public void onSubscribe(Subscription s) {
+        Logger.i("hello  onSubscribe");
+    }
+    @Override
+    public void onNext(String s) {
+        Logger.i("hello  onNext-->" + s);
+    }
+    @Override
+    public void onError(Throwable t) {
+        Logger.i("hello  onError");
+    }
+    @Override
+    public void onComplete() {
+        Logger.i("hello  onComplete");
+    }
+};
+Observer<String> observer = new Observer<String>() {
+    @Override
+    public void onSubscribe(Disposable d) {
+        Logger.i("hello  onSubscribe");
+    }
+    @Override
+    public void onNext(String value) {
+        Logger.i("hello  onNext-->" + value);
+    }
+    @Override
+    public void onError(Throwable e) {
+        Logger.i("hello  onError");
+    }
+    @Override
+    public void onComplete() {
+        Logger.i("hello  onComplete");
+    }
+};
+#+END_SRC
+- Subscriber 和 Observer的接口是分别独立的，Obsesrver用于订阅Observable，而Subscriber用于订阅Flowable
+
+#+BEGIN_SRC java
+#+END_SRC
+**** 步骤3：通过订阅（Subscribe）连接观察者和被观察者 - Subscribe （订阅）
+#+BEGIN_SRC java
+observable.subscribe(observer);
+// 或者 observable.subscribe(subscriber)；
+#+END_SRC
+-  扩展说明
+#+BEGIN_SRC java
+// <-- Observable.subscribe(Subscriber) 的内部实现 -->
+public Subscription subscribe(Subscriber subscriber) {
+    subscriber.onStart();
+    // 步骤1中 观察者  subscriber抽象类复写的方法，用于初始化工作
+    onSubscribe.call(subscriber);
+    // 通过该调用，从而回调观察者中的对应方法从而响应被观察者生产的事件
+    // 从而实现被观察者调用了观察者的回调方法 & 由被观察者向观察者的事件传递，即观察者模式
+    // 同时也看出：Observable只是生产事件，真正的发送事件是在它被订阅的时候，即当 subscribe() 方法执行时
+}
+#+END_SRC
+- 创建了 Flowable和 Subscriber 之后，再用 subscribe()方法将它们联结起来，整条链子就可以工作了。代码形式很简单：
+#+BEGIN_SRC java
+stringFlowable.subscribe(subscriber);
+#+END_SRC
+- 有人可能会注意到， subscribe()这个方法有点怪：它看起来是『observalbe订阅了 observer/ subscriber』而不是『observer /subscriber 订阅了 observalbe』，这看起来就像『杂志订阅了读者』一样颠倒了对象关系。这让人读起来有点别扭，不过如果把 API 设计成 observer.subscribe(observable) / subscriber.subscribe(observable) ，虽然更加符合思维逻辑，但对流式 API 的设计就造成影响了，比较起来明显是得不偿失的。
+#+BEGIN_SRC java
+@Override
+public final void subscribe(Subscriber<? super T> s) {
+    ObjectHelper.requireNonNull(s, "s is null");
+    s = RxJavaPlugins.onSubscribe(this, s);
+    ObjectHelper.requireNonNull(s, "Plugin returned null Subscriber");
+    subscribeActual(s);
+
+}
+/**注意：这不是 subscribe()的源码，而是将源码中与性能、兼容性、扩性有关的代码剔除后的核心代码。
+ *如果需要看源码，可以去 RxJava 的 GitHub 仓库下载。
+ */
+public Disposable onSubscribe(Subscriber subscriber) {
+    subscriber.onSubscribe();
+    flowableOnSubscribe.subscribe();
+    return subscriber;
+}
+#+END_SRC
+- 订阅过程做了三件事
+  - 调用 Subscriber.onSubscribe()。是Rx2.0新添加的方法，第一个执行
+  - 调用 FlowableOnSubscribe中的subscribe() 。在这里，事件发送的逻辑开始运行。从这也可以看出，在 RxJava 中，Flowable并不是在创建的时候就立即开始发送事件，而是在它被订阅的时候，即当 subscribe()方法执行的时候。
+- 上面我们可以看到，通过subscriber来订阅返回的是void
+- 在RxJava2.0 如果是直接订阅或传入消费者那么会产生一个新的类
+- 那就是Disposable
+#+BEGIN_SRC java
+/**
+** Represents a disposable resource.
+*/
+#+END_SRC
+- 代表一个一次性的资源。
+- 代码如下
+#+BEGIN_SRC java
+Disposable subscribe = stringFlowable.subscribe(new Consumer<String>() {
+    @Override
+    public void accept(String s) throws Exception {
+
+    }
+});
+#+END_SRC
+- 订阅源码如下
+#+BEGIN_SRC java
+public final Disposable subscribe(Consumer<? super T> onNext, Consumer<? super Throwable> onError, 
+        Action onComplete, Consumer<? super Subscription> onSubscribe) {
+    LambdaSubscriber<T> ls = new LambdaSubscriber<T>(onNext, onError, onComplete, onSubscribe);
+    subscribe(ls);
+    return ls;
+}
+#+END_SRC
+- 不过最终走的还是上面的逻辑，不过多返回了一个Disposable，
+- 用于dispose();
+
+*** 方式2：优雅的实现方法 - 基于事件流的链式调用
+- 上述的实现方式是为了说明Rxjava的原理 & 使用
+- 在实际应用中，会将上述步骤&代码连在一起，从而更加简洁、更加优雅，即所谓的 RxJava基于事件流的链式调用
+#+BEGIN_SRC java
+// RxJava的链式操作
+Observable.create(new ObservableOnSubscribe<Integer>() {
+        // 1. 创建被观察者 & 生产事件
+        @Override
+            public void subscribe(ObservableEmitter<Integer> emitter) throws Exception {
+            emitter.onNext(1);
+            emitter.onNext(2);
+            emitter.onNext(3);
+            emitter.onComplete();
+        }
+    }).subscribe(new Observer<Integer>() {
+            // 2. 通过通过订阅（subscribe）连接观察者和被观察者
+            // 3. 创建观察者 & 定义响应事件的行为
+            // 默认最先调用复写的 onSubscribe（）
+            @Override
+                public void onSubscribe(Disposable d) {
+                Log.d(TAG, "开始采用subscribe连接");
+            }
+            @Override
+                public void onNext(Integer value) {
+                Log.d(TAG, "对Next事件"+ value +"作出响应"  );
+            }
+            @Override
+                public void onError(Throwable e) {
+                Log.d(TAG, "对Error事件作出响应");
+            }
+            @Override
+                public void onComplete() {
+                Log.d(TAG, "对Complete事件作出响应");
+            }
+        });
+}
+#+END_SRC
+- 这种 基于事件流的链式调用，使得RxJava：
+  - 逻辑简洁
+  - 实现优雅
+  - 使用简单
+- 更重要的是，随着程序逻辑的复杂性提高，它依然能够保持简洁 & 优雅。所以，一般建议使用这种基于事件流的链式调用方式实现RxJava。
+- 特别注意
+  - RxJava 2.x 提供了多个函数式接口 ，用于实现简便式的观察者模式。具体如下：
+#+BEGIN_SRC java
+Observable.just("hello").subscribe(new Consumer<String>() {
+        // 每次接收到Observable的事件都会调用Consumer.accept（）
+        @Override
+            public void accept(String s) throws Exception {
+            System.out.println(s);
+        }
+    });
+#+END_SRC
+
+** 线程控制
+*** Scheduler
+- 以下API来自RxJava1.0， 与RxJava2.0用法无区别
+- 在RxJava 中，Scheduler ——调度器，相当于线程控制器，RxJava 通过它来指定每一段代码应该运行在什么样的线程。RxJava 已经内置了几个 Scheduler ，它们已经适合大多数的使用场景：
+  - Schedulers.immediate(): 直接在当前线程运行，相当于不指定线程。这是默认的 Scheduler。
+  - Schedulers.newThread(): 总是启用新线程，并在新线程执行操作。
+  - Schedulers.io(): I/O 操作（读写文件、读写数据库、网络信息交互等）所使用的 Scheduler。行为模式和 new Thread() 差不多，区别在于 io() 的内部实现是是用一个无数量上限的线程池，可以重用空闲的线程，因此多数情况下 io() 比new Thread()更有效率。不要把计算工作放在 io() 中，可以避免创建不必要的线程。
+  - Schedulers.computation(): 计算所使用的 Scheduler。这个计算指的是 CPU 密集型计算，即不会被 I/O 等操作限制性能的操作，例如图形的计算。这个 Scheduler 使用的固定的线程池，大小为 CPU 核数。不要把 I/O 操作放在computation()中，否则 I/O 操作的等待时间会浪费 CPU。
+  - 另外， Android 还有一个专用的 AndroidSchedulers.mainThread()，它指定的操作将在 Android 主线程运行。
+- 有了这几个 Scheduler ，就可以使用 subscribeOn()和 observeOn()两个方法来对线程进行控制了。 * subscribeOn(): 指定 subscribe()所发生的线程，即 Observable.OnSubscribe被激活时所处的线程。或者叫做事件产生的线程。 * observeOn(): 指定 Subscriber 所运行在的线程。或者叫做事件消费的线程。
+- 下面是一个获取本地资源并显示在控件上的例子
+#+BEGIN_SRC java
+private void rxSchedulerMap() {
+    Flowable<Bitmap> bitmapFlowable = Flowable.just(R.drawable.effect_icon001)
+            .subscribeOn(Schedulers.io()) // 资源的获取，用的io
+            .map(new Function<Integer, Bitmap>() {
+                @Override
+                public Bitmap apply(Integer integer) throws Exception {
+                    Logger.i("这是在io线程做的bitmap绘制圆形"); // map 并绘制， 仍然是io
+                    return BitmapUtils.createCircleImage(BitmapFactory.decodeResource(MainActivity.this.getResources(), integer));
+                }
+            })
+            .observeOn(AndroidSchedulers.mainThread()) // 要更新UI，必须用mainThread
+            .doOnNext(new Consumer<Bitmap>() {
+                @Override
+                public void accept(Bitmap bitmap) throws Exception {
+                    Logger.i("这是在main线程做的UI操作");
+                    imageView.setImageBitmap(bitmap);
+                }
+            });
+    bitmapFlowable.subscribe();
+}
+#+END_SRC
+- 想必大家已经看得很清楚了
+  - 获取drawable资源我用的io线程
+  - 通过 subscribeOn(Schedulers.io())控制
+  - 转变成bitmap并绘制成圆形也是在io线程，可以通过observeOn(Schedulers.io())也可以顺着之前的流继续执行
+  - 最后显示在UI上是通过observeOn(AndroidSchedulers.mainThread())。
+- subscribeOn(Scheduler.io())和 observeOn(AndroidSchedulers.mainThread()) 的使用方式非常常见，它适用于多数的 『后台线程取数据，主线程显示』的程序策略。
+*** 转换和Scheduler的原理
+- 大家参考扔物线大神的文章吧，我没必要再赘述一遍: 变换 & 变换的原理：lift()& compose: 对 Observable 整体的变换
+- 像一种代理机制，通过事件拦截和处理实现事件序列的变换
+- 在 Observable 执行了 lift(Operator) 方法之后，会返回一个新的 Observable，这个新的 Observable 会像一个代理一样，负责接收原始的 Observable 发出的事件，并在处理后发送给 Subscriber
+- Scheduler 的 API & Scheduler 的原理 & 延伸：doOnSubscribe()
+  
+[[./pic/subscribeOn.png]]
+
+[[./pic/observeOn.png]]
+
+- 从图中可以看出，subscribeOn() 和 observeOn() 都做了线程切换的工作（图中的 “schedule…” 部位）。
+  - 不同的是， subscribeOn() 的线程切换发生在 OnSubscribe 中，即在它通知上一级 OnSubscribe 时，这时事件还没有开始发送，因此 subscribeOn() 的线程控制可以从事件发出的开端就造成影响；
+  - 而 observeOn() 的线程切换则发生在它内建的 Subscriber 中，即发生在它即将给下一级 Subscriber 发送事件时，因此 observeOn() 控制的是它后面的线程。
+- 使用Scheduler: 再换一种方式来表达：
+  - subscribeOn()指定 subscribe() 所发生的线程，即 Observable.OnSubscribe 被激活时所处的线程。或者叫做事件产生的线程；当使用了多个 subscribeOn() 的时候，只有第一个 subscribeOn() 起作用。
+  - observeOn():指定 Subscriber 所运行在的线程。或者叫做事件消费的线程，通常我们都是在Subscriber中进行操作，所以用observeOn（）先去指定下一个Subscriber 的线程，就能够满足大部分需求。
+
+- 最后，我用一张图来解释当多个 subscribeOn() 和 observeOn() 混合使用时，线程调度是怎么发生的（由于图中对象较多，相对于上面的图对结构做了一些简化调整）：
+
+[[./pic/lift.png]]
+
+- 由图中可以看出，①和②两处受第一个 subscribeOn() 影响，运行在红色线程；③和④处受第一个observeOn() 的影响，运行在绿色线程；⑤处受第二个 onserveOn()影响，运行在紫色线程；而第二个 subscribeOn()，由于在通知过程中线程就被第一个 subscribeOn()截断，因此对整个流程并没有任何影响。这里也就回答了前面的问题：当使用了多个subscribeOn()的时候，只有第一个 subscribeOn() 起作用。
+**** 延伸：doOnSubscribe()
+- 然而，虽然超过一个的 subscribeOn() 对事件处理的流程没有影响，但在流程之前却是可以利用的。
+- 在前面讲 Subscriber 的时候，提到过 Subscriber 的 onStart() 可以用作流程开始前的初始化。然而 onStart() 由于在 subscribe() 发生时就被调用了，因此不能指定线程，而是只能执行在 subscribe() 被调用时的线程。这就导致如果 onStart() 中含有对线程有要求的代码（例如在界面上显示一个 ProgressBar，这必须在主线程执行），将会有线程非法的风险，因为有时你无法预测 subscribe() 将会在什么线程执行。
+- 而与 Subscriber.onStart() 相对应的，有一个方法 Observable.doOnSubscribe() 。它和 Subscriber.onStart() 同样是在 subscribe() 调用后而且在事件发送前执行，但区别在于它可以指定线程。默认情况下， doOnSubscribe() 执行在 subscribe() 发生的线程；而如果在 doOnSubscribe() 之后有 subscribeOn() 的话，它将执行在离它最近的 subscribeOn() 所指定的线程。
+#+BEGIN_SRC java
+Observable.create(onSubscribe)
+    .subscribeOn(Schedulers.io())
+    .doOnSubscribe(new Action0() {
+        @Override
+        public void call() {
+            progressBar.setVisibility(View.VISIBLE); // 需要在主线程执行
+        }
+    })
+    .subscribeOn(AndroidSchedulers.mainThread()) // 指定主线程
+    .observeOn(AndroidSchedulers.mainThread())
+    .subscribe(subscriber);
+#+END_SRC
+- 如上，在 doOnSubscribe()的后面跟一个 subscribeOn() ，就能指定准备工作的线程了。
+ 
+*** 常用操作符
+- 我很还通过just直接快捷的生成了Flowable
+- 我们还通过将drwable通过map操作符转换成了 bitmap进以下一流的操作
+- 操作符部分一览 （基于Rxjava1.0）
+**** Combining Obsercables(Observable的组合操作符)|
+|-----------------+---------------------------------------------------------------------------------------------------------------------------|
+| 操作符          | 功能                                                                                                                      |
+|-----------------+---------------------------------------------------------------------------------------------------------------------------|
+| combineLatest   | 两个Observable产生的结果合并成新Observable，任意Observable产生的结果和另一个Observable最后产生的结果按规则合并            |
+| join            | like combineLatest 能控制每个Observable产生结果的生命周期，在每个结果的生命周期内，与另一个Observable产生的结果按规则合并 |
+| groupJoin       | like join 暂不知其他区别                                                                                                  |
+| ==merge==       | ==按照两个Observable的提交结果的时间顺序，对Observable合并。时间按某Observable完成的最小时间==                            |
+| mergeDelayError | 合并的某一个Observable中出现错误，把错误放到所有结果都合并完成之后，订阅者回调执行onError。而merge会马上停止合并          |
+| startWith       | 源Observable提交结果之前，插入指定数据                                                                                    |
+| switchOnNext    | 把一组Observable转换成Observable。这组Observable中取最后一个Observable提交的结果给订阅者。                                |
+| ==zip==         | ==把两个Observable提交的结果按照顺序进行合并。==                                                                          |
+|-----------------+---------------------------------------------------------------------------------------------------------------------------|
+**** Error Handing Operators(Observable的错误处理操作符)|
+|-----------------------+----------------------------------------------------------------------------------------------------------------------------------|
+| 操作符                | 功能                                                                                                                             |
+|-----------------------+----------------------------------------------------------------------------------------------------------------------------------|
+| onErrorReturn         | 在Observable 发生错误或异常（即将回调onError）时，拦截错误并执行指定的逻辑，                                                     |
+|                       | 返回一个跟源Observable相同类型的结果，最后回调订阅者的onComplete方法                                                             |
+| onErrorResumeNext     | like onErrorReturn 不同的是返回一个Observable 例：return Observable.just(5,2,0);                                                 |
+| onExceptionResumeNext | like onErrorResumeNext 不同的是只有在exception的时候触发                                                                         |
+| ==retry==             | ==当Observable发生错误或异常，重新执行Observable的逻辑，如果经过n次重新执行后仍然出现错误或异常，                                |
+|                       | 则最后回调onError方法，若无错误或异常则按正常流程执行 例：observable.retry(2).subscribe();==                                     |
+| retryWhen             | like retry 不同在于retryWhen是在源Observable出现错误或异常时，通过回调第二个Observable来判断是否重新尝试执行源Observable的逻辑； |
+|                       | 若第二个Observable没错误或异常，则会重新尝试执行源Observable的逻辑，否则就会直接回调执行订阅者的onError();                       |
+|-----------------------+----------------------------------------------------------------------------------------------------------------------------------|
+**** 其他常用
+|------------------------+-------------------------------------------------------------------------------------------------------------------------|
+| 操作符                 | 功能                                                                                                                    |
+|------------------------+-------------------------------------------------------------------------------------------------------------------------|
+| map                    | 对源Observable数据的加工处理,返回其他类型 例：return 520+”string data”;                                                 |
+| flatMap                | like map 不同的是返回一个Observable 扩展：使用了merge操作符 例：return Observable.from(…);                              |
+| concatMap              | like concatMap 不同的是concatMap操作遵循元素的顺序 扩展：使用了concat操作符                                             |
+| compose                | 唯一一个能从流中获取原生Observable的方法，因此，影响整个流的操作符（subscribeOn()和observeOn()）需要用compose()。       |
+|                        | 当你创建一个Observable流并且内联了一堆操作符以后，compose()会立即执行，所以compose转换的是整个流                        |
+| compose与flagMap的区别 | flatMap()一定是低效率的，因为他每次调用onNext()之后都需要创建一个新的Observable，compose()是操作在整个流上的            |
+| concat                 | 按顺序依次连接两个或更多的 Observable                                                                                   |
+| first                  | 从序列中取第一个先完成的项                                                                                              |
+| takeFirst              | like first 区别是first()如果没有释放有效的数据源,那么会throw NoSuchElementException;而takeFirst会complete没有 exception |
+|------------------------+-------------------------------------------------------------------------------------------------------------------------|
+**** 常用场景
+- 我们前面已经大致理解RxJava和他的基本使用了，虽然是冰山一角，但够我们入门了，现在我们来通过实际项目中常用的场景来进阶学习。
+- 因为RxJava2.0 是16年八九月份刚更新的，没有时间来将1.0的代码替换过来，但是主要的使用方法还是没变的，所以下面的代码大部分是基于RxJava1.0，看客请见谅
+**** map() 事件对象的直接变换
+- 例如：将参数中的 String 对象转换成一个 Bitmap 对象后返回，而在经过 map() 方法后，事件的参数类型也由 String转为了 Bitmap
+#+BEGIN_SRC java
+Observable.just("img_url")
+    .map(new Func1<String, Bitmap>() {
+        @Override
+        public Bitmap call(String filePath) {   // 参数类型 String
+            return getBitmapFromPath(filePath); // 返回类型 Bitmap
+        }
+    })
+    .subscribe(new Action1<Bitmap>() {
+        @Override
+        public void call(Bitmap bitmap) { // 参数类型 Bitmap
+            showBitmap(bitmap);
+        }
+    });
+#+END_SRC
+- Func1 和 Action1 非常相似，也是 RxJava 的一个接口，用于包装含有一个参数的方法。 Func1 和 Action的区别在于， Func1 包装的是有返回值的方法。另外，和 ActionX 一样， FuncX 也有多个，用于不同参数个数的方法。
+**** flatMap():
+- flatMap() 和 map() 有一个相同点：它也是把传入的参数转化之后返回另一个对象。但需要注意，和 map() 不同的是， flatMap() 中返回的是个 Observable 对象，并且这个 Observable 对象并不是被直接发送到了 Subscriber 的回调方法中。
+- flatMap() 的原理：
+  - 1. 使用传入的事件对象创建一个 Observable 对象；
+  - 2. 并不发送这个 Observable, 而是将它**，于是它开始发送事件；
+  - 3. 每一个创建出来的 Observable 发送的事件，都被汇入同一个 Observable ，而这个 Observable 负责将这些事件统一交给 Subscriber 的回调方法
+- 假设这么一种需求：假设有一个数据结构『学生』，每个学生只有一个名字，但却有多个课程，如果要打印出每个学生所需要修的所有课程的名称。
+#+BEGIN_SRC java
+Student[] students = ...;
+Subscriber<Course> subscriber = new Subscriber<Course>() {
+    @Override
+    public void onNext(Course course) {
+        Log.d(tag, course.getName());
+    }
+};
+Observable.from(students)
+    .flatMap(new Func1<Student, Observable<Course>>() {
+            @Override
+                public Observable<Course> call(Student student) {
+                return Observable.from(student.getCourses());
+            }
+        })
+    .subscribe(subscriber);
+#+END_SRC
+**** 变换的原理：lift()
+- RxJava 都不建议开发者自定义 Operator 来直接使用 lift()，而是建议尽量使用已有的 lift() 包装方法（如 map() flatMap() 等）进行组合来实现需求，因为直接使用 lift() 非常容易发生一些难以发现的错误
+#+BEGIN_SRC java
+Observable.just(1).lift(new Observable.Operator<String, Integer>() {
+        @Override
+            public Subscriber<? super Integer> call(final Subscriber<? super String> subscriber) {
+            // 将事件序列中的 Integer 对象转换为 String 对象
+            return new Subscriber<Integer>() {
+                @Override
+                    public void onNext(Integer integer) {
+                    subscriber.onNext("11" + integer);
+                }
+                @Override
+                    public void onCompleted() {
+                    subscriber.onCompleted();
+                }
+                @Override
+                    public void onError(Throwable e) {
+                    subscriber.onError(e);
+                }
+            };
+        }
+    }).subscribe(new Observer<String>() {
+            @Override
+                public void onCompleted() {
+            }
+            @Override
+                public void onError(Throwable e) {
+            }
+            @Override
+                public void onNext(String s) {
+                Log.i(TAG,">>>> course ="+s);
+            }
+        });
+#+END_SRC
+
+**** compose vs flatMap(): compose: 对 Observable 整体的变换
+- compose() 是针对 Observable 自身进行变换。举个例子，假设在程序中有多个 Observable ，并且他们都需要应用一组相同的 lift() 变换
+我们知道，compose和flatMap都是以Observable<T>作为输入，Observable<R>作为输出，那么两者有什么区别呢
+- 1.compose() 是唯一一个能从流中获取原生Observable 的方法，因此，影响整个流的操作符（像subscribeOn()和observeOn()）需要使用compose()，相对的，如果你在flatMap()中使用subscribeOn()/observeOn()，它只影响你创建的flatMap()中的Observable,而不是整个流。
+- 2.当你创建一个Observable流并且内联了一堆操作符以后，compose()会立即执行，flatMap()则是在onNext()被调用以后才会执行，换句话说，flatMap()转换的是每个项目，而compose()转换的是整个流。
+- 3.flatMap()一定是低效率的，因为他每次调用onNext()之后都需要创建一个新的Observable，compose()是操作在整个流上的。
+- 举个例子
+#+BEGIN_SRC kotlin
+Observable.timer(1500, TimeUnit.MILLISECONDS)
+    .observeOn(AndroidSchedulers.mainThread())
+    .compose(this.bindUntilEvent(ActivityEvent.DESTROY))
+    .subscribe(object : Observer<Long> {
+        override fun onComplete() {
+        }
+        override fun onSubscribe(d: Disposable) {
+        }
+        override fun onNext(t: Long) {
+            var intent = Intent(mContext, MainActivity::class.java)
+            startActivity(intent)
+            finish()
+        }
+        override fun onError(e: Throwable) {
+        }
+    })
+#+END_SRC
+- 再看个例子
+#+BEGIN_SRC java
+RetrofitClient.singletonDemoService("http://gank.io/api/random/data/")
+    .requestNet("福利","1")
+    .compose(schedulersTransformer())
+    .subscribe(subscriber);
+#+END_SRC
+- 仅仅通过.compose(schedulersTransformer())一行代码就完成了线程切换。
+- 简单啰嗦下compose操作符的原理 :
+  - 不同于map、flatMap等lift操作改变Observable发布的事件及序列，compose操作符是直接对当前Observable进行操作（可简单理解为不停地.方法名（）.方法名（）链式操作当前Observable），所以我们自然可以把切换线程的操作加入这里。
+- 那么动手吧~
+  - 1.首先compose()需要传入一个Observable.Transformer类型的参数，那我们直接在这new一个即可；
+  - 2.在上述transformer对象里，我们通过重写call 方法，可以拿到一个observable对象，对其进行一系列的lift变换（自然可以切换线程）；
+#+BEGIN_SRC java
+Observable.Transformer schedulersTransformer() {
+    return new Observable.Transformer() {
+        @Override
+            public Object call(Object observable) {
+            return ((Observable)observable).subscribeOn(Schedulers.io())
+                .unsubscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread());
+        }
+    };
+}
+#+END_SRC
+- 套在一起便成了
+#+BEGIN_SRC java
+observable.compose (schedulersTransformer()).subscribe(subscriber)
+#+END_SRC
+- 除了 lift() 之外， Observable 还有一个变换方法叫做 compose(Transformer)。它和 lift() 的区别在于， lift() 是针对事件项和事件序列的，而 compose() 是针对 Observable 自身进行变换。举个例子，假设在程序中有多个 Observable ，并且他们都需要应用一组相同的 lift() 变换。你可以这么写：
+#+BEGIN_SRC java
+observable1
+    .lift1()
+    .lift2()
+    .lift3()
+    .lift4()
+    .subscribe(subscriber1);
+observable2
+    .lift1()
+    .lift2()
+    .lift3()
+    .lift4()
+    .subscribe(subscriber2);
+observable3
+    .lift1()
+    .lift2()
+    .lift3()
+    .lift4()
+    .subscribe(subscriber3);
+observable4
+    .lift1()
+    .lift2()
+    .lift3()
+    .lift4()
+    .subscribe(subscriber1);
+#+END_SRC
+- 你觉得这样太不软件工程了，于是你改成了这样：
+#+BEGIN_SRC java
+private Observable liftAll(Observable observable) {
+    return observable
+        .lift1()
+        .lift2()
+        .lift3()
+        .lift4();
+}
+liftAll(observable1).subscribe(subscriber1);
+liftAll(observable2).subscribe(subscriber2);
+liftAll(observable3).subscribe(subscriber3);
+liftAll(observable4).subscribe(subscriber4);
+#+END_SRC
+- 可读性、可维护性都提高了。可是 Observable 被一个方法包起来，这种方式对于 Observale 的灵活性似乎还是增添了那么点限制。怎么办？这个时候，就应该用 compose() 来解决了：
+#+BEGIN_SRC java
+public class LiftAllTransformer implements Observable.Transformer<Integer, String> {
+    @Override
+    public Observable<String> call(Observable<Integer> observable) {
+        return observable
+            .lift1()
+            .lift2()
+            .lift3()
+            .lift4();
+    }
+}
+Transformer liftAll = new LiftAllTransformer();
+observable1.compose(liftAll).subscribe(subscriber1);
+observable2.compose(liftAll).subscribe(subscriber2);
+observable3.compose(liftAll).subscribe(subscriber3);
+observable4.compose(liftAll).subscribe(subscriber4);
+#+END_SRC
+- 像上面这样，使用 compose() 方法，Observable 可以利用传入的 Transformer 对象的 call 方法直接对自身进行处理，也就不必被包在方法的里面了。
+
+** RxJava的一些精典应用
+*** RxJava实现三级缓存（RxJava 1.0）
+Loading data from multiple sources with RxJava
+RxImageloader
+使用Rxjava实现三级缓存(下）：http://blog.chinaunix.net/uid-20771867-id-5182551.html 这里把源码复制下来方便自己参考
+- 创建三个缓存的Observable对象
+#+BEGIN_SRC java
+Observable<Data> memory = ...;  
+Observable<Data> disk = ...;  
+Observable<Data> network = ...;
+#+END_SRC
+- 获取第一个源的数据
+#+BEGIN_SRC java
+Observable<Data> source = Observable  
+  .concat(memory, disk, network)
+  .first(new Func1<Data, Boolean>() {//如果对象为空、说明没有数据从下一层找
+                    public Boolean call(Data data) {
+                        return data!=null;
+                    }
+                });
+#+END_SRC
+- concat()订阅了所有需要的Observable。
+- 通过first()会因为取到数据后会停止序列
+- 也就是说，如果memory返回了一个结果，那么我们不会打扰disk 和 network
+- 我们从网络获取到数据，记得存起来。
+#+BEGIN_SRC java
+Observable<Data> networkWithSave = network.doOnNext(data -> {  
+  saveToDisk(data);
+  cacheInMemory(data);
+});
+Observable<Data> diskWithCache = disk.doOnNext(data -> {  
+  cacheInMemory(data);
+});
+#+END_SRC
+- 具体详细步骤的代码： 
+- 我们引入了一个用Rxjava实现的加载图片的框架。但是仅仅是个demo，到底能不能真正地实现三级缓存加载图片呢？下面我们就具体实现这个框架，让其可以完成加载图片的功能吧。
+-     首先重新定义了Data类，在Data类中包含了一个bitmap，用来存储我们要显示的图片，通过url来区分不同的图片，同时添加一个构造方法让其可以从磁盘中加载图片。其中isAvalbile()方法十分重要，Rxjava的first操作符就要根据这个方法的值来判断从哪里来加载图片。
+#+BEGIN_SRC java
+public class Data {
+    public Bitmap bitmap;
+    public String url;
+    private boolean isAvailable;
+    public Data(Bitmap bitmap, String url) {
+        this.bitmap = bitmap;
+        this.url = url;
+    }
+    public Data(File f, String url) {
+        if (f != null && f.exists()) {
+            this.url = url;
+            try {
+                bitmap = BitmapFactory.decodeStream(new FileInputStream(f));
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    public boolean isAvailable() {
+        isAvailable = url != null && bitmap != null;
+        return isAvailable;
+    }
+}
+#+END_SRC
+-    下面来定义一个基类CacheObseravble,所有三级缓存的三个类都继承自这个基类，内部有一个虚函数，需要基类来实现并返回一个Obseravble
+#+BEGIN_SRC java
+public abstract class CacheObservable {
+    public abstract Observable<Data> getObservable(String url);
+}
+#+END_SRC
+-    第一级的缓存是Memory,我们使用LruCache来缓存bitmap对象。
+#+BEGIN_SRC java
+public class MemoryCacheOvservable extends CacheObservable {
+    public static final int DEFAULT_CACHE_SIZE = (24 /* MiB */ * 1024 * 1024);
+    MemoryCache<String> mCache = new MemoryCache<>(DEFAULT_CACHE_SIZE);
+    @Override
+    public Observable<Data> getObservable(String url) {
+        return Observable.create(subscriber -> {
+            Logger.i("search in memory");
+            if (!subscriber.isUnsubscribed()) {
+                subscriber.onNext(new Data(mCache.get(url), url));
+                subscriber.onCompleted();
+            }
+        });
+    }
+    public void putData(Data data) {
+        mCache.put(data.url, data.bitmap);
+    }
+}
+#+END_SRC
+-    第二级缓存是Disk,这一级里面涉及到了文件的读取和存储操作，所以这些操作都需要放在子线程中来完成，用RxJava来实现简直是小菜一碟。这也是我喜欢RxJava的地方之一，在Android中我们就可以彻底地抛弃AsycTask啦。
+#+BEGIN_SRC java
+public class DiskCacheObservable extends CacheObservable {
+    Context mContext;
+    File mCacheFile;
+    public DiskCacheObservable(Context mContext) {
+        this.mContext = mContext;
+        mCacheFile = mContext.getCacheDir();
+    }
+    @Override
+    public Observable<Data> getObservable(String url) {
+        return Observable.create(new Observable.OnSubscribe<Data>() {
+            @Override
+            public void call(Subscriber<? super Data> subscriber) {
+                Logger.i("read file from disk");
+                File f = getFile(url);
+                Data data = new Data(f, url);
+                subscriber.onNext(data);
+                subscriber.onCompleted();
+            }
+        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread());
+    }
+    private File getFile(String url) {
+        url = url.replaceAll(File.separator, "-");
+        return new File(mCacheFile, url);
+    }
+    /**
+     * save pictures downloaded from net to disk
+     * @param data data to be saved
+     */
+    public void putData(Data data) {
+        Observable.create(new Observable.OnSubscribe<Data>() {
+            @Override
+            public void call(Subscriber<? super Data> subscriber) {
+                File f = getFile(data.url);
+                OutputStream out = null;
+                try {
+                    out = new FileOutputStream(f);
+                    Bitmap.CompressFormat format;
+                    if (data.url.endsWith("png") || data.url.endsWith("PNG")) {
+                        format = Bitmap.CompressFormat.PNG;
+                    } else {
+                        format = Bitmap.CompressFormat.JPEG;
+                    }
+                    data.bitmap.compress(format, 100, out);
+                    out.flush();
+                    out.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } finally {
+                    if (out != null) {
+                        try {
+                            out.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                if (!subscriber.isUnsubscribed()) {
+                    subscriber.onNext(data);
+                    subscriber.onCompleted();
+                }
+            }
+        }).subscribeOn(Schedulers.io()).subscribe();
+    }
+}
+#+END_SRC
+-    第三级当然是Net了，网络操作也是耗时操作，同样我们要将其放在子线程中进行
+#+BEGIN_SRC java
+public class NetCacheObservable extends CacheObservable {
+    @Override
+    public Observable<Data> getObservable(String url) {
+        return Observable.create(new Observable.OnSubscribe<Data>() {
+            @Override
+            public void call(Subscriber<? super Data> subscriber) {
+                Data data;
+                Bitmap bitmap = null;
+                InputStream inputStream = null;
+                Logger.i("get img on net:" + url);
+                try {
+                    final URLConnection con = new URL(url).openConnection();
+                    inputStream = con.getInputStream();
+                    bitmap = BitmapFactory.decodeStream(inputStream);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } finally {
+                    if (inputStream != null) {
+                        try {
+                            inputStream.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                data = new Data(bitmap, url);
+                if(!subscriber.isUnsubscribed()) {
+                    subscriber.onNext(data);
+                    subscriber.onCompleted();
+                }
+            }
+        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread());
+    }
+}
+#+END_SRC
+-    好了，现在三级缓存的Observable都有了，下一步就是将他们结合起来，按照我们想要的顺序来加载图片。首先我们得能得到这些Observable对象，就是用Source类来统一管理
+#+BEGIN_SRC java
+public class Sources {
+    Context mContext;
+    MemoryCacheOvservable mMemoryCacheOvservable;
+    DiskCacheObservable mDiskCacheObservable;
+    NetCacheObservable mNetCacheObservable;
+    public Sources(Context mContext) {
+        this.mContext = mContext;
+        mMemoryCacheOvservable = new MemoryCacheOvservable();
+        mDiskCacheObservable = new DiskCacheObservable(mContext);
+        mNetCacheObservable = new NetCacheObservable();
+    }
+    public Observable<Data> memory(String url) {
+        return mMemoryCacheOvservable.getObservable(url)
+                .compose(logSource("MEMORY"));
+    }
+    public Observable<Data> disk(String url) {
+        return mDiskCacheObservable.getObservable(url)
+                .filter(data -> data.bitmap != null)
+                //save picture to disk
+                .doOnNext(mMemoryCacheOvservable::putData)
+                .compose(logSource("DISK"));
+    }
+    public Observable<Data> network(String url) {
+        return mNetCacheObservable.getObservable(url)
+                .doOnNext(data -> {
+                    //save picture to disk and memory
+                    mMemoryCacheOvservable.putData(data);
+                    mDiskCacheObservable.putData(data);
+                })
+                .compose(logSource("NET"));
+    }
+    Observable.Transformer<Data, Data> logSource(final String source) {
+        return dataObservable -> dataObservable.doOnNext(data -> {
+            if (data != null && data.bitmap != null) {
+                Logger.i(source + " has the data you are looking for!");
+            } else {
+                Logger.i(source + " not has the data!");
+            }
+        });
+    }
+}
+#+END_SRC
+-    终于到了最后一步了，我们无需自己来处理各种情况并决定从何处加载图片，一切都交给Rxjava来处理，感受Rxjava的强大之处吧。
+#+BEGIN_SRC java
+public class RxImageLoader {
+    static Sources sources;
+    public static void init(Context mContext) {
+        sources = new Sources(mContext);
+    }
+
+    private static final Map<Integer, String> cacheKeysMap = Collections
+            .synchronizedMap(new HashMap<>());
+    /**
+     * get the observable that load img and set it to the given ImageView
+     *
+     * @param img the ImageView to show this img
+     * @param url the url for the img
+     * @return the observable to load img
+     */
+    public static Observable<Data> getLoaderObservable(ImageView img, String url) {
+        if (img != null) {
+            cacheKeysMap.put(img.hashCode(), url);
+        }
+        // Create our sequence for querying best available data
+        Observable<Data> source = Observable.concat(sources.memory(url), sources.disk(url), sources.network(url))
+                .first(data -> data != null && data.isAvailable() && url.equals(data.url));
+        return source.doOnNext(data -> {
+            if (img != null && url.equals(cacheKeysMap.get(img.hashCode()))) {
+                img.setImageBitmap(data.bitmap);
+            }
+        });
+    }
+}
+#+END_SRC
+-    至此，我们的Rxjava实现的三级缓存完全可以使用了，当然还有许多需要继续完善的地方，留待以后慢慢改进吧。
+*** RxJava实现心跳（RxJava 2.0）
+    #+BEGIN_SRC java
+private Disposable intervalInterval;//心跳
+private void rxInterval() {
+    intervalInterval = Flowable.interval(1, TimeUnit.SECONDS)
+        .doOnNext(new Consumer<Long>() {
+                @Override
+                public void accept(Long aLong) throws Exception {
+                    Logger.i("rxInterval---" + aLong);
+                }
+            })
+        .observeOn(AndroidSchedulers.mainThread())
+        .doOnNext(new Consumer<Long>() {
+                @Override
+                public void accept(Long aLong) throws Exception {
+                    Logger.i("rxInterval---txt.setText---" + aLong);
+                    txt.setText("----心跳---" + aLong);
+                }
+            })
+        .subscribeOn(Schedulers.io())
+        .subscribe(new Consumer<Long>() {
+                @Override
+                public void accept(Long aLong) throws Exception {
+                }
+            });
+}
+/**
+ * 停止心跳
+ * @param v
+ */
+@Override public void onClick(View v) {
+    switch (v.getId()) {
+        case R.id.btn:
+            if (intervalInterval != null) 
+                intervalInterval.dispose();
+            break;
+    }
+}
+@Override
+    protected void onDestroy() {
+    super.onDestroy();
+    if (intervalInterval != null) 
+        intervalInterval.dispose();
+}
+    #+END_SRC
+*** 遍历集合
+    #+BEGIN_SRC java
+Flowable.just(new ArrayList<StringEntity>())
+    .doOnNext(new Consumer<ArrayList<StringEntity>>() {
+            @Override
+                public void accept(ArrayList<StringEntity> stringEntities) throws Exception {
+                for (int i = 0; i < 10; i++) 
+                    stringEntities.add(new StringEntity("rxFromFilter--" + i, i));
+            }
+        })
+    .flatMap(new Function<ArrayList<StringEntity>, Publisher<?>>() {
+            @Override
+                public Publisher<?> apply(ArrayList<StringEntity> stringEntities) throws Exception {
+                return handleList(stringEntities);
+            }
+        })
+    .subscribe(new Subscriber<Object>() {
+            @Override
+                public void onSubscribe(Subscription s) {
+            }
+            @Override
+                public void onNext(Object o) {
+            }
+            @Override
+                public void onError(Throwable t) {
+            }
+            @Override
+                public void onComplete() {
+            }
+        });
+
+/**
+ * 将list转换成Flowable
+ * @param list
+ * @return
+ */
+public Flowable<StringEntity> handleList(ArrayList<StringEntity> list) {
+    return Flowable.fromIterable(list)
+        .filter(new Predicate<StringEntity>() {
+                @Override
+                    public boolean test(StringEntity entity) throws Exception {
+                    return entity.position != 0;
+                }
+            })
+        .doOnNext(new Consumer<StringEntity>() {
+                @Override
+                    public void accept(StringEntity entity) throws Exception {
+                    Logger.i(entity.getItem());
+                }
+            });
+}
+    #+END_SRC
+*** 并发任务（RxJava 1.0）
+    #+BEGIN_SRC java
+/**
+ * 两个耗时任务一起执行
+ */
+private static Observable<Intent> createLivePlayerRoomPageOrDonePageObservable(final Context context, final int roomId, final String url) {
+    // 获取网络资源的Observable
+    Observable<RspLiveInfo> rspLiveInfoObservable = LiveNetManager.liveInfo(roomId, null, false);
+    // 获取图片高斯模糊的Observable
+    Observable<GlideBitmapDrawable> glideBitmapDrawableObservable = RxGlide.afterGlideRequestListener(Global.getContext(), ImageWorker.buildBlurBitmapRequest(context, url));
+    return Observable.zip(rspLiveInfoObservable, glideBitmapDrawableObservable,
+                          new Func2<RspLiveInfo, GlideBitmapDrawable, Intent>() {
+                              @Override
+                                  public Intent call(RspLiveInfo rspLiveInfo, GlideBitmapDrawable glideBitmapDrawable) {
+                              }
+                          }).observeOn(AndroidSchedulers.mainThread());
+}
+    #+END_SRC
+
+** 线程切换原理 
+   
+   [[./pic/rxjava0.png]]
+   
+- https://zachaxy.github.io/2017/04/03/RxJava%E6%BA%90%E7%A0%81%E8%AF%A6%E8%A7%A3-%E7%BA%BF%E7%A8%8B%E5%88%87%E6%8D%A2%E5%8E%9F%E7%90%86/
+*** 线程调度深入
+- 一个基本线程调度的例子:事件在IO线程产生,然后再UI线程被消费;
+#+BEGIN_SRC java
+Observable.create(new Observable.OnSubscribe<String>() {
+    @Override
+    public void call(Subscriber<? super String> subscriber) {
+        subscriber.onNext("Hello RxJava!");
+        subscriber.onCompleted();
+    }
+})
+.subscribeOn(Schedulers.io())
+.observeOn(AndroidSchedulers.mainThread())
+.subscribe(new Subscriber<String>() {
+    @Override
+    public void onCompleted() {
+        System.out.println("completed!");
+    }
+    @Override
+    public void onError(Throwable e) {
+    }
+    @Override
+    public void onNext(String s) {
+        System.out.println(s);
+    }
+});
+#+END_SRC
+*** subscribeOn()原理
+- subscribeOn()用来指定Observable在哪个线程中执行事件流，也就是指定Observable中OnSubscribe(计划表)的call()方法在那个线程发射数据。下面通过源码分析subscribeOn()是怎样实现线程的切换的。
+#+BEGIN_SRC java
+public final Observable<T> subscribeOn(Scheduler scheduler) {
+    // 忽略这个 if 分支吧
+    if (this instanceof ScalarSynchronousObservable) {
+      return ((ScalarSynchronousObservable<T>)this).scalarScheduleOn(scheduler);
+    }
+    //  重点看这个:this指的是调用线程切换方法subscribeOn()的Observerble ,
+    return create(new OperatorSubscribeOn<T>(this, scheduler));
+}
+#+END_SRC
+- subscribeOn()方法是 Observerble 中的方法,一旦调用了该方法,就会创建出一个新的 Observerble 对象;当然还是通过create(OnSubscribe)方法来创建Observerble ;
+- 再来看一下新创建的这个Observerble 对象中的OnSubscribe的实现类内部是如何实现的;OperatorSubscribeOn是OnSubscribe的实现类,自然也要实现call方法来触发事件了.同时一旦换了新的Observerble ,那么最终的观察者订阅的自然也就是新的Observerble 了,这一点一定要明确;那么自然call方法中的参数也就持有了原始观察者的引用.
+#+BEGIN_SRC java
+public final class OperatorSubscribeOn<T> implements Observable.OnSubscribe<T> {
+    final Scheduler scheduler;   // 调度器
+    final Observable<T> source;  // 原始Observable
+    // 构造函数,传入原始的被观察者和线程调度器;
+  	public OperatorSubscribeOn(Observable<T> source, Scheduler scheduler) {
+        this.scheduler = scheduler;
+        this.source = source;
+    }
+    // (1)原始观察者订阅了新的Observable后,将先执行此call方法(还记得订阅函数是如何实现的吗?)
+    // 这个参数的final的,其实是为了给内部类调用,内部类已经在其他线程了;
+    // 传入的参数是原始观察者;和上一篇操作符的原理类似,也是在call方法中创建了一个代理观察者,使其与原始被观察者订阅
+    @Override
+        public void call(final Subscriber<? super T> subscriber) {
+        final Scheduler.Worker inner = scheduler.createWorker();  // 创建了一个worker对象,内部持有一个线程池
+        subscriber.add(inner);
+        // (2)call方法中使用传入的调度器创建的Worker对象的schedule方法切换线程,传入的Action0会作为一个参数传入runnable中
+        // runnable的run方法中会调用action0的call方法,然后runnable又被添加到线程池中被执行;
+        inner.schedule(new Action0() {
+                @Override
+                public void call() {
+                    final Thread thread = Thread.currentThread();
+                    // (3)根据外层call中传来的原始观察者,创建了一个新的观察者(代理观察者),而且代理观察者持有原始观察者的引用
+                    Subscriber<T> s = new Subscriber<T>(subscriber) {
+                        @Override
+                        public void onNext(T t) {
+                            // (5) 新的(代理)观察者收到数据后直接发送给原始观察者
+                            subscriber.onNext(t);
+                        }
+                    };
+                    // (4)在切换的线程中，新的观察者订阅原始Observable，用来接收数据
+                    // 代理观察者能收到数据的前提是因为代理观察者订阅了原始被观察者;
+                    // 其实这个订阅的动作是在新线程中执行的.
+                    source.unsafeSubscribe(s);
+                }
+            });
+    }
+}
+#+END_SRC
+- 在call方法中通过scheduler.createWorker().schedule(Action0)完成线程的切换.
+- 简单说:这里在subscribeOn()方法中新创建了一个Observable对象(代理Observable),于是发生了原始观察者与代理被观察者订阅的情况,于是代理被观察者中的call()方法被先执行,但是代理被观察者哪里有数据呢,还不是用老方法,又创建了一个代理观察者,然后让代理观察者与原始被观察者进行订阅,一旦发生订阅,数据就发出来了,数据发出来给了代理观察者,代理观察者的onNext()方法中有调用了原始观察者的onNext()方法;这不就解决了嘛,可是如何实现的线程切换呢?
+- 提前说一下:这个Action0对象时作为参数传入一个Runnable实例中,然后将该runnable对象传入线程池,这样就实现了线程的切换,也就是说这个Action0()中的所有动作都是在新的线程池中执行的;
+- 上述说说的一切动作都是在scheduler.createWorker().schedule(new Action0(XXX));都是在这个Action0()中发生的.
+- 这里涉及到两个对象:Scheduler和Worker,究竟这是怎么实现的线程切换呢?
+**** Scheduler
+- 其实在subscribeOn(Scheduler scheduler)方法中传入的参数就是 Scheduler 对象;
+- 由于RxJava中有多种调度器，我们就看一个简单的Schedulers.newThread()，其他调度器的思路是一样的.
+- 先看一下Schedulers这个类,Schedulers就是一个调度器的管理器,大管家;
+#+BEGIN_SRC java
+public final class Schedulers {
+    // 各种调度器对象,看着眼熟吧.
+    private final Scheduler computationScheduler;
+    private final Scheduler ioScheduler;
+    private final Scheduler newThreadScheduler;
+  
+    // 单例，Schedulers被加载的时候，上面的各种调度器对象已经初始化
+    private static final Schedulers INSTANCE = new Schedulers();
+    
+    // 构造方法,在构造方法中初始化各种调度器
+    private Schedulers() {
+        RxJavaSchedulersHook hook = RxJavaPlugins.getInstance().getSchedulersHook();
+          
+        // 这里只关注创建一个新的线程的调度器
+        Scheduler nt = hook.getNewThreadScheduler();
+        if (nt != null) 
+            newThreadScheduler = nt;
+        else {
+            // ①.创建newThreadScheduler对象
+            newThreadScheduler = RxJavaSchedulersHook.createNewThreadScheduler();
+        }
+
+        // 下面是Compute线程的创建  
+        Scheduler c = hook.getComputationScheduler();
+        if (c != null) {
+            computationScheduler = c;
+        } else {
+            computationScheduler = RxJavaSchedulersHook.createComputationScheduler();
+        }
+
+        // 下面是IO线程的创建;
+        Scheduler io = hook.getIOScheduler();
+        if (io != null) {
+            ioScheduler = io;
+        } else {
+            ioScheduler = RxJavaSchedulersHook.createIoScheduler();
+        }
+    }
+    
+    // ②. 获取NewThreadScheduler对象,也就是我们在使用调度调用的该方法来获取一个新线程的调度器;
+    // 我们平时使用线程切换时,就是调用的 Schedulers.io(),Schedulers.newThread()等方法来获取一个Scheduler对象的!!
+    public static Scheduler newThread() {
+        return INSTANCE.newThreadScheduler;
+    }
+}
+#+END_SRC
+- 接着跟踪RxJavaSchedulersHook.createNewScheduler()，看看newThreadScheduler究竟是如何创建的?
+- 我们发现无论是IO线程,Compute线程,还是NewThread线程调度器,都是RxJavaSchedulersHook.createXXX()方法创建出来了,其内部是用工厂方法实现的.
+- 最终会找到一个叫NewThreadScheduler的类：
+#+BEGIN_SRC java
+public final class NewThreadScheduler extends Scheduler {
+    private final ThreadFactory threadFactory;
+    public NewThreadScheduler(ThreadFactory threadFactory) {
+        this.threadFactory = threadFactory;
+    }
+    @Override
+    public Worker createWorker() {
+        return new NewThreadWorker(threadFactory);
+    }
+}
+#+END_SRC
+- 最终看到NewThreadScheduler就是我们调用subscribeOn(Schedulers.newThread() )传入的调度器对象，通过上面的分析,我们已经明白了Scheduler 的产生原理
+- 产生Scheduler 并不是最终目的,而是通过Scheduler 产生 Worker,然后调用Worker.schedule(Action0)实现线程的切换.
+**** Worker
+- 通过上面的分析,我们已经明白了Scheduler 的产生原理,产生Scheduler 并不是最终目的,而是通过Scheduler 产生 Worker,然后调用Worker.schedule(Action0)实现线程的切换.
+- 每个调度器对象都有一个createWorker方法用于创建一个Worker对象，而NewThreadScheduler对应创建的Worker是一个叫NewThreadWorker的对象.
+- 而在上面的分析中我们也看到了, OperatorSubscribeOn类中调用了
+#+BEGIN_SRC java
+final Scheduler.Worker inner = scheduler.createWorker()
+#+END_SRC
+  - 方法来得到一个 Worker,然后又调用 inner.schedule(Action0)实现线程的切换
+- 接下来我们跟进schedule()方法查看其内部的实现原理.同样,这里的Worker 依然是以最简单的NewThreadWorker 为例.这里删减了部分代码,只留取对整体结构有用的部分.
+  #+BEGIN_SRC java
+public class NewThreadWorker extends Scheduler.Worker implements Subscription {
+
+    private final ScheduledExecutorService executor;   // 线程池,在下面构造函数中进行初始化.
+    public NewThreadWorker(ThreadFactory threadFactory) {
+        // 创建一个线程池
+        ScheduledExecutorService exec = Executors.newScheduledThreadPool(1, threadFactory);
+        executor = exec;
+    }
+  
+    // 默认调用的是这个方法;
+    @Override
+        public Subscription schedule(final Action0 action) {
+        return schedule(action, 0, null);
+    }
+    @Override
+        public Subscription schedule(final Action0 action, long delayTime, TimeUnit unit) {
+        return scheduleActual(action, delayTime, unit);
+    }
+    
+  
+    // 重要：其实 worker.schedule()最终调用的是这个方法
+    public ScheduledAction scheduleActual(final Action0 action, long delayTime, TimeUnit unit) {
+        // 别紧张,源码中直接将传入的 action return回来了... 这一步相对于什么也没做;
+        Action0 decoratedAction = schedulersHook.onSchedule(action);
+
+        // ScheduledAction就是一个Runnable对象，在run()方法中调用了Action0.call()
+        ScheduledAction run = new ScheduledAction(decoratedAction);
+        Future<?> f;
+        if (delayTime <= 0) {
+            f = executor.submit(run);   // 将Runnable对象放入线程池中
+        } else {
+            f = executor.schedule(run, delayTime, unit);  // 延迟执行
+        }
+        run.add(f);
+        return run;
+    }
+}
+  #+END_SRC
+- 我们发现OperatorSubscribeOn计划表中通过NewThreadWorker.schedule(Action0)，将Action0作为参数传入一个Runnable的实现类:ScheduledAction,然后将这个runnable放入到一个线程池中执行，这样就实现了线程的切换。
+- 简单说:最原始的subscribeOn()—调用了—-create(new OperatorSubscribeOn<T>(this, scheduler))—-创建一个代理被观察者—->OperatorSubscribeOn()中实现了call()方法—->call()方法中调用了NewThreadWorker.schedule(Action0)—-Action0被包装称一个RUnnable对象,然后schedule()方法内部使用了线程池,创建一个新的线程,并将包装的Runnable对象传递进去,这样就实现了线程的切换
+- 步骤:
+  - 原始被观察者调用subscribeOn()方法准备切换线程,(这时候还没切换呢.)产生一个代理被观察者
+  - 原始订阅者订阅代理被观察者(明面代码上你能看得到的)
+  - 代理被观察者的onSubscribe.call()方法执行,提供了一个Runnable对象,也就是线程已经被切换了
+  - 新线程中产生一个新的代理观察者,代理观察者订阅原始被观察者(接下来的动作也都是在新线程中执行)
+  - 原始被观察者发射数据,这个动作已经是在新线程中执行了
+  - 代理观察者收到数据,再将数据转发给原始观察者
+- 此处用到了多线程的知识,多线程这一块还需要总结整理;
+**** 多次subscribeOn()的情况
+- 我们发现，每次使用subscribeOn都会产生一个新的Observable，并产生一个新的计划表OnSubscribe，目标Subscriber最后订阅的将是最后一次subscribeOn产生的新的Observable。在每个新的OnSubscribe的call方法中都会有一个产生一个新的线程，在这个新线程中订阅上一级Observable，并创建一个新的Subscriber接受数据，最终原始Observable将在第一个新线程中发射数据，然后传送给给下一个新的观察者，直到传送到目标观察者，所以多次调用subscribeOn只有第一个起作用（这只是表面现象，其实每个subscribeOn都切换了线程，只是最终目标Observable是在第一个subscribeOn产生的线程中发射数据的）
+- 也就是说多次调用subscribeOn()方法其实不是只有第一次方法其作用,而是每次都起作用,这里说的第一次起作用其实说的是最原始的数据发射是在第一次subscribeOn()指定的线程,只不过我们很少关注中间数据的处理过程而已;
+- 下面是多次线程切换的伪代码
+#+BEGIN_SRC java
+// 第3个subscribeOn产生的新线程
+new Thread(){
+    @Override
+    public void run() {
+        Subscriber s1 = new Subscriber();
+        // 第2个subscribeOn产生的新线程
+        new Thread(){
+            @Override
+            public void run() {
+                Subscriber s2 = new Subscriber();
+                // 第1个subscribeOn产生的新线程
+                new Thread(){
+                    @Override
+                    public void run() {
+                        Subscriber<T> s3 = new Subscriber<T>(subscriber) {
+                            @Override
+                            public void onNext(T t) {
+                                subscriber.onNext(t);
+                            }
+                            // ...
+                        };
+                        // ①. 最后一个新观察者订阅原始Observable
+                        Observable.subscribe(s3);
+                        // ②. 原始Observable将在此线程中发射数据
+                        // ③. 最后一个新的观察者s3接受数据
+                        // ④. s3收到数据后，直接发送给s2，s2收到数据后传给s1,...最后目标观察者收到数据
+                    } 
+                }.start();
+            }
+        }.start();
+    }
+}.start();
+#+END_SRC
+*** observeOn原理: 还是需要进一步的整理
+- observeOn调用的是lift操作符。lift操作符创建了一个代理的Observable，用于接收原始Observable发射的数据，然后在Operator中对数据做一些处理后传递给目标Subscriber。observeOn一样创建了一个代理的Observable，并创建一个代理观察者接受上一级Observable的数据，代理观察者收到数据之后会开启一个线程，在新的线程中，调用下一级观察者的onNext、onCompete、onError方法。
+#+BEGIN_SRC java
+public final Observable<T> observeOn(Scheduler scheduler) {
+    return observeOn(scheduler, RxRingBuffer.SIZE);
+}
+public final Observable<T> observeOn(Scheduler scheduler, int bufferSize) {
+  	return observeOn(scheduler, false, bufferSize);
+}
+public final Observable<T> observeOn(Scheduler scheduler, boolean delayError, int bufferSize) {
+    if (this instanceof ScalarSynchronousObservable) {
+      return ((ScalarSynchronousObservable<T>)this).scalarScheduleOn(scheduler);
+    }
+    return lift(new OperatorObserveOn<T>(scheduler, delayError, bufferSize));
+}
+#+END_SRC
+- 可以看到使用observeOn(Scheduler scheduler)方法时,也是传入了一个scheduler,这和subscribeOn()方法如出一辙,,随着不断深入的调用,其最终使用 lift()操作符创建了一个Observable 对象.这里先不管lift,接着上面的lift()中创建了一个OperatorObserveOn类,其源码如下:
+#+BEGIN_SRC java
+public final class OperatorObserveOn<T> implements Observable.Operator<T, T> {
+
+    private final Scheduler scheduler;
+
+    // 创建代理观察者，用于接收上一级Observable发射的数据,而这个child就是原始观察者.
+    @Override
+        public Subscriber<? super T> call(Subscriber<? super T> child) {
+        if (scheduler instanceof ImmediateScheduler) {
+            return child;
+        } else if (scheduler instanceof TrampolineScheduler) {
+            return child;
+        } else {
+            ObserveOnSubscriber<T> parent = new ObserveOnSubscriber<T>(scheduler, child, delayError, bufferSize);
+            parent.init();
+            return parent;
+        }
+    }
+
+    // -----------------------------------我是分割线-------------------------------------------------------- 
+    /*
+      先不管前面的复杂逻辑了,总之现在有了代理被观察者和代理观察者,像map那样发生了订阅,然后原始被观察者开始发数据了
+      在代理观察者中,自然也有onNext,onCompleted(),onError()方法,但是在这三个方法后都调用了 schedule()函数
+    */
+    // 代理观察者
+    private static final class ObserveOnSubscriber<T> extends Subscriber<T> implements Action0 {
+        final Subscriber<? super T> child;
+        final Scheduler.Worker recursiveScheduler;
+        final NotificationLite<T> on;
+        final Queue<Object> queue;
+
+        // 接受上一级Observable发射的数据
+        @Override
+            public void onNext(final T t) {
+            if (isUnsubscribed() || finished) {
+                return;
+            }
+            if (!queue.offer(on.next(t))) {
+                onError(new MissingBackpressureException());
+                return;
+            }
+            // 在代理观察者中,自然也有onNext,onCompleted(),onError()方法,但是在这三个方法后都调用了 schedule()函数
+            schedule();
+        }
+        @Override
+            public void onCompleted() {
+            // ...
+                schedule();
+        }
+        @Override
+            public void onError(final Throwable e) {
+            // ...
+                schedule();
+        }
+        // 开启新线程处理数据,切换线程就是在这里,重要的方法.
+        protected void schedule() {
+            if (counter.getAndIncrement() == 0) 
+                recursiveScheduler.schedule(this);
+        }
+      
+        // only execute this from schedule()
+        // 在新线程中将数据发送给目标观察者,注意这里是观察者,其call方法是因为实现了Action0接口,什么时候调用呢?
+        @Override
+            public void call() {
+            long missed = 1L;
+            long currentEmission = emitted;
+            final Queue<Object> q = this.queue;
+            final Subscriber<? super T> localChild = this.child;
+            final NotificationLite<T> localOn = this.on;
+            for (;;) {
+                while (requestAmount != currentEmission) {
+                    // ...
+                        localChild.onNext(localOn.getValue(v));
+                }
+            }
+        }
+    }
+}
+#+END_SRC
+- 还记得subscribeOn()时传入的Scheduler吗,这个observeOn()也传入了一个Scheduler,和之前一样,通过这个scheduler产生一个Worker,然后调用Worker.schedule(Action0)实现线程的切换.与subscribeOn()不同的是,这个线程切换时在代理观察者执行onNext()中执行的,也就是说先把线程切换过去,然后代理观察者在执行的 actual.onNext()方法.
+- 我们可以参照多次subscribeOn()的图解示例,可以把第二次subscribeOn()替换成observeOn(),那么在产生的第二个代理观察者给原始观察者发消息时,本来是在其onNext()方法中直接调用原始观察者的onNext()的,但是由于有observeOn(),所以在执行onNext的时候进行了线程切换,然后在调用原始观察者的onNext()
+*** 总结
+- 只要涉及到操作符，其实就是生成了一套代理的Subscriber(观察者)、Observable(被观察者)和OnSubscribe(计划表)。Observable最典型的特征就是链式调用，我们暂且将每一步操作称为一级。代理的OnSubscribe中的call方法就是让代理Subscriber订阅上一级Observable，直到订阅到原始Observable发射数据，代理Subscriber收到数据后，可能对数据做一些操作也有可能切换线程，然后将数据传送给下一级Subscriber，直到目标观察者接收到数据，目标观察者在那个线程接受数据取决于上一个Subscriber在哪一个线程调用目标观察者的方法。
+** 另一种更为简洁的综述与总结
+- 五种可观察者和两种全能者
+  - Flowable(支持背压[Backpressure]), Observable, Maybe, Single, Completable
+  - Subject，Processor(支持背压):既是可(被)观察者也是观察者
+    
+[[./pic/rxjava.png]]
+- 上图是对需要Function对象参数的操作符解释，subscribeOn/observeOn 线程切换操作符同理，新Observable/Observer将原Observable/Observer计算操作切换到指定线程中进行。
+- 理解操作符，个人认为关键是要理解链式操作，再去理解其他问题就会比较容易。
+  - 问题一：subscribeOn 对在其前面的代码起作用，observeOn对在其后面的代码起作用
+  - 问题二：subscribeOn 作用于该操作符之前的 Observable 的创建操符以及 doOnSubscribe 操作符
+- 回答这两个问题，优先需要明确的是哪些操作符是在可观察者中执行，哪些操作符是在观察者中执行。 大部分的操作符都是在观察者中执行的，目前常用且个人知道的有Observable创建操作符和doOnSubscribe是在可观察者中执行的。
+- 回答问题一，不管是对其前面的代码起作用还是对其后面代码起作用，重点是代码的执行顺序是怎样的。结合上图可知，Observable链式调用顺序是从下到上，而Observer链式调用顺序是从上到下，所以问题一答案自明。
+
+[[./pic/rxjava2.png]]
+
+- 回答问题二，每次调用subscribeOn操作符都会对可观察者的执行线程切换起作用，即对其前面在可观察者中执行的代码切换执行线程，只是第一次调用之后再次调用会有一个对比判断操作，重复设置会抛出onError，在onError中可以监听重复设置动作。Observer有一个特殊方法onSubscribe是在Observable中调用，doOnSubscribe是在Observer的onSubscribe中调用，最终doOnSubscribe是在Observable中执行。具体流程可以阅读下文关键代码：
+#+BEGIN_SRC java
+public final class ObservableSubscribeOn<T> extends AbstractObservableWithUpstream<T, T> {
+    @Override
+        public void subscribeActual(final Observer<? super T> s) {
+        
+        // 观察者的onSubscribe方法在可观察者的中被调用
+        s.onSubscribe(parent);
+
+        // set 并且 切换线程执行上一个Observable subscribe方法
+        parent.setDisposable(scheduler.scheduleDirect(new Runnable() {
+                    @Override
+                    public void run() {
+                        source.subscribe(parent);
+                    }
+                }));
+    }
+    static final class SubscribeOnObserver<T> extends AtomicReference<Disposable> implements Observer<T>, Disposable {
+        void setDisposable(Disposable d) {
+            DisposableHelper.setOnce(this, d);
+        }
+    }
+    public static boolean setOnce(AtomicReference<Disposable> field, Disposable d) {
+        ObjectHelper.requireNonNull(d, "d is null");
+        // 对比操作，如果重复设置会上报RxJavaPlugins.onError(new IllegalStateException("Disposable already set!"));
+        if (!field.compareAndSet(null, d)) {
+            d.dispose();
+            if (field.get() != DISPOSED) 
+                reportDisposableSet();
+            return false;
+        }
+        return true;
+    }
+}
+#+END_SRC
+- 前面讲到了，可以利用 subscribeOn() 结合 observeOn() 来实现线程控制，让事件的产生和消费发生在不同的线程。可是在了解了 map() flatMap() 等变换方法后，有些好事的（其实就是当初刚接触 RxJava 时的我）就问了：能不能多切换几次线程？
+  - 答案是：能。因为 observeOn() 指定的是 Subscriber 的线程，而这个 Subscriber 并不是（严格说应该为『不一定是』，但这里不妨理解为『不是』）subscribe() 参数中的 Subscriber ，而是 observeOn() 执行时的当前 Observable 所对应的 Subscriber ，即它的直接下级 Subscriber 。换句话说，observeOn() 指定的是它之后的操作所在的线程。因此如果有多次切换线程的需求，只要在每个想要切换线程的位置调用一次 observeOn() 即可。上代码：
+#+BEGIN_SRC java
+Observable.just(1, 2, 3, 4) // IO 线程，由 subscribeOn() 指定
+    .subscribeOn(Schedulers.io())
+    .observeOn(Schedulers.newThread())
+    .map(mapOperator) // 新线程，由 observeOn() 指定
+    .observeOn(Schedulers.io())
+    .map(mapOperator2) // IO 线程，由 observeOn() 指定
+    .observeOn(AndroidSchedulers.mainThread) 
+    .subscribe(subscriber);  // Android 主线程，由 observeOn() 指定
+#+END_SRC
+- 如上，通过 observeOn() 的多次调用，程序实现了线程的多次切换。
+- 不过，不同于 observeOn() ， subscribeOn() 的位置放在哪里都可以，但它是只能调用一次的。
