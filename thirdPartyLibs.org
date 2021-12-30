@@ -370,6 +370,18 @@ Observable.just("hello").subscribe(new Consumer<String>() {
   - Schedulers.io(): I/O 操作（读写文件、读写数据库、网络信息交互等）所使用的 Scheduler。行为模式和 new Thread() 差不多，区别在于 io() 的内部实现是是用一个无数量上限的线程池，可以重用空闲的线程，因此多数情况下 io() 比new Thread()更有效率。不要把计算工作放在 io() 中，可以避免创建不必要的线程。
   - Schedulers.computation(): 计算所使用的 Scheduler。这个计算指的是 CPU 密集型计算，即不会被 I/O 等操作限制性能的操作，例如图形的计算。这个 Scheduler 使用的固定的线程池，大小为 CPU 核数。不要把 I/O 操作放在computation()中，否则 I/O 操作的等待时间会浪费 CPU。
   - 另外， Android 还有一个专用的 AndroidSchedulers.mainThread()，它指定的操作将在 Android 主线程运行。
+|----------------------+--------------------------------+-----------------+--------------------------------------------------|
+| 类型                 | 使用方式                       | 含义            | 使用场景                                         |
+|----------------------+--------------------------------+-----------------+--------------------------------------------------|
+| IoScheduler          | Schedulers.io()                | io操作线程      | 读写SD卡文件，查询数据库，访问网络等IO密集型操作 |
+| NewThreadScheduler   | Schedulers.newThread()         | 创建新线程      | 耗时操作等                                       |
+| ComputationScheduler | Schedulers.computation()       | CPU计算操作线程 | 图片压缩取样、xml,json解析等CPU密集型计算        |
+| HandlerScheduler     | AndroidSchedulers.mainThread() | Android主线程   | 更新UI等                                         |
+|----------------------+--------------------------------+-----------------+--------------------------------------------------|
+| SingleScheduler      | Schedulers.single()            | 单例线程        | 只需一个单例线程时                               |
+| TrampolineScheduler  | Schedulers.trampoline()        | 当前线程        | 需要在当前线程立即执行任务时                     |
+|----------------------+--------------------------------+-----------------+--------------------------------------------------|
+
 - 有了这几个 Scheduler ，就可以使用 subscribeOn()和 observeOn()两个方法来对线程进行控制了。 * subscribeOn(): 指定 subscribe()所发生的线程，即 Observable.OnSubscribe被激活时所处的线程。或者叫做事件产生的线程。 * observeOn(): 指定 Subscriber 所运行在的线程。或者叫做事件消费的线程。
 - 下面是一个获取本地资源并显示在控件上的例子
 #+BEGIN_SRC java
@@ -440,7 +452,7 @@ Observable.create(onSubscribe)
     .subscribe(subscriber);
 #+END_SRC
 - 如上，在 doOnSubscribe()的后面跟一个 subscribeOn() ，就能指定准备工作的线程了。
- 
+
 *** 常用操作符
 - 我很还通过just直接快捷的生成了Flowable
 - 我们还通过将drwable通过map操作符转换成了 bitmap进以下一流的操作
@@ -1434,7 +1446,10 @@ public final class OperatorObserveOn<T> implements Observable.Operator<T, T> {
 
 [[./pic/rxjava2.png]]
 
-- 回答问题二，每次调用subscribeOn操作符都会对可观察者的执行线程切换起作用，即对其前面在可观察者中执行的代码切换执行线程，只是第一次调用之后再次调用会有一个对比判断操作，重复设置会抛出onError，在onError中可以监听重复设置动作。Observer有一个特殊方法onSubscribe是在Observable中调用，doOnSubscribe是在Observer的onSubscribe中调用，最终doOnSubscribe是在Observable中执行。具体流程可以阅读下文关键代码：
+- 回答问题二，每次调用subscribeOn操作符都会对可观察者的执行线程切换起作用，即对其前面在可观察者中执行的代码切换执行线程，只是第一次调用之后再次调用会有一个对比判断操作，重复设置会抛出onError，在onError中可以监听重复设置动作。Observer有一个特殊方法onSubscribe是在Observable中调用，doOnSubscribe是在Observer的onSubscribe中调用，最终doOnSubscribe是在Observable中执行。
+- 为什么 subscribeOn() 只有第一次切换有效
+  - 因为 RxJava 最终能影响 ObservableOnSubscribe 这个匿名实现接口的运行环境的只能是最后一次运行的 subscribeOn() ，又因为 RxJava 订阅的时候是从下往上订阅，所以从上往下第一个 subscribeOn() 就是最后运行的，这就造成了写多个 subscribeOn() 并没有什么乱用的现象。
+- 具体流程可以阅读下文关键代码：
 #+BEGIN_SRC java
 public final class ObservableSubscribeOn<T> extends AbstractObservableWithUpstream<T, T> {
     @Override
@@ -1483,3 +1498,166 @@ Observable.just(1, 2, 3, 4) // IO 线程，由 subscribeOn() 指定
 #+END_SRC
 - 如上，通过 observeOn() 的多次调用，程序实现了线程的多次切换。
 - 不过，不同于 observeOn() ， subscribeOn() 的位置放在哪里都可以，但它是只能调用一次的。
+- 还有一篇，暂时不想看了，源码没有着色，https://juejin.cn/post/6844903619947397134 https://www.daimajiaoliu.com/daima/479c2288b100407
+
+** Retrofit+RxJava快速集成
+- 只贴部分源码以供参考吧
+#+BEGIN_SRC java
+/**
+ * 配置请求，封装请求url和参数，返回类型
+ */
+public interface WebService {
+    @GET()
+        Observable<Response> getData(@Url String url);
+
+    @POST("hq/nhg/getHQByCode?khh4log=002929098620&mobile4log=13520783026&userno4log=069706c9-e29f-11e6-bc4d-005056b97973&serviceVersion=V2&clientip4log=eno864370036298679android13520783026")
+        Observable<PostResponse> getPostData(@QueryMap Map<String,String> map);
+}
+
+public class PostResponse {
+    String duration;
+    String exchange;
+    @Override
+        public String toString() {
+        return "PostResponse{" +
+            "duration='" + duration + '\'' +
+            ", exchange='" + exchange + '\'' +
+            '}';
+    }
+}
+
+public class Response {
+    public String msg;
+    public String code;
+    @Override
+        public String toString() {
+        return "Response{" +
+            "msg='" + msg + '\'' +
+            ", code='" + code + '\'' +
+            '}';
+    }
+}
+
+// ##3 定义请求体
+public class Api {
+    public static WebService api;
+    public static final String BASE_URL = "https://106.37.173.33:8060/";
+    private static final long TIMEOUT = 30;
+    private static OkHttpClient httpClient;
+
+    static {
+        X509TrustManager xtm = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) {
+            }
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            }
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                X509Certificate[] x509Certificates = new X509Certificate[0];
+                return x509Certificates;
+            }
+        };
+        SSLContext sslContext = null;
+        try {
+            sslContext = SSLContext.getInstance("SSL");
+            sslContext.init(null, new TrustManager[]{xtm}, new SecureRandom());
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (KeyManagementException e) {
+            e.printStackTrace();
+        }
+        HostnameVerifier DO_NOT_VERIFY = new HostnameVerifier() {
+            @Override
+            public boolean verify(String hostname, SSLSession session) {
+                return true;
+            }
+        };
+        httpClient = new OkHttpClient.Builder()
+            .connectTimeout(45, TimeUnit.SECONDS)
+            .sslSocketFactory(sslContext.getSocketFactory())
+            .hostnameVerifier(DO_NOT_VERIFY)
+            .addInterceptor(new HttpLoggingInterceptor(new HttpLoggingInterceptor.Logger() {
+                        @Override
+                        public void log(String message) {
+                        }
+                    }).setLevel(HttpLoggingInterceptor.Level.BASIC))
+            .connectTimeout(TIMEOUT, TimeUnit.SECONDS)
+            .readTimeout(TIMEOUT, TimeUnit.SECONDS)
+            .addInterceptor(new Interceptor() {
+                    @Override
+                    public Response intercept(Chain chain) throws IOException {
+                        Request.Builder builder = chain.request().newBuilder();
+                        // 替换为自己的token
+                        builder.addHeader("你的用户名", "密码");
+                        return chain.proceed(builder.build());
+                    }
+                })
+            .build();
+    }
+    public static WebService getService() {
+        if (api == null) {
+            creatWebService();
+        }
+        return api;
+    }
+    private static synchronized void creatWebService() { // 静态同步方法
+        if (api == null) {
+            api = new Retrofit.Builder()
+                .baseUrl(BASE_URL)
+                .client(httpClient)
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+                .build()
+                .create(WebService.class);
+        }
+    }
+}
+// 注意：
+//     OkHttpClient要设置sslSocketFactory
+//     java.security.cert.CertPathValidatorException: Trust anchor for certification path not found.
+// #4 调用
+//         注意：网络请求要在异步中
+
+// （1）get请求
+Api.getService().getData("msgservice/GetPersonalBulletin?userno=069706c9-e29f-11e6-bc4d-005056b97973&khh=&prdSoftName=android&prdSoftVersion=88&posid=1&khh4log=&mobile4log=13520783026&userno4log=069706c9-e29f-11e6-bc4d-005056b97973&serviceVersion=V2&clientip4log=eno864370036298679android13520783026"
+                         ).subscribeOn(Schedulers.io()).subscribe(new Observer<Response>() {
+                                 @Override
+                                     public void onSubscribe(@NonNull Disposable d) {
+                                     Log.i(TAG,"onSubscribe>> ");
+                                 }
+                                 @Override
+                                     public void onNext(@NonNull Response response) {
+                                     Log.i(TAG,"onNext>> response="+response);
+                                 }
+                                 @Override
+                                     public void onError(@NonNull Throwable e) {
+                                     Log.i(TAG,"onError>> "+e.getMessage());
+                                 }
+                                 @Override
+                                     public void onComplete() {
+                                 }
+                             });
+
+// （2）post请求
+Map<String,String> map = new HashMap<>();
+map.put("code","204002");
+map.put("exchange","SH");
+Api.getService().getPostData(map).subscribeOn(Schedulers.io()).subscribe(new Observer<PostResponse>() {
+        @Override
+            public void onSubscribe(@NonNull Disposable d) {
+            Log.i(TAG,"onSubscribe>> ");
+        }
+        @Override
+            public void onNext(@NonNull PostResponse postResponse) {
+            Log.i(TAG,"onNext>> response="+postResponse);
+        }
+        @Override
+            public void onError(@NonNull Throwable e) {
+        }
+        @Override
+            public void onComplete() {
+        }
+    });
+#+END_SRC
