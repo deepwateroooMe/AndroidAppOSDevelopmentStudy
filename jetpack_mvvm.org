@@ -1827,3 +1827,631 @@ public ViewModelStore getViewModelStore() {
   - ViewModelStore的 get方法，是根据 key 来取值的，如果 key相同，那取出来的ViewModel就是一个。具体内容看第 9.2 小节
 - 3.onCleared方法在什么调用
   - 当 Activity 真正销毁的时候，而不是配置改变会调用ViewModelStore的 clear进而调用了ViewModel的onCleared，具体内容看第 9.2 小节
+
+* App Startup: 这块儿内容需要找个开源项目实练一下代码
+- App Startup是一个可以用于加速App启动速度的一个库。很多人一听到可以加速App的启动速度？那这是好东西啊，迫不及待地想要将这个库引入到自己的项目当中，结果研究了半天，发现越看越不明白，怎么学着学着还和ContentProvider扯上关系了？
+- 所以，在学习App Startup的用法之前，首先我们需要搞清楚的是，App Startup具体是用来解决什么问题的。
+- 关注我比较久的朋友应该都知道，LitePal是由我编写并长期维护的一个Android数据库框架。这个框架可以帮助大家自动管理表的创建与升级，并提供方便的数据库操作API。
+- 而用过LitePal的朋友一定知道，LitePal有提供一个initialize()接口，在进行所有的数据库操作之前，我们需要在自己的Application当中去调用这个接口进行初始化：
+#+BEGIN_SRC kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        LitePal.initialize(this)
+    }
+}
+#+END_SRC
+- 为什么LitePal要求先进行初始化呢？因为Android的数据库中有需要操作都是需要依赖于Context的，在初始化的时候传入一次Context，LitePal会在内部将其保存下来，这样所以有其他数据库接口就不需要再传入Context参数了，从而让API变得更加精简。
+- 这确实是个不错的主意，但是并不是只有LitePal想到了这一点，许多库也提供了类似的初始化接口，因此如果你在项目当中引入了非常多的第三方库，那么Application中的代码就可能会变成这个样子：
+#+BEGIN_SRC kotlin
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        LitePal.initialize(this)
+        AAA.initialize(this)
+        BBB.initialize(this)
+        CCC.initialize(this)
+		DDD.initialize(this)
+		EEE.initialize(this)
+    }
+}
+#+END_SRC
+- 这样的代码就会显得有些凌乱了对不对？随着你引用的第三方库越来越多，这种情况真的是有可能发生的。
+- 于是，有些更加聪明的库设计者，他们想到了一种非常巧妙的办法来避免显示地调用初始化接口，而是可以自动调用初始化接口，这种办法就是借助ContentProvider。
+- ContentProvider我们都知道是Android四大组件之一，它的主要作用是跨应用程序共享数据。比如为什么我们可以读取到电话簿中的联系人、相册中的照片等数据，借助的都是ContentProvider。
+- 然而这些聪明的库设计者们并没有打算使用ContentProvider来跨应用程序共享数据，只是准备使用它进行初始化而已。我们来看如下代码：
+#+BEGIN_SRC kotlin
+class MyProvider : ContentProvider() {
+    override fun onCreate(): Boolean {
+        context?.let {
+            LitePal.initialize(it)
+        }
+        return true
+    }
+}
+#+END_SRC
+- 这里我定义了一个MyProvider，并让它继承自ContentProvider，然后我们在onCreate()方法中调用了LitePal的初始化接口。注意在ContentProvider中也是可以获取到Context的。
+- 当然，继承了ContentProvider之后，我们是要重写很多个方法的，只不过其他方法在我们这个场景下完全使用不到，所以你可以在那些方法中直接抛出一个异常，或者进行空实现都是可以的。
+- 另外不要忘记，四大组件是需要在AndroidManifest.xml文件中进行注册才可以使用的，因此记得添加如下内容：
+#+BEGIN_SRC xml
+<application ...>
+    <provider
+        android:name=".MyProvider"
+        android:authorities="${applicationId}.myProvider"
+        android:exported="false" />
+</application>
+#+END_SRC
+- authorities在这里并没有固定的要求，填写什么值都是可以的，但必须保证这个值在整个手机上是唯一的，所以通常会使用${applicationId}作为前缀，以防止和其他应用程序冲突。
+- 那么，自定义的这个MyProvider它会在什么时候执行呢？我们来看一下这张流程图：
+
+[[./pic/appstartup.png]]
+
+- 可以看到，一个应用程序的执行顺序是这个样子的。首先调用Application的attachBaseContext()方法，然后调用ContentProvider的onCreate()方法，接下来调用Application的onCreate()方法。
+- 那么，假如LitePal在自己的库当中实现了上述的MyProvider，会发生什么情况呢？
+- 你会发现LitePal.initialize()这个接口可以省略了，因为在MyProvider当中这个接口会被自动调用，这样在进入Application的onCreate()方法时，LitePal其实已经初始化过了。
+- 有没有觉得这种设计方式很巧妙？它可以将库的用法进一步简化，不需要你主动去调用初始化接口，而是将这个工作在背后悄悄自动完成了。
+- 那么有哪些库使用了这种设计方式呢？这个真的有很多了，比如说Facebook的库，Firebase的库，还有我们所熟知的WorkManager，Lifecycles等等。这些库都没有提供一个像LitePal那样的初始化接口，其实就是使用了上述的技巧。
+- 看上去如此巧妙的技术方案，那么它有没有什么缺点呢？
+- 有，缺点就是，ContentProvider会增加许多额外的耗时。
+- 毕竟ContentProvider是Android四大组件之一，这个组件相对来说是比较重量级的。也就是说，本来我的初始化操作可能是一个非常轻量级的操作，依赖于ContentProvider之后就变成了一个重量级的操作了。
+- 关于ContentProvider的耗时，Google官方也有给出一个测试结果：
+  
+[[./pic/contentProviderCost.png]]
+
+- 这是在一台搭载Android 10系统的Pixel2手机上测试的情况。可以看到，一个空的ContentProvider大约会占用2ms的耗时，随着ContentProvider的增加，耗时也会跟着一起增加。如果你的应用程序中使用了50个ContentProvider，那么将会占用接近20ms的耗时。
+- 注意这还只是空ContentProvider的耗时，并没有算上你在ContentProvider中执行逻辑的耗时。
+- 这个测试结果告诉我们，虽然刚才所介绍的使用ContentProvider来进行初始化的设计方式很巧妙，但是如果每个第三方库都自己创建了一个ContentProvider，那么最终我们App的启动速度就会受到比较大的影响。
+- 有没有办法解决这个问题呢？
+- 有，就是使用我们今天要介绍的主题：App Startup。
+- 我上面花了很长的篇幅来介绍App Startup具体是用来解决什么问题的，因为这部分内容才是App Startup库的核心，只有了解了它是用来解决什么问题的，才能快速掌握它的用法。不然就会像刚开始说的那样，学着学着怎么学到ContentProvider上面去了，一头雾水。
+- 那么App Startup是如何解决这个问题的呢？它可以将所有用于初始化的ContentProvider合并成一个，从而使App的启动速度变得更快。
+- 具体来讲，App Startup内部也创建了一个ContentProvider，并提供了一套用于初始化的标准。然后对于其他第三方库来说，你们就不需要再自己创建ContentProvider了，都按我的这套标准进行实现就行了，我可以保证你们的库在App启动之前都成功进行初始化。
+- 了解了App Startup具体是用来解决什么问题的，以及它的实现原理，接下来我们开始学习它的用法，这部分就非常简单了。
+- 首先要使用App Startup，我们要将这个库引入进来：
+#+BEGIN_SRC groovy
+dependencies {
+    implementation "androidx.startup:startup-runtime:1.0.0-alpha01"
+}
+#+END_SRC
+- 接下来我们要定义一个用于执行初始化的Initializer，并实现App Startup库的Initializer接口，如下所示：
+#+BEGIN_SRC kotlin
+class LitePalInitializer : Initializer<Unit> {
+    override fun create(context: Context) {
+        LitePal.initialize(context)
+    }
+    override fun dependencies(): List<Class<out Initializer<*>>> {
+        return listOf(OtherInitializer::class.java)
+    }
+}
+#+END_SRC
+- 实现Initializer接口要求重现两个方法，在create()方法中，我们去进行之前要进行的初始化操作就可以了，create()方法会把我们需要的Context参数传递进来。
+- dependencies()方法表示，当前的LitePalInitializer是否还依赖于其他的Initializer，如果有的话，就在这里进行配置，App Startup会保证先初始化依赖的Initializer，然后才会初始化当前的LitePalInitializer。
+- 当然，绝大多数的情况下，我们的初始化操作都是不会依赖于其他Initializer的，所以通常直接返回一个emptyList()就可以了，如下所示：
+#+BEGIN_SRC kotlin
+class LitePalInitializer : Initializer<Unit> {
+    override fun create(context: Context) {
+        LitePal.initialize(context)
+    }
+    override fun dependencies(): List<Class<out Initializer<*>>> {
+        return emptyList()
+    }
+}
+#+END_SRC
+- 定义好了Initializer之后，接下来还剩最后一步，将它配置到AndroidManifest.xml当中。但是注意，这里的配置是有比较严格的格式要求的，如下所示：
+#+BEGIN_SRC xml
+<application ...>
+	<provider
+		android:name="androidx.startup.InitializationProvider"
+		android:authorities="${applicationId}.androidx-startup"
+		android:exported="false"
+		tools:node="merge">
+		<meta-data
+			android:name="com.example.LitePalInitializer"
+			android:value="androidx.startup" />
+	</provider>
+	
+</application>
+#+END_SRC
+- 上述配置，我们能修改的地方并不多，只有meta-data中的android:name部分我们需要指定成我们自定义的Initializer的全路径类名，其他部分都是不能修改的，否则App Startup库可能会无法正常工作。
+- 没错，App Startup库的用法就是这么简单，基本我将它总结成了三步走的操作。
+- 引入App Startup的库。
+- 自定义一个用于初始化的Initializer。
+- 将自定义Initializer配置到AndroidManifest.xml当中。
+- 这样，当App启动的时候会自动执行App Startup库中内置的ContentProvider，并在它的ContentProvider中会搜寻所有注册的Initializer，然后逐个调用它们的create()方法来进行初始化操作。
+- 只用一个ContentProvider就可以让所有库都正常初始化，Everyone is happy。
+- 其实到这里为止，App Startup库的知识就已经讲完了，最后再介绍一个不太常用的知识点吧：延迟初始化。
+- 现在我们已经知道，所有的Initializer都会在App启动的时候自动执行初始化操作。但是如果我作为LitePal库的用户，就是不希望它在启动的时候自动初始化，而是想要在特定的时机手动初始化，这要怎么办呢？
+- 首先，你得通过分析LitePal源码的方式，找到LitePal用于初始化的Initializer的全路径类名是什么，比如上述例子当中的com.example.LitePalInitializer（注意这里我只是为了讲解这个知识点而举的例子，实际上LitePal还并没有接入App Startup）。
+- 然后，在你的项目的AndroidManifest.xml当中加入如下配置：
+#+BEGIN_SRC xml
+<application ...>
+	<provider
+		android:name="androidx.startup.InitializationProvider"
+		android:authorities="${applicationId}.androidx-startup"
+		android:exported="false"
+		tools:node="merge">
+		<meta-data
+			android:name="com.example.LitePalInitializer"
+			tools:node="remove" />
+	</provider>
+</application>
+#+END_SRC
+- 区别就在于，这里在LitePalInitializer的meta-data当中加入了一个tools:node="remove"的标记。
+- 这个标记用于告诉manifest merger tool，在最后打包成APK时，将所有android:name是com.example.LitePalInitializer的meta-data节点全部删除。
+- 这样，LitePal库在自己的AndroidManifest.xml中配置的Initializer也会被删除，既然删除了，App Startup在启动的时候肯定就无法初始化它了。
+- 而在之后手动去初始化LitePal的代码也极其简单，如下所示：
+#+BEGIN_SRC kotlin
+AppInitializer.getInstance(this)
+    .initializeComponent(LitePalInitializer::class.java)
+#+END_SRC
+- 将LitePalInitializer传入到initializeComponent()方法当中即可，App Startup库会按照同样的标准去调用其create()方法来执行初始化操作。
+- 到这里为止，App Startup的功能基本就全部讲解完了。
+- 最后如果让我总结一下的话，这个库的整体用法非常简单，但是可能并不适合所有人去使用。如果你是一个库开发者，并且使用了ContentProvider的方式来进行初始化操作，那么你应该接入App Startup，这样可以让接入你的库的App降低启动耗时。而如果你是一个App开发者，我认为使用ContentProvider来进行初始化操作的概率很低，所以可能App Startup对你来说用处并不大。
+- 当然，考虑到业务逻辑分离的代码结构，App的开发者也可以考虑将一些原来放在Application中的初始化代码，移动到一个Initializer中去单独执行，或许可以让你的代码结构变得更加合理与清晰。
+
+* Dagger Dagger2 Hilt Koin: 自动依赖注入框架
+- 有一些库通过自动执行创建和提供依赖项的过程解决此问题，实现原理有如下几种方案：
+  - 1. 通过反射，在运行时连接依赖项;
+  - 2. 通过注解，编译时生成连接依赖项的代码;
+  - 3. kotlin 强大的语法糖和函数式编程;
+- 1. Dagger：
+- Android领域最广为熟知的依赖注入框架，可以说大名鼎鼎了
+  - Dagger 1.x版本：Square基于反射实现的，有两个缺点一个是反射的耗时，另一个是反射是运行时的，编译期不会报错。而使用难度较高，刚接触时有经常容易写错，造成开发效率底；
+  - Dagger 2.x版本：Google基于Java注解实现的，完美解决了上述问题，
+- Koin
+  - 为 Kotlin 开发者提供的一个实用型轻量级依赖注入框架，采用纯 Kotlin 语言编写而成，仅使用功能解析，无代理、无代码生成、无反射(通过kotlin 强大的语法糖（例如 Inline、Reified 等等）和函数式编程实现)；
+- Hilt
+  - Hilt 通过为项目中的每个 Android 类提供容器并自动为您管理其生命周期，定义了一种在应用中执行 DI 的标准方法。
+  - Hilt 在热门 DI 库 Dagger 的基础上构建而成，因而能够受益于 Dagger 提供的编译时正确性、运行时性能、可伸缩性和 Android Studio 支持。
+** Hilt使用流程
+*** 添加依赖项
+    #+BEGIN_SRC groovy
+//1. 配置Hilt的插件路径
+buildscript {
+    ...
+    dependencies {
+        ...
+        classpath 'com.google.dagger:hilt-android-gradle-plugin:2.28-alpha'
+    }
+}
+//2. 引入Hilt的插件
+plugins {
+    ...
+    id 'dagger.hilt.android.plugin'
+    id 'kotlin-kapt'
+}
+//3. 添加Hilt的依赖库及Java8
+android {
+  ...
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+  //对于 Kotlin 项目，需要添加 kotlinOptions
+  kotlinOptions {
+      jvmTarget = "1.8"
+  }
+}
+dependencies {
+    ...
+    implementation "com.google.dagger:hilt-android:2.28-alpha"
+    kapt "com.google.dagger:hilt-android-compiler:2.28-alpha"
+}
+    #+END_SRC
+** Hilt 应用类
+- 用@HiltAndroidApp注解Application;
+- @HiltAndroidApp注解 会触发 Hilt 的代码生成操作，生成的代码包括应用的一个基类，该基类充当应用级依赖项容器;
+#+BEGIN_SRC kotlin
+@HiltAndroidApp
+class MyApplication : MultiDexApplication() {
+}
+#+END_SRC
+** 将依赖项注入 Android 类
+- 1. 用@AndroidEntryPoint注释类;
+  - 目前支持6类入口点：Application（通过使用 @HiltAndroidApp），Activity，Fragment，View，Service，BroadcastReceiver
+  - 使用 @AndroidEntryPoint 注解 Android 类，还必须为依赖于该类的 Android 类添加注释，例如为注解 fragment ，则还必须为该 fragment 依赖的 Activity 添加@AndroidEntryPoint注释。
+- 2. 使用 @Inject 注释执行字段
+  - @AndroidEntryPoint 会为项目中的每个 Android 类生成一个单独的 Hilt 组件。这些组件可以从它们各自的父类接收依赖项, 如需从组件获取依赖项，请使用 @Inject 注释执行字段注入， 注意：Hilt注入的字段是不可以声明成private的；
+- 3. 构造函数中使用 @Inject 注释
+  - 为了执行字段注入，需要在类的构造函数中使用 @Inject 注释，以告知 Hilt 如何提供该类的实例：
+#+BEGIN_SRC kotlin
+@AndroidEntryPoint
+class HiltDemoActivity : AppCompatActivity() {
+    @Inject
+    lateinit var cpu: CPU
+}
+class CPU @Inject constructor() {
+    var name: String = ""
+    fun run() {
+        LjyLogUtil.d("$name run...")
+    }
+}
+#+END_SRC
+** 带参数的依赖注入：
+- 如果构造函数中带有参数，Hilt要如何进行依赖注入呢？
+- 需要构造函数中所依赖的所有其他对象都支持依赖注入
+#+BEGIN_SRC kotlin
+class CPU @Inject constructor() {
+    var name: String = ""
+    fun run() {
+        LjyLogUtil.d("$name run...")
+    }
+}
+class Phone @Inject constructor(val cpu: CPU) {
+    fun use() {
+        cpu.run()
+    }
+}
+@AndroidEntryPoint
+class HiltActivity : AppCompatActivity() {
+    @Inject
+    lateinit var phone: Phone
+    fun test() {
+        phone.cpu.name = "麒麟990"
+        phone.use()
+    }
+}
+#+END_SRC
+** Hilt Module
+- 有时一些类型参数不能通过构造函数注入, 如 接口 或 来自外部库的类，此时可以使用 Hilt模块 向Hilt提供绑定信息；
+- Hilt 模块是一个带有 @Module 注释的类，并使用 @InstallIn 设置作用域
+*** 使用 @Binds 注入接口实例
+    #+BEGIN_SRC kotlin
+//1. 接口
+interface ICPU {
+    fun run()
+}
+//2. 实现类
+class KylinCPU @Inject constructor() : ICPU {
+    override fun run() {
+        LjyLogUtil.d("kylin run...")
+    }
+}
+//3. 被注入的类，入参是接口类型
+class Phone @Inject constructor(val cpu: ICPU) {
+    fun use() {
+        cpu.run()
+    }
+}
+//4. 使用@Binds注入接口实例
+@Module
+@InstallIn(ActivityComponent::class)
+abstract class CPUModel {
+    @Binds
+    abstract fun bindCPU(cpu: KylinCPU): ICPU
+}
+//5. 使用注入的实例
+@AndroidEntryPoint
+class HiltActivity : AppCompatActivity() {
+    @Inject
+    lateinit var phone: Phone
+    fun test() {
+        phone.cpu.name = "麒麟990"
+        phone.use()
+    }
+}
+    #+END_SRC
+*** 使用 @Provides 注入实例
+- 如果某个类不归您所有（因为它来自外部库，如 Retrofit、OkHttpClient 或 Room 数据库等类），或者必须使用构建器模式创建实例，也无法通过构造函数注入。
+#+BEGIN_SRC kotlin
+@Module
+@InstallIn(ApplicationComponent::class)
+class NetworkModel {
+    @Provides
+    fun provideOkHttpClient(): OkHttpClient {
+        return OkHttpClient().newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build()
+    }
+}
+#+END_SRC
+*** 为同一类型提供多个绑定
+- 比如网络请求中可能需要不同配置的OkHttpClient，或者不同BaseUrl的Retrofit
+- 使用@Qualifier注解实现
+#+BEGIN_SRC kotlin
+//1. 接口和实现类
+interface ICPU {
+    fun run()
+}
+
+class KylinCPU @Inject constructor() : ICPU {
+    override fun run() {
+        LjyLogUtil.d("kylin run...")
+    }
+}
+class SnapdragonCPU @Inject constructor() : ICPU {
+    override fun run() {
+        LjyLogUtil.d("snapdragon run...")
+    }
+}
+//2. 创建多个类型的注解
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class BindKylinCPU
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class BindSnapdragonCPU
+//@Retention:注解的生命周期
+//AnnotationRetention.SOURCE：仅编译期，不存储在二进制输出中
+//AnnotationRetention.BINARY：存储在二进制输出中，但对反射不可见
+//AnnotationRetention.RUNTIME：存储在二进制输出中，对反射可见
+
+//3. 在Hilt模块中使用注解
+@Module
+@InstallIn(ActivityComponent::class)
+abstract class CPUModel {
+    @BindKylinCPU
+    @Binds
+    abstract fun bindKylinCPU(cpu: KylinCPU): ICPU
+    @BindSnapdragonCPU
+    @Binds
+    abstract fun bindSnapdragonCPU(cpu: SnapdragonCPU): ICPU
+}
+//4. 使用依赖注入获取实例，可以用在字段注解，也可以用在构造函数或者方法入参中
+class Phone5 @Inject constructor(@BindSnapdragonCPU private val cpu: ICPU) {
+    @BindKylinCPU
+    @Inject
+    lateinit var cpu1: ICPU
+    @BindSnapdragonCPU
+    @Inject
+    lateinit var cpu2: ICPU
+    fun use() {
+        cpu.run()
+        cpu1.run()
+        cpu2.run()
+    }
+    fun use(@BindKylinCPU cpu: ICPU) {
+        cpu.run()
+    }
+}
+#+END_SRC
+** 组件默认绑定
+- 由于可能需要来自 Application 或 Activity 的 Context 类，因此 Hilt 提供了 @ApplicationContext 和 @ActivityContext 限定符。
+- 每个 Hilt 组件都附带一组默认绑定，Hilt 可以将其作为依赖项注入您自己的自定义绑定
+#+BEGIN_SRC kotlin
+class Test1 @Inject constructor(@ApplicationContext private val context: Context)
+class Test2 @Inject constructor(@ActivityContext private val context: Context)
+#+END_SRC
+- 对于Application和Activity这两个类型，Hilt也是给它们预置好了注入功能(必须是这两个，即使子类也不可以)
+#+BEGIN_SRC kotlin
+class Test3 @Inject constructor(val application: Application)
+class Test4 @Inject constructor(val activity: Activity)
+#+END_SRC
+** Hilt内置组件类型
+- 上面使用Hilt Module时，有用到@InstallIn(), 意思是把这个模块安装到哪个组件中
+- Hilt内置了7种组件可选：
+  - ApplicationComponent：对应Application，依赖注入实例可以在全项目中使用
+  - ActivityRetainedComponent：对应ViewModel（在配置更改后仍然存在，因此它在第一次调用 Activity#onCreate() 时创建，在最后一次调用 Activity#onDestroy() 时销毁）
+  - ActivityComponent：对应Activity，Activity中包含的Fragment和View也可以使用；
+  - FragmentComponent：对应Fragment
+  - ViewComponent：对应View
+  - ViewWithFragmentComponent：对应带有 @WithFragmentBindings 注释的 View
+  - ServiceComponent：对应Service
+- Hilt 没有为 broadcast receivers 提供组件，因为 Hilt 直接从 ApplicationComponent 注入 broadcast receivers；
+** 组件作用域
+- Hilt默认会为每次的依赖注入行为都创建不同的实例。
+- Hilt内置7种组件作用域注解
+  - @Singleton：对应组件ApplicationComponent，整个项目共享同一个实例
+  - @ActivityRetainedScope：对应组件ActivityRetainedComponent
+  - @ActivityScoped：对应组件ActivityComponent，在同一个Activity（包括其包含的Fragment和View中）内部将会共享同一个实例
+  - @FragmentScoped：对应组件FragmentComponent
+  - @ViewScoped：对应组件ViewComponent和ViewWithFragmentComponent；
+  - @ServiceScopedService：对应ServiceComponent
+- 比如我们经常会需要一个全局的OkhttpClient或者Retrofit,就可以如下实现
+#+BEGIN_SRC kotlin
+ interface ApiService {
+    @GET("search/repositories?sort=stars&q=Android")
+    suspend fun searRepos(@Query("page") page: Int, @Query("per_page") perPage: Int): RepoResponse
+}
+@Module
+@InstallIn(ApplicationComponent::class)
+class NetworkModel {
+    companion object {
+        private const val BASE_URL = "https://api.github.com/"
+    }
+    @Singleton
+    @Provides
+    fun provideApiService(retrofit: Retrofit): ApiService {
+        return retrofit.create(ApiService::class.java)
+    }
+    //组件作用域:Hilt默认会为每次的依赖注入行为都创建不同的实例。
+    @Singleton
+    @Provides
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .addConverterFactory(GsonConverterFactory.create())
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .build()
+    }
+    @Singleton
+    @Provides
+    fun provideOkHttpClient(): OkHttpClient {
+        return OkHttpClient().newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build()
+    }
+}
+#+END_SRC
+- 或是使用Room操作本地数据库
+#+BEGIN_SRC kotlin
+@Database(entities = [RepoEntity::class], version = Constants.DB_VERSION)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun repoDao(): RepoDao
+}
+@Module
+@InstallIn(ApplicationComponent::class)
+object RoomModule {
+    @Provides
+    @Singleton
+    fun provideAppDatabase(application: Application): AppDatabase {
+        return Room
+            .databaseBuilder(
+                application.applicationContext,
+                AppDatabase::class.java,
+                Constants.DB_NAME
+            )
+            .allowMainThreadQueries() //允许在主线程中查询
+            .build()
+    }
+    @Provides
+    @Singleton
+    fun provideRepoDao(appDatabase: AppDatabase):RepoDao{
+        return appDatabase.repoDao()
+    }
+}
+#+END_SRC
+** ViewModel的依赖注入
+- 通过上面的学习，那我们如果在ViewModel中创建Repository要如何实现呢，可以如下:
+#+BEGIN_SRC kotlin
+//1. 仓库层
+class Repository @Inject constructor(){
+    @Inject
+    lateinit var apiService: ApiService
+    suspend fun getData(): RepoResponse {
+        return apiService.searRepos(1, 5)
+    }
+}
+//2. ViewModel层
+@ActivityRetainedScoped
+class MyViewModel @Inject constructor(private val repository: Repository): ViewModel() {
+    var result: MutableLiveData<String> = MutableLiveData()
+    fun doWork() {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO){
+                    repository.getData()
+                }
+            }.onSuccess {
+                result.value="RepoResponse=${gson().toJson(it)}"
+            }.onFailure {
+                result.value=it.message
+            }
+        }
+    }
+}
+//3. Activity层
+@AndroidEntryPoint
+class HiltMvvmActivity : AppCompatActivity() {
+    @Inject
+    lateinit var viewModel: MyViewModel
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_hilt_mvvm)
+        viewModel.result.observe(this, Observer {
+            LjyLogUtil.d("result:$it")
+        })
+        lifecycleScope
+        viewModel.doWork()
+    }
+}
+#+END_SRC
+*** ViewModel 和 @ViewModelInject 注解
+- 这种改变了获取ViewModel实例的常规方式, 为此Hilt专门为其提供了一种独立的依赖注入方式: @ViewModelInject
+#+BEGIN_SRC kotlin
+//1. 添加两个额外的依赖
+implementation 'androidx.hilt:hilt-lifecycle-viewmodel:1.0.0-alpha02'
+kapt 'androidx.hilt:hilt-compiler:1.0.0-alpha02'
+//2. 修改MyViewModel: 去掉@ActivityRetainedScoped注解，把@Inject改为@ViewModelInject
+class MyViewModel @ViewModelInject constructor(private val repository: Repository): ViewModel() {
+}
+//3. activity中viewModel获取改为常规写法
+@AndroidEntryPoint
+class HiltMvvmActivity : AppCompatActivity() {
+//    @Inject
+//    lateinit var viewModel: MyViewModel
+    val viewModel: MyViewModel by viewModels()
+//  或  val viewModel: MyViewModel by lazy { ViewModelProvider(this).get(MyViewModel::class.java) }
+}
+#+END_SRC
+*** SavedStateHandle 和 @assist注解
+- Activity/Fragment被销毁一般有三种情况：
+  - 界面关闭或退出应用
+  - Activity 配置 (configuration) 被改变，如旋转屏幕时；
+  - 在后台时因运行内存不足被系统回收；
+- ViewModel 会处理2的情况，而3的情况就需要使用onSaveInstanceState()保存数据，重建时用SavedStateHandle恢复数据，就要用@assist 注解添加 SavedStateHandle 依赖项
+#+BEGIN_SRC kotlin
+class MyViewModel @ViewModelInject constructor(
+    private val repository: Repository,
+    //SavedStateHandle 用于进程被终止时，保存和恢复数据
+    @Assisted private val savedStateHandle: SavedStateHandle
+) : ViewModel() {
+    var result: MutableLiveData<String> = MutableLiveData()
+    private val userId: MutableLiveData<String> = savedStateHandle.getLiveData("userId")
+    fun doWork() {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    repository.getData(userId)
+                }
+            }.onSuccess {
+                result.value = "RepoResponse=${Gson().toJson(it)}"
+            }.onFailure {
+                result.value = it.message
+            }
+        }
+    }
+}
+#+END_SRC
+** 在 Hilt 不支持的类中注入依赖项
+- 可以使用 @EntryPoint 注释创建入口点, 调用EntryPointAccessors的静态方法来获得自定义入口点的实例
+- EntryPointAccessors提供了四个静态方法：fromActivity、fromApplication、fromFragment、fromView，根据自定义入口的MyEntryPoint的注解@InstallIn所指定的范围选择对应的获取方法；
+#+BEGIN_SRC kotlin
+@EntryPoint
+@InstallIn(ApplicationComponent::class)
+interface MyEntryPoint{
+    fun getRetrofit():Retrofit
+}
+#+END_SRC
+*** 在ContentProvider中使用
+- Hilt支持的入口点中少了一个关键的Android组件：ContentProvider, 主要原因就是ContentProvider.onCreate() 在Application的onCreate() 之前执行，因此很多人会利用这个特性去进行提前初始化, 详见Android Jetpack系列--5. App Startup使用详解, 而Hilt的工作原理是从Application.onCreate()中开始的，即ContentProvider.onCreate()执行之前，Hilt的所有功能都还无法正常工作；
+#+BEGIN_SRC kotlin
+class MyContentProvider : ContentProvider() {
+    override fun onCreate(): Boolean {
+        context?.let {
+            val appContext=it.applicationContext
+            //调用EntryPointAccessors.fromApplication()函数来获得自定义入口点的实例
+            val entryPoint=EntryPointAccessors.fromApplication(appContext,MyEntryPoint::class.java)
+            //再调用入口点中定义的getRetrofit()函数就能得到Retrofit的实例
+            val retrofit=entryPoint.getRetrofit()
+            LjyLogUtil.d("retrofit:$retrofit")
+        }
+        return true
+    }
+}
+#+END_SRC
+*** 在 App Startup 中使用
+- App Startup 会默认提供一个 InitializationProvider，InitializationProvider 继承 ContentProvider；
+#+BEGIN_SRC kotlin
+class LjyInitializer : Initializer<Unit> {
+    override fun create(context: Context) {
+        //调用EntryPointAccessors.fromApplication()函数来获得自定义入口点的实例
+        val entryPoint= EntryPointAccessors.fromApplication(context, MyEntryPoint::class.java)
+        //再调用入口点中定义的getRetrofit()函数就能得到Retrofit的实例
+        val retrofit=entryPoint.getRetrofit()
+        LjyLogUtil.d("retrofit:$retrofit")
+    }
+    override fun dependencies(): List<Class<out Initializer<*>>> {
+        return emptyList()
+    }
+}
+#+END_SRC
+- 报错解决
+  - Expected @HiltAndroidApp to have a value. Did you forget to apply the Gradle Plugin?
+#+BEGIN_SRC groovy
+android {
+    defaultConfig {
+            javaCompileOptions {
+            annotationProcessorOptions {
+                arguments = ["room.schemaLocation":
+                             "$projectDir/schemas".toString()]
+            }
+        }
+    }
+}
+//If so, try changing from "arguments =" to "arguments +=", as just using equals overwrites anything set previously.
+#+END_SRC

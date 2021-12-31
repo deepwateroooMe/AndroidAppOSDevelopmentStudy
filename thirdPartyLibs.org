@@ -1,4 +1,4 @@
-#+latex_class: cn-article
+_class: cn-article
 #+title: 安卓开发中常用的第三方库
 #+author: deepwaterooo
 
@@ -1661,3 +1661,9 @@ Api.getService().getPostData(map).subscribeOn(Schedulers.io()).subscribe(new Obs
         }
     });
 #+END_SRC
+
+* Hilt Dagger ButterKnife
+
+* Volley OkHttp Retrofit
+
+* LeakCanary?
