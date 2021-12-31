@@ -1353,11 +1353,11 @@ private class AlwaysActiveObserver extends ObserverWrapper {
 data class User(var userId: String = UUID.randomUUID().toString(), var userName: String)
 class UserViewModel : ViewModel() {
     private val userBean = User(userName = "刀锋之影")
-    //  私有的 user LiveData
+    // 私有的 user LiveData
     private val _user = MutableLiveData<User>().apply {
         value = userBean
     }
-    //  对外暴露的,不可更改 value 值的LiveData
+    // 对外暴露的,不可更改 value 值的LiveData
     var userLiveData: LiveData<User> = _user
     // 更新 User 信息
     fun updateUser() {
@@ -1377,15 +1377,19 @@ class UserViewModel : ViewModel() {
 *** 再看下ViewModelActivity的内容
     #+BEGIN_SRC kotlin
 class ViewModelActivity : AppCompatActivity() {
+    // private lateinit var binding: ActivityMainBinding
+    private val TAG = javaClass.simpleName
+
     // 初始化 UserViewModel 通过 ViewModelProvider
     private val userViewModel by lazy { ViewModelProvider(this)[UserViewModel::class.java] }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val button = Button(this)
+        val button = Button(this) // 动态设置了一个占据整个屏幕的大button
         setContentView(button)
         // 观察 User 数据,并打印
         userViewModel.userLiveData.observe(this, Observer { user ->
-            "User = $user".log()
+                                                                Log.d(TAG, "observe() User = $user")
         })
         // 点击按钮更新 User 信息
         button.setOnClickListener {
@@ -1448,8 +1452,10 @@ class SecondFragment : Fragment() {
 - 其中的参数都为activity as ViewModelStoreOwner其实也就是ViewModelActivity2
 - 打印UserViewModel对象的地址值，来看日志
 *** 结果日志
-- E/FirstFragment: userViewModel = com.jhb.awesomejetpack.viewmodel.UserViewModel@9940311
-- E/SecondFragment: userViewModel = com.jhb.awesomejetpack.viewmodel.UserViewModel@9940311
+    #+BEGIN_SRC kotlin
+ com.me.ktl D/FirstFragment: userViewModel = com.me.ktl.UserViewModel@c35f635
+com.me.ktl D/SecondFragment: userViewModel = com.me.ktl.UserViewModel@c35f635 
+    #+END_SRC
 - 可以看到两个 Fragment 中 UserViewModel是同一个对象。
 - 可以这两个 Fragment 可以使用其 Activity 范围共享 ViewModel 来处理此类通信
 ** 抛出问题
@@ -1537,7 +1543,7 @@ public <T extends ViewModel> T get(@NonNull String key, @NonNull Class<T> modelC
     } else {
         // noinspection StatementWithEmptyBody
         if (viewModel != null) {
-            //  TODO: log a warning.
+            // TODO: log a warning.
         }
     }
     // 3
@@ -1632,7 +1638,7 @@ public class ComponentActivity extends androidx.core.app.ComponentActivity imple
             NonConfigurationInstances nc =
                     (NonConfigurationInstances) getLastNonConfigurationInstance();
             if (nc != null) {
-                //  Restore the ViewModelStore from NonConfigurationInstances
+                // Restore the ViewModelStore from NonConfigurationInstances
                 mViewModelStore = nc.viewModelStore;
             }
             if (mViewModelStore == null) {
@@ -1717,7 +1723,7 @@ public abstract class ViewModel {
         if (mBagOfTags != null) {
             synchronized (mBagOfTags) {
                 for (Object value : mBagOfTags.values()) {
-                    //  see comment for the similar call in setTagIfAbsent
+                    // see comment for the similar call in setTagIfAbsent
                     closeWithRuntimeException(value);
                 }
             }
@@ -1765,8 +1771,8 @@ public final Object onRetainNonConfigurationInstance() {
     Object custom = onRetainCustomNonConfigurationInstance();
     ViewModelStore viewModelStore = mViewModelStore;
     if (viewModelStore == null) {
-        //  No one called getViewModelStore(), so see if there was an existing
-        //  ViewModelStore from our last NonConfigurationInstance
+        // No one called getViewModelStore(), so see if there was an existing
+        // ViewModelStore from our last NonConfigurationInstance
         NonConfigurationInstances nc =
                 (NonConfigurationInstances) getLastNonConfigurationInstance();
         if (nc != null) {
@@ -1802,7 +1808,7 @@ public ViewModelStore getViewModelStore() {
         NonConfigurationInstances nc =
                 (NonConfigurationInstances) getLastNonConfigurationInstance();
         if (nc != null) {
-            //  Restore the ViewModelStore from NonConfigurationInstances
+            // Restore the ViewModelStore from NonConfigurationInstances
             mViewModelStore = nc.viewModelStore;
         }
         if (mViewModelStore == null) {
