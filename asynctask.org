@@ -702,7 +702,7 @@ public class tmp implements Runnable { // Thread_Running
     public static void main(String[] args) {
         for(int i = 0;i < 15;i++) {
             System.out.println(Thread.currentThread().getName()+"  "+i);
-            if(i == 4) {
+            if(i == 7) {
                 new Thread(new tmp(),"thread 1").start();
                 new Thread(new tmp(),"thread 2").start();
             }
