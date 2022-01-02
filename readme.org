@@ -2,52 +2,192 @@
 #+title: Android Study Plan
 #+author: deepwaterooo
 
-* Daily updates
+* Weekly updates
 
 ** 调整作息
 - 经过的过去几个月（9月到12月几个整月）的6:00am-11pm作息后，我觉得自己白天的头脑思维和精力还是不够好（常常还是会脑袋有点儿昏），应该是到了需要再切换一下，晚上12:30-1am左右休息入睡，早上6am起床，中午12:00-1:30左右午休90分钟的作息
 - 新的作息下，早上的精力会相对差一些，晚上入睡4.5个小时左右（总共5个小时），平均三个睡眠周期之后，上午的脑袋相对会比较昏；但如果中午能够入睡，下午和晚上的头脑会比较清醒，学习的效率也会提升不少。所以新的作息下，希望晚上少睡以确保中午能够入睡，哪怕只能真正睡着5分钟，上午精力不够好的前提下，需要再搜索计划一下上午应该做哪些方面的事情（现在还没有想好上午适合做什么，写调试项目，真正试图去fix一些bug?或者做一些基础文档、学习笔记的整理）；如果中午能够入睡，便希望下午和晚上的时间能够科学高效地利用起来，做leetcode难题，或是去理解平时、正常状态下理解不了或读不下去的原理
-- 前天晚上12休息，昨天中午是调整午休的第一天，昨天中午一个鬼窝里的恶鬼室友在厨房作饭，故意乒乒乓乓吵了别人整个午休的一两个小时，但最终还是睡着了。。。。。。
-- 昨天晚上12:30-1am入睡，今天中午无法deep sleep入睡，浅眠，今天晚上应该需要1am左右才上床准备休息，希望明天中午能够午休休息好
-
-** leetcode算法练习
-- 希望这个周的时间能够回过头去把自己认为还有必要提升的部分、相关难题部分做完，接下来也都会参加自1月8日开始起的每个周六的周赛，半月赛练习
 
 ** 安卓方面的知识、面试准备
 - 可以确定的是：现在的理解、分析解决问题的能力已经比以前、往年，或者说2017/2018年作为安卓开发工程师的要强了很多，很多的原理都能自己搜索明白，但做安卓开发的知识面广度和深度都希望还能再扩大和加深，并配合项目、代码来加强理解。
-- 这段时间仍然会总结一些安卓方面基础，希望自己在头脑比较清醒的状态下能够真正理解原理，用到项目上。
-- 感觉安卓开发，自己也有基础，也有理解、分析和解决问题的能力，但还没能寻找到一个系统化、或者说循序渐进的学习方法，这个周的业余时间也会再多搜索一下，需要着力的版块，希望能够列个题纲出来
-- 
-- 会把view相关的部分、安卓应用的性能代优化，以及异步这三大版块再总结一下。有时间的话，activity fragments再加强一下
-- 因为需要准备一个面试，这几天不更新算法系列，只准备安卓面试
-- win 10 wsl 1 ubuntu 18 adb configuration done, not complicated, once search for solutions, and config, it works.
-- api levle 30 androidx basic project environment can be configured, but dynamic fragment add not done yet, switched back to api 28 temporatorily
-- wsl 1 ubuntu 18 adb logcat is so slow. after 9pm yesterday, 150K lines of log, I could only adb logcat previous project samplefragments, can can not grab any FirstFragment nor Second Fragment Log.i info. may switch laptop back to Mac, but it has only 8GB memory, and internet too slow for that laptop
-- today will review major components, as well small details, notes summaries to move on
-- *恶鬼们昨天晚上今天早上又疯狂作案一晚，一个故意晚回来，用洗手间，用厨房，半夜一两点钟还在故意厨房里开厨导柜吵别人；一个今天早上五点钟便受恶房东暗示指使，故意开车库噪音极大的声响，早上五点钟便故意吵醒别人休息，实在是无恶不作（它有昨天晚上下班后到休息前一晚上的时间他不提前装车，非要等到早上五点钟故意把别人吵醒，另一个贱畜牲的做法是在别人晚上入睡前故意吵别人，贱蓄牲们的做法还不够猖狂吗?）*
-- BroadcastReceiver sample project runs though easily. Will look into ContentProvider projects too today, all of them are not complicated.
-- ContentProvider Interprocess communication projects are connected well too. One functions as server, the other as client, not complicated at all.
-- The coding interview is done (due to the interface reasons, the 120 minutes test was submitted in about 60 minutes by mistake, the coding test interface does not false-positive submit proof), expecting the final round of interview, while at the same time, I am returning back to algorithms, and tomorrow there is a weekly contest too.
-** 职场弱弱的奔溃瞬间（+1）
-- 联系我安排面试相关的按照名字来看，应该是一个美国人吧，关于文化、语言等，这样的hr写邮件与candidate沟通应该会相对比较顺利一点
-  
-[[./pic/buddy.png]]
-  - 偶这个职场弱弱，瞬间被这五个字母吓傻了，怎么也不敢跟他们联系，直到下午约定的时候中介打电话进来。
-    - 为什么不敢主动给它们打电话呢？因为三大中文有它们自己的媒体喉舌，不顺应他们的逼迫，他们会采用极端手段，当年陈冠希等事件的爆出，最终落入他们手中的不有张柏芝吗？他们为达到目的，会不择手段（范冰冰案，郑爽案，吴亦凡，哪个不是出自己他们的狠辣手段？）。我有自己的底线，打了那个电话，正是他们想要逼别人做牵线木偶，逼别人回中国大陆帮他们圈钱，他们会不择手段地逼死别人在美国的职场生涯。
-    - 一个buddy，他们派个美国人打进邮件里不打紧，但如果我主动了，如果他们采取极端手段，一定要把别人逼死，我做不出！我守得住自己的底线，就不怕他们逼
-    - 毕竟，还是他们自己下套，他们自己去玩儿他们自己的吧
-  - 他们自己也说了，男子连杀父母姊妹三人，不想杀妹妹，妹妹总哭。。。。。。18年3月4月是它们发动黑势力封杀了别人的职场生涯。现在别问别人为什么会怕，为什么会没有安全感。没有安全感，我就永远守着这个表哥。
-- 记得上次与另一个公司的第一轮面试快结束时问及第二轮的coding test是怎么样的，会是像leetcode之类的刷题界面一样吗？我是一个emacs依赖症重症患者，离开command line based editor emacs，我不会写代码。记得当时与面试官沟通这个问题的时候，他说到会sharing screen, 这个我们面试者就可以在自己最熟悉与舒适的工作环境中尽可能高效地答题、写出理想的代码。
-- 今天早上，当我第一时间读及收件箱邮件里的reminder, 
-  
-  [[./pic/req.png]]
-  - 作为一个久经沙场、久经面试的弱弱，当读到这样的coding test reminder要求，弱弱的内心瞬间奔溃、溃不成军（像山顶瀑布里的水哗啦啦地流不下停）。。。。。。这究竟是要干什么？？？
-  - 好在，作为一个久经沙场，久经面试的弱弱，死猪不怕开水烫，大不了就是不是command line based editor的界面会写得慢、会写得不顺，会无数次敲错字符，会写出来的代码不成型，bug多，极度降低效率，但它好歹也还是一个test不是？这种test的机会也不是很多呀，大不了我敲不好这样的代码，得个0分，又如何？
-  - 于是，崩溃了的弱弱还是硬着头皮明知山有虎地爬去把coding test给做了。。。
-- 回想2012年9月还是10月继自己装linux系统把电脑弄坏之后，被自己作业c++代码里的一个bug吓得魂飞魄散，急忙给代课教师写邮件求救。。。。。。木有想到，原来这么多年过去了，内心里，偶们还是这么一个表哥眼中永远长不大的弱弱（应该说，内心里，心理上，我愿做亲爱的表哥眼中哪怕是永远也长不大的弱弱，很是留恋他的目光）。。。。。。 
-- 我想申请过国内大陆一个类似leetcode的做题网站，但被网站封死了，正如leetcode会根据时间点故意坑或踩一个人，国内的那个做题网站想来与他们黑势力相关，他们从来不想我专业上强大，他们更想要逼别人去开餐馆，对，就是逼，只可惜，他们逼错对象了，他们逼得了别人，逼不了我，狮子座的人拥有强大的自信，岂是他们想踩个时间点就能把别人的自信粉碎得了的？！！！做梦。我会每天都变得更加强大。。。。。。
+- 感觉安卓开发，自己也有基础，也有理解、分析和解决问题的能力，但还没能寻找到一个系统化、或者说循序渐进的学习方法，这个周的业余时间也会再多搜索一下，需要着力的版块，希望能够列个题纲出来，在网上搜一搜，争取把零碎，工作中、项目中可能用到的知识点都总结掌握好了
+- 希望这个周用每天上午的时间把《零碎知识点题纲》里列的知识点都复习或检漏一遍，用作相关的笔记，以便自己复习，和作面试准备
+- leetcode算法练习： 希望这个周下午和傍晚时间能够回过头去把自己认为还有必要提升的部分、相关难题部分做完，接下来也都会参加自1月8日开始起的每个周六的周赛，半月赛练习
+
+* 零碎知识点题纲
+- https://medium.com/mindorks/android-development-learning-path-2020-edition-3f464ac56dbf
+** Programming
+- Java
+- Kotlin: 现在基本没有读代码障碍，零星知识点需要用到时再拾取
+** Android Studio
+- Android Studio IDE Overview
+- Project Structure — Java/Kotlin, XML, .gradle files
+** Android Component
+- Activity — Activity Lifecycle, Tasks & Back Stack
+- Service
+- Broadcast Receiver
+- Content Provider: IPC 需要项目加强
+** Intents
+- Types of Intent - Implicit, Explicit
+- Intent Filter
+** Static User Interface
+- View — Button, ImageView, TextView, EditText, and etc
+- ViewGroup - LinearLayout, RelativeLayout, FrameLayout, ConstraintLayout
+  - ViewGroup - LinearLayout, RelativeLayout, FrameLayout:三大传统布局，适用于不同的场合
+  - ConstraintLayout : Google 新推的布局，目前已经取代 RelativeLayout 成为默认的 App 布局
+** Dynamic User Interface
+- RecyclerView
+- ViewPager： 需要项目加强
+- Spinner： 需要项目加强
+** CustomView: Android 默认的布局很多时候都没法满足设计的需求，这时候就需要自定义 View，你需要掌握下面几个知识点的使用
+- Canvas
+- Bitmap
+- Paint
+** UI Resources
+- Drawables
+- String
+- Styles
+** Fragments
+- Fragment Lifecycle
+- Fragment Manager
+** Support User Interface: 需要知道这是什么东西，基本的用法
+- ProgressBar
+- Dialogs
+- Toast & Snackbar
+** Storage: 不免要和文件打交道，文件的读写、存储都是必不可少的
+- Shared Preferences: 适合存储字段
+- File Systems: 文件存储
+- Database — RoomDB: 数据库存储，RoomDB 是 Google 新推出的数据库解决方案
+** Build
+- Android App 默认使用 Gradle 进行编译，关于 Gradle 的使用必须要熟悉，以及如何区分开发版本和 Release 版本，以及国内特有的多渠道打包技术、以及 ASM 等
+- Gradle
+- Debug / Release Configuration
+- 多渠道打包
+- ASM
+** Threading
+- Android App 只有一个主线程，其余的我们称之为工作线程，我们的很多工作需要再工作线程和主线程直接切换，如何高效创建和释放线程、线程池、线程间通信、Message-Looper-Handler 模型这些知识点都要了熟于心，另外进阶的话 Binder 通信也是需要掌握的知识
+- Threads
+- Handler / Looper / Message / MessageQueue
+- AIDL / Binder: ? 这个，更多的是进程间通讯，和安卓底层架构实现机理了吧？（不过也需要掌握）
+** Debugging
+- Memory profiling - MAT，AS Memory Profile
+- Logging - Log 包含非常丰富的信息，可以帮助我们还原现场
+- Systrace - Systrace 工具可以查看一段时间内手机系统各个进程的运行状态，具体使用可以参考我博客的 Systrace 系列教程
+- Exceptions - 各种异常，保证程序的健壮性
+- Error Handling - Error 是必须要解决的问题，一般会导致 App 直接闪退，需要非常重视
+** Memory Leak
+- 内存泄漏是一个很大的专题，包括 Java 内容泄漏和 Native 内存泄漏，涉及的知识点非常多，可以单独拿出来做一个大的知识栈。一般来说， Java 内存泄漏会比较好检测和修复，但是 Native 内存泄漏就会比较难。
+  - Detecting and Fixing Memory Leaks - 内存泄漏检测和修复，是一个比较大的工程，可以参考 LeakCanary、Matrix 等开源工具
+  - Context - 使用不当会造成该释放的对象没有释放造成内存泄漏
+  - Native Memory Leaks: 与上面的有什么区别呢？
+** 3rd Party Library
+- Image Loading - Glide, Picasso
+- Dependency Injection - Dagger
+- Networking - Fast Android Networking Library, Retrofit
+- MultiThreading - RxJava, Coroutines
+** Data Format
+- JSON — GSON
+- Flat Buffer
+- Protocol Buffer
+** Android Jetpack
+- Jetpack 包含与平台 API 解除捆绑的 androidx.* 软件包库。这意味着，它可以提供向后兼容性，且比 Android 平台的更新频率更高，以此确保您始终可以获取最新且最好的 Jetpack 组件版本。
+- Foundation Components — AppCompat, Android KTX, Multidex
+- Architecture Components — LiveData, ViewModel, DataBinding, Paging, Navigation， Work Manager（这最后一个没怎么看，暂时的项目中用到的较少）
+- Behaviour Components - Download Manager, Media Playback, Notification, Permissions, Preference, Sharing, Slice
+- UI Component - Animation & Transition, Android Auto, Emoji, Palette, Android TV, Android Wear（缺失）
+** Architecture
+- MVVM - MVVM 是 Model-View-ViewModel的简写。它本质上就是 MVC 的改进版。MVVM 就是将其中的 View 的状态和行为抽象化，让我们将视图 UI 和业务逻辑分开
+- MVI ？
+- MVP - MVP 从更早的 MVC 框架演变过来，与 MVC 有一定的相似性：Controller/Presenter 负责逻辑的处理，Model 提供数据，View 负责显示
+** Unit Testing
+- Local Unit Testing
+- Instrumentation Testing
+** Firebase：只是接触过，要加强
+- FCM
+- Crashlytics
+- Analytics
+- Remote Config
+- App Indexing
+- Dynamic Link
+** Security：只是接触过，要加强
+- Encrypt / Decrypt
+- Proguard
+- R8
+** App Release
+- .keystore file
+- App Bundle
+- Playstore
+- 多渠道打包
+- 插件化
+
+* 超详细的-Android超神学习路线总结
+** 第一阶段，基础入门（java部分）
+- 1、计算机基础知识计算机基础、DOs常用命令java概述、j环境安装配置、环境变量配置、Java程序入门（掌握）
+- 2、编程基础常量与变量、数据类型、运算符、流程控制语句、方法、数组（掌握）
+- 3、面向对象（重点）类与对象、封装、继承、多态、抽象类、接口
+- 4、常用类（重点）常用类介绍、正则表达式
+- 5、集合（重点）Collection集合、List集合、set集合、Map集合
+- 6、异常（掌握）异常处理方式、自定义异常
+- 7、IO（重点）File类、递归、字节流、字符流、转换流、缓冲流
+- 8、多线程（掌握）多线程、线程池
+- 9、网络编程（掌握）网络编程
+- 10、反射（掌握）
+- 学习Android开发，首先要学习java基础知识，尤其是校招的时候非常注重基础，即使没有项目也没关系，基础一定要打好，一般笔试以及面试的第一轮，对基础的考察是比较多的。
+- 如果是小白入门，看视频是最有助于理解的，而且是学习最快的，后面再查缺补漏的时候，就看看书就好了，或者回头翻一下笔记。如果已经学过java基础的知识，也可以直接翻一遍书，复习复习即可。看视频的时候不能只听不练，建议用IDEA工具，更普遍一些。
+- 【初级Android开发教程】
+- 【Android高级工程师大厂面试必问】Java虚拟机原理大揭秘 上
+- 【Android高级工程师大厂面试必问】Java虚拟机原理大揭秘 下
+** 第二阶段
+- 1、 xmljson门解析+Android入门+常见布局（掌握）几种数据格式的掌握、json的解析方法、 Android系统框架理解、常见几种布局、DM各个功能、单元测试
+- 2、文件存储界面展现+MySQL+DBC（重点） LogcatAndroid的使用方法、中的文件权限的作用 SharedPreference的使用介绍、s卡使用介绍、 MySql数据库使用介绍、JDBC操作数据库
+- 3、数据存储+界面展现 3.+html+tomcat +http+ Servlet （Request. Response）+协议介绍+servlet（requestesponse）+文件上传+Androld应用开发网络编程（重点）sqlite数据的使用、 ListView控件的使用、ml标签的使用的生命周期、ANR异常、 Handler消息机制原理
+- 4、页面跳转和数据传递+广播和服务+内容提供者（重点） Intent意图介绍、 AndroidManifest xml文件掌握、四大组件的使用方法、用户私有数据的访问
+- 5、多媒体编程+新特性和知识点回顺+代码版本管理和实战（掌握）图形图像的处理、 SurfaceView使用、 VideoView使用、 Vitamio万能播放器的使用、 Fragment的使用、动画的定义
+【对标阿里P7-年薪百万，最牛第三方库系列学习视频】热修复设计，插件化框架设计，组件化框架设计，图片加载框架等
+** 第三阶段
+- 1、C语言基（main函数、 include头文件、em命，C的基本数类， pintle. sanf与白位符，数组与指针、内存分配、结构体、联合体与举， typedef
+- 2、与底层调用（器）m概念、交又编译、ndk、开发流程a向传数C代码中向a出日志、C回调jva方法等
+- 3、基磁合项目（进程管理手机存空间管理，名单设置和关系话与短信管理控件的优化技巧等（原点）w工具、获取服务端应用版本号、Dag控件更新版本k，代码时执行Co的区别、30旋转效、状态选择器自定义组合控件、 Sharedpreferences读写数据、G5定位，手势识别器定M，获取联系人、超级管理员功能、黑名单、分页加、电话与短信，P 即，打开、详情、分享软件等
+- 4、复自定义控件（探）自定义ew、自定义口标题、自定义 Notification、自定义 Dialog、各种图形的使介 Listview数据异步加 Asynctask Listview数据的分批加数、拖拉与多点触等
+- 【高级UI】对标阿里P7Android高级架构师系统教程-自定义ViewGroup（上）
+- 【高级UI】对标阿里P7 Android高级架构师系统学习教程-自定义ViewGroup （中）
+- 【高级UI】对标阿里P7 Android高级工程师系统学习教程-自定义ViewGroup （下）
+** 第四阶段
+- 1、互联网新闻项目客户端（掌握）
+  - 综合使用了、例拉单、极光推送、社会分享、下拉断、二码生成等开源项目，屏幕适配新阳详使用，hml机板和 javascript的动态交互项目的需求分析、构建项目业务模型、程序设计文等详， Splash界面动效果、ewer实现引导页界面、 Sidingmenu控件、 Fragment换界面 Viewpagereradioggroup、基类的抽取、 Vlewpager禁止滑动、 Slldingmenu例边、 Httputils 7获络数Gom解析ON、 sharepreference本地数据存、 Viewpagerindicator使用、 Vlewpager Indicator滑动神突、事件分发机制、 centercrop.性、 Shares完成分享功能、内存缓存和硬盒缓存、缓存机制、第三方接入
+- 2、电子应用市场项目（掌握）
+  - 项目体架设计观察者式工厂模式模版式三级存，对内存进行优化谷推出的兼容包自定义控件ew原理、测量、布局、绘制触事件详，自定义 Application、 Commonutils工具类、封装日志管理工具类、 Actionbar、 Pagersliding Tab+viewpager、 Httphelper获取数据、 Pulltorefresh、 mageloader Stellar Map、随机色、动态添加 Textview选择器、 Valueanimator、 Photoview、 Executors封线程池
+- 3、开发工具 Android Studio（重点）
+  - 安装 Android Studio工、置 Android Studio的 Android SDK路径、 gradle、 Android Studio常用菜单、修改常用设置、导入 eclipse项目、 Android Studio依赖库文件添加
+- 4、 Android5+60新性（掌）
+  - Materal主题样式、 Android5，0中 Elevation、 translation属性、ew中 outlineprovider性、独立应用vew的功能、 Palette类实现取色， Recyderview控件、 Cardic开发出卡片效果、 Swiperefreshlayout刷新控件、 Toolbar控件、50新特性版本兼容4.0及以上版本、OTP网络框架等
+- 5、开源架合集（提）
+  - lon库、 Retrofit、vol库、图片加库、 Pulltorefresh， Pinnedsectionlist、Customshapelmage
+- 【开源架构原理分析与手写实战】为什么要进行组件化？（1））
+
+* 按title 级别分
+** Android初级工程师
+- 四大组件的使用(Activity、Service、Broadcast、ContentProvider)
+- 五大布局的使用(LinearLayout、RelativeLayout、FrameLayout、TableLayout、AbsoluteLayout)
+- 自定义View
+- 动画的使用
+** Android中级工程师
+- 熟悉AIDL，理解其工作原理，懂transact和onTransact的区别
+- 从Java层大概理解Binder的工作原理，懂Parcel对象的使用
+- 多进程的运行机制，懂Messenger、Socket等
+- 弹性滑动、滑动冲突等
+- View的绘制原理、各种自定义View
+- View动画和属性动画的不同点，懂属性动画的工作原理
+- 性能优化、mat等工具
+- 常见的设计模式
+** Android高级工程师
+- 稍微深入的知识点
+- 系统核心机制
+- 基本知识点的细节
+- 设计模式和架构
+
 * 系统服务篇
-:clock1: DONE: Android 如何启动？
+DONE: Android 如何启动？
 [x] DONE: Android 应用进程启动流程
 [ ] 什么是系统服务？
 [ ] ActivityManagerService
@@ -104,33 +244,3 @@ Android 调试桥；启用logcat日志调试；模拟器上安装删除软件；
 支持ARM11的Linux-2.6.28内核新特性简介；移植LCD double buffer驱动；移植触摸屏驱动；移植Android键盘驱动；移植Wifi驱动支持Android上网功能；移植电源管理驱动，支持Android电池管理；部署Android系统到实际ARM11平台。
 * 阶段项目实战与测试
 通过对ITelephony接口和ISms接口以及AIDL在Android程序中的开发应用，开发一个打电话和发短信的程序。
-
-* 自定义view Android 11 api level android M 
-** gradle.properties
-#+BEGIN_SRC xm
-android.useAndroidX=true
-landroid.enableJetifier=true
-#+END_SRC
-- 什么是Jetifier？ 例如，要使用androidx打包的依赖项创建新项目，此新项目需要在gradle.properties文件中添加以下行：
-
-java version 8
- compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
-import android.view.View;
-import android.view.Menu;
-import android.view.MenuItem;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
-import com.google.android.material.floatingactionbutton.FloatingActionButton;
-import com.google.android.material.snackbar.Snackbar;
-
-    <com.me.generalprac.CustomTitleView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
-    <include layout="@layout/custom_title"/>
