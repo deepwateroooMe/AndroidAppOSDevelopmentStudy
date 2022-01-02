@@ -1656,6 +1656,104 @@ public class PersonObserver extends ContentObserver{
   - 采用 Sharedpreferences 共享数据，需要使用sharedpreferences API读写数据,这使得访问数据变得复杂 & 难度大。
   - 而采用ContentProvider方式，其 解耦了 底层数据的存储方式，使得无论底层数据存储采用何种方式，外界对数据的访问方式都是统一的，这使得访问简单 & 高效
   - 如一开始数据存储方式 采用 SQLite 数据库，后来把数据库换成 MongoDB，也不会对上层数据ContentProvider使用代码产生影响
+** ContentProvider的工作过程
+-   ContentProvider是一种数据共享型组件，用于向其他组件乃至其他应用共享数据。需要注意的是ContentProvider内部的insert、delete、update和query方法需要处理好线程同步，因为这几个方法是在Binder线程池中被调用的，另外ContentProvider组件不需要手动停止。
+*** 一、ContentProvider的启动过程
+-   当ContentProvider所在进程启动时，ContentProvider会同时启动并被发布到AMS中，这个时候ContentProvider的onCreate要先于Application的onCreate而执行，这在四大组件中是少有的一个现象。
+-   当一个应用启动的时候，入口方法为ActivityThread的main方法，期间ContentProvider的启动过程流程如下图。
+-   其中，黑色虚线箭头表示调用了重载方法，最终调用箭头指向方法；紫色虚线箭头表示远程调用的IPC过程。橙色流程先于绿色流程执行。对于ContentProvider的启动过程，需要注意几点。
+**** ContentProvider可以是单实例也可以是多实例
+-   一般来说，ContentProvider是单实例的。但是这是可以设置的，它的属性android:multiprocess为false时表示单实例，为true表示多实例，其默认值为false。实际开发中，多实例缺乏使用价值，因此默认ContentProvider为单实例。
+**** ActivityThread会先加载ContentProvider再调用Application的onCreate方法
+-   ActivityThread的attach方法的部分源码如下。
+#+BEGIN_SRC java
+private void handleBindApplication(AppBindData data) {
+    // ...
+    // 创建ContextImpl和Instrumentation
+    final ContextImpl instrContext = ContextImpl.createAppContext(this, pi,
+            appContext.getOpPackageName());
+    try {
+        final ClassLoader cl = instrContext.getClassLoader();
+        mInstrumentation = (Instrumentation)
+            cl.loadClass(data.instrumentationName.getClassName()).newInstance();
+    } catch (Exception e) {
+        throw new RuntimeException(
+            "Unable to instantiate instrumentation "
+            + data.instrumentationName + ": " + e.toString(), e);
+    }
+    final ComponentName component = new ComponentName(ii.packageName, ii.name);
+    mInstrumentation.init(this, instrContext, appContext, component,
+            data.instrumentationWatcher, data.instrumentationUiAutomationConnection);
+    // ....
+    // 创建Application对象
+    Application app;
+    final StrictMode.ThreadPolicy savedPolicy = StrictMode.allowThreadDiskWrites();
+    final StrictMode.ThreadPolicy writesAllowedPolicy = StrictMode.getThreadPolicy();
+    try {
+        // If the app is being launched for full backup or restore, bring it up in
+        // a restricted environment with the base application class.
+        app = data.info.makeApplication(data.restrictedBackupMode, null);
+        // ...
+        // 启动当前进程的ContentProvider并调用其onCreate方法，绿色流程
+        if (!data.restrictedBackupMode) {
+            if (!ArrayUtils.isEmpty(data.providers)) {
+            installContentProviders(app, data.providers);
+            }
+        }
+    // ....
+    // 调用Application的onCreate方法    
+    try {
+        mInstrumentation.callApplicationOnCreate(app);
+    } catch (Exception e) {
+        if (!mInstrumentation.onException(app, e)) {
+            throw new RuntimeException(
+              "Unable to create application " + app.getClass().getName()
+              + ": " + e.toString(), e);
+        }
+    }
+}   
+#+END_SRC 
+-   从源码可以得知，handleBindApplication方法的工作主要分为四个：
+  -   ① 创建ContentImpl和Instrumentation。
+  -   ② 创建Application对象。
+  -   ③ 启动当前进程的ContentProvider（即调用installContentProviders方法）并调用其onCreate方法，其对应于上述流程图的绿色流程部分。
+  -   ④ 调用Application的onCreate方法
+-   因此在一个应用启动的时候，ActivityThread会先加载ContentProvider，调用ContentProvider的onCreate方法，接着才调用Application的onCreate方法。
+**** publicContentProviders存储ContentProvider
+-  在handleBindApplication调用installContentProviders方法加载ContentProvider进行启动的同时，通过AMS的publicContentProviders方法将ContentProvider发布到AMS并将其对应的ContentProviderRecode存储到ProviderMap中，这样一来外部调用者就可以直接从AMS中获取ContentProvider。其部分源码如下。
+#+BEGIN_SRC java
+public final void publishContentProviders(IApplicationThread caller,
+        List<ContentProviderHolder> providers) {
+    // ...
+    for (int i = 0; i < N; i++) {
+        ContentProviderHolder src = providers.get(i);
+        if (src == null || src.info == null || src.provider == null) {
+            continue;
+        }
+        ContentProviderRecord dst = r.pubProviders.get(src.info.name);
+        if (DEBUG_MU) Slog.v(TAG_MU, "ContentProviderRecord uid = " + dst.uid);
+        if (dst != null) {
+            ComponentName comp = new ComponentName(dst.info.packageName, dst.info.name);
+            // 保存ContentProvider
+            mProviderMap.putProviderByClass(comp, dst);
+            String names[] = dst.info.authority.split(";");
+            for (int j = 0; j < names.length; j++) {
+                mProviderMap.putProviderByName(names[j], dst);
+            }
+        }
+        // ...
+    }
+    // ....  
+}
+#+END_SRC 
+-  至此ContentProvider的启动过程就分析完了。
+*** 二、ContentProvider启动过程的触发
+-   当通过ContentProvider的四个方法的任何一个调用可以触发ContentProvider的启动过程。而当ContentProvider所在进程未启动时，第一次访问它就会触发ContentProvider的创建，同时伴随着ContentProvider所在进程的启动。
+-   我们知道，访问ContentProvider需要通过ContentResolver，ContentResolver是一个抽象类，通过Context的getContentResolver方法获取的实际上是ApplicationContentResolver对象。调用query方法触发启动过程的具体流程如下。
+-   这个流程看起来相当复杂，实际上总结起来就是：若当前Application A有ContentProvider对象，用该对象进行IPC过程调用query；否则从AMS获取ContentProvider，AMS中已经有发布的ContentProvider则返回，否则启动其所在进程并加载ContentProvider，等发布到AMS后返回。
+-   需要注意的一点是，这里一直提及的ContentProvider并非本身，因为其无法进行进程间通信，其指代的是ContentProvider.Transport。该类是Binder对象，实现了IContentProvider接口。当A获得ContentProvider的Binder对象即ContentProvider.Transport对象，以进程通信的方式调用B应用的query方法，最终调用子类实现的query方法。具体见上述流程图。
+-   至于其他的三个方法：insert、update和delete，其流程就与之类似了。
+
 ** IPC interprocess ContentProvider 实例关键点纪录
 *** app 1: function as server
 - AndroidManifest.xml

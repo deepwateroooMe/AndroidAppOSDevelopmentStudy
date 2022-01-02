@@ -3,14 +3,20 @@
 #+author: deepwaterooo
 
 * Daily updates
+
 ** 调整作息
 - 经过的过去几个月（9月到12月几个整月）的6:00am-11pm作息后，我觉得自己白天的头脑思维和精力还是不够好（常常还是会脑袋有点儿昏），应该是到了需要再切换一下，晚上12:30-1am左右休息入睡，早上6am起床，中午12:00-1:30左右午休90分钟的作息
 - 新的作息下，早上的精力会相对差一些，晚上入睡4.5个小时左右（总共5个小时），平均三个睡眠周期之后，上午的脑袋相对会比较昏；但如果中午能够入睡，下午和晚上的头脑会比较清醒，学习的效率也会提升不少。所以新的作息下，希望晚上少睡以确保中午能够入睡，哪怕只能真正睡着5分钟，上午精力不够好的前提下，需要再搜索计划一下上午应该做哪些方面的事情（现在还没有想好上午适合做什么，写调试项目，真正试图去fix一些bug?或者做一些基础文档、学习笔记的整理）；如果中午能够入睡，便希望下午和晚上的时间能够科学高效地利用起来，做leetcode难题，或是去理解平时、正常状态下理解不了或读不下去的原理
-
 - 前天晚上12休息，昨天中午是调整午休的第一天，昨天中午一个鬼窝里的恶鬼室友在厨房作饭，故意乒乒乓乓吵了别人整个午休的一两个小时，但最终还是睡着了。。。。。。
 - 昨天晚上12:30-1am入睡，今天中午无法deep sleep入睡，浅眠，今天晚上应该需要1am左右才上床准备休息，希望明天中午能够午休休息好
-- 
-- 这段时间仍然会总结一些安卓方面基础，希望自己在头脑比较清醒的状态下能够真正理解原理，用到项目上。过了这个周末，会希望回去把leetcode里想写的难题写完，接下来也都会参加自1月8日开始起的每个周六的周赛，这个周六应该还是不会参加
+
+** leetcode算法练习
+- 希望这个周的时间能够回过头去把自己认为还有必要提升的部分、相关难题部分做完，接下来也都会参加自1月8日开始起的每个周六的周赛，半月赛练习
+
+** 安卓方面的知识、面试准备
+- 可以确定的是：现在的理解、分析解决问题的能力已经比以前、往年，或者说2017/2018年作为安卓开发工程师的要强了很多，很多的原理都能自己搜索明白，但做安卓开发的知识面广度和深度都希望还能再扩大和加深，并配合项目、代码来加强理解。
+- 这段时间仍然会总结一些安卓方面基础，希望自己在头脑比较清醒的状态下能够真正理解原理，用到项目上。
+- 感觉安卓开发，自己也有基础，也有理解、分析和解决问题的能力，但还没能寻找到一个系统化、或者说循序渐进的学习方法，这个周的业余时间也会再多搜索一下，需要着力的版块，希望能够列个题纲出来
 - 
 - 会把view相关的部分、安卓应用的性能代优化，以及异步这三大版块再总结一下。有时间的话，activity fragments再加强一下
 - 因为需要准备一个面试，这几天不更新算法系列，只准备安卓面试
@@ -22,8 +28,7 @@
 - BroadcastReceiver sample project runs though easily. Will look into ContentProvider projects too today, all of them are not complicated.
 - ContentProvider Interprocess communication projects are connected well too. One functions as server, the other as client, not complicated at all.
 - The coding interview is done (due to the interface reasons, the 120 minutes test was submitted in about 60 minutes by mistake, the coding test interface does not false-positive submit proof), expecting the final round of interview, while at the same time, I am returning back to algorithms, and tomorrow there is a weekly contest too.
- 
-* 职场弱弱的奔溃瞬间（+1）
+** 职场弱弱的奔溃瞬间（+1）
 - 联系我安排面试相关的按照名字来看，应该是一个美国人吧，关于文化、语言等，这样的hr写邮件与candidate沟通应该会相对比较顺利一点
   
 [[./pic/buddy.png]]

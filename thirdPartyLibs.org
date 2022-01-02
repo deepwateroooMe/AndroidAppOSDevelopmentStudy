@@ -1664,4 +1664,22 @@ Api.getService().getPostData(map).subscribeOn(Schedulers.io()).subscribe(new Obs
 
 * Volley OkHttp Retrofit
 
-* LeakCanary?
+* LeakCanary
+** activity 主要的处理逻辑都在代码的注释里。这里再总结一下监测内存泄漏的原理：
+  - (1) 监测Activity 的生命周期的 onDestroy() 的调用。
+  - (2) 当某个 Activity 的 onDestroy() 调用后，便对这个 activity 创建一个带 ReferenceQueue 的弱引用，并且给这个弱引用创建了一个 key 保存在 retainedKeys 中。
+  - (3) 在 Android 的 Framework 中，当一个 Activity 被 destroy 后一般会产生一次 gc，并且还会产生一个 idle。
+  - (4) 如果这个 activity 可以被回收，那么弱引用就会被添加到 ReferenceQueue 中。
+  - (5) 等待主线程进入 idle后，通过一次遍历，在 ReferenceQueue 中的弱引用所对应的 key 将从 retainedKeys 中移除，说明其没有内存泄漏。
+  - (6) 如果 activity 没有被回收，先强制进行一次 gc，再来检查，如果 key 还存在 retainedKeys 中，说明 activity 不可回收，同时也说明了出现了内存泄漏。
+- 其监听了 onFragmentViewDestroyed() 和 onFragmentDestroyed()，这两个分别针对了 view 和 fragment 的监测是否存在泄漏。而后续的 watch 过程就和 Activity 是一样的了。
+- 与 Activity 的不同点在于对生周期的监听实现，Fragment 的生命周期的监听是通过 FragmentManager 来注册实现的。其他 watch 的过程都是一样的。
+- 小结： 到这里，所有的初始化工作已经完成了，等待接下来的内存泄漏的发生了。总的来说，这是一个抽丝剥茧的过程，只不过这个过程在这里的分析过程中是一个逆向的：
+  - (1) 我们先知道了当 heap hprof dump 完成后是由 DisplayLeakService 来处理的。
+  - (2) 然后知道了当 heap hprof 分析完成后是由 ServiceHeapDumpListener 监听到的，而交由 HeapAnalyzerService 进行分析的。
+  - (3) 最后我们才知道通过监听 Activity 与 Fragment 的生命周期，以及利用弱引用在 gc 后会被立即回收的特性来判断是否有内存泄漏的发生。
+- 总结
+  - (1) 从大的层面上来看，LeakCanary 的核心包括了用于监测内存泄漏的 leakcanary-watcher 以及用于分析 hprof 的 leakcanary-analyzer 两个大的模块。leakcanary-watcher 中的核心类是 RefWatcher ，而 leakcanary-analyzer 中的核心类是 HeapAnalyzer。对于应用开发者来说，掌握 leakcanary-watcher 的原理会更适用一些。
+  - (2) leakcanary-watcher 监测内存的核心原理是，监测 Activity/Fragment 组件的生命周期，组件在进入 onDestroy 后，一般的 framework 会主动 gc 一次，如果没有则还会强制 gc 一次。同时，还利用了弱引用在一次 gc 后便会进入到内存回收的状态的原理从而判断当前被监测的组件是否发生了内存泄漏。
+  - (3) leakcanary-analyzer 负责 hprof 的分析，这个模块其实只是对 haha 库的所提供的 api 的应用，就像我们拿着 leakcanary 编写自己的业务代码一样。这里不作深入的分析，而是放到下一篇 haha 库相关的文章里再来详细分析。
+
