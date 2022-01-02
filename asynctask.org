@@ -644,3 +644,438 @@ private final class ServiceHandler extends Handler {
 - 每个线程都会耗费至少 1040KB 内存，线程池的线程数量需要控制在一定范围内。
 - 线程的优先级具有继承性，如果在 UI 线程中创建线程池，线程的默认优先级会和 UI 线程相同，从而对 UI 线程使用资源进行抢占。
 
+
+* Java基础之多线程(没那么复杂)
+** 多线程的引入
+- 1.什么是多线程
+  - 线程是程序执行的一条路径，一个进程中可以包含多条线程;多线程并发执行可以提高程序的效率
+- 2.进程和线程之间的关系
+  - 操作系统可以同时执行多个任务，每个任务就是进程;进程可以同时执行多个任务，每个任务就是线程。
+- 3.多线程的应用场景
+  - 红蜘蛛同时共享屏幕给多个电脑
+  - 迅雷开启多条线程一起下载
+  - QQ开启多人聊天
+  - 服务器同时处理多个客户的请求
+- 多线程并行和并发的区别
+  - 并行性和并发性是两个概念，并行性指在同一时刻，有多条指令在多个处理器上同时执行
+  - 并发性指的是同一时刻只有一条指令被执行，但多个进程指令被快速切换执行是的在宏观上具有多个进程被同时执行的效果
+- Java程序运行原理和JVM的启动是多线程的吗？
+  - java程序运行原理
+  - Java命令启动jvm，启动jvm等于启动一个应用程序，也就是启动了一个进程，该进程会自动启动一个“主线程”，然后主线程去调用某个类的main方法
+  - Jvm启动是多线程的的吗
+  - JVM启动至少启动了垃圾回收线程和主线程，所以是多线程
+** 多线程的实现方式
+*** 1. 继承Thread类创建线程类
+- (1) 定义Thread的子类，并重写该类的run方法，该ru的执行体就代表了线程需要完成的任务，因此run()方法被称为线程执行体
+- (2) 创建Thread子类的实例，即创建了线程对象
+- (3) 调用线程对象的start()方法启动该线程
+#+BEGIN_SRC java
+public class Demo1__Thread {
+    public static void main(String[] args) {
+        ChThread t=new ChThread();
+        t.start();
+        for(int i=0;i<1000;i++) {
+            System.out.println("我是主方法！");
+        }
+    }
+}
+ class ChThread extends Thread {
+    @Override
+    public void run() {
+        super.run();
+        for(int i=0;i<1000;i++) {
+            System.out.println("我是run方法");
+        }
+    }
+ }
+#+END_SRC 
+- 上述代码的执行验证了多线程，如果上述程序的执行过程是多线程的话，会发现屏幕中的 ”我是主方法”和“我是run方法” 的字样是交替出现的，这说明了程序的的执行过程为并行执行Thread类的Start()方法启动run()方法的线程，和主方法中的执行同时进行。
+*** 2.实现Runnable接口创建线程类
+- (1) 定义一个实现了Runnable接口的实现类(2) 创建Runnable实现类的实例(3) 将创建的实例作为Thread类的target类创建Thread对象，该对象才是真正的线程对象 (4) 用创建的Thread对象启动线程
+#+BEGIN_SRC java
+public class tmp implements Runnable { // Thread_Running
+    private int i;
+    public void run() {
+        for(;i < 15;i++) 
+            System.out.println(Thread.currentThread().getName()+"  "+i);
+    }
+    public static void main(String[] args) {
+        for(int i = 0;i < 15;i++) {
+            System.out.println(Thread.currentThread().getName()+"  "+i);
+            if(i == 4) {
+                new Thread(new tmp(),"thread 1").start();
+                new Thread(new tmp(),"thread 2").start();
+            }
+        }
+    }
+}
+#+END_SRC 
+- 执行的结果如下
+#+BEGIN_SRC kotlin
+main  0
+main  1
+main  2
+main  3
+main  4
+main  5
+main  6
+thread 1  0
+thread 1  1
+thread 1  2
+thread 1  3
+thread 1  4
+thread 1  5
+thread 2  0
+thread 2  1
+thread 2  2
+thread 2  3
+thread 2  4
+thread 2  5
+thread 2  6
+thread 2  7
+thread 2  8
+thread 2  9
+thread 2  10
+thread 2  11
+thread 2  12
+thread 2  13
+thread 2  14
+main  7
+thread 1  6
+main  8
+thread 1  7
+main  9
+thread 1  8
+thread 1  9
+thread 1  10
+main  10
+thread 1  11
+thread 1  12
+thread 1  13
+thread 1  14
+main  11
+main  12
+main  13
+main  14
+#+END_SRC
+- 查看API文档，会发现Runnable接口只定义了run()方法这一个抽象类，所以实现Runnable接口的实现类只有run()方法，仅作为线程执行体，所以，Runnable对象仅仅作为Thread对象的target，而实际的线程对象依然是Thread实例，Thread实例负责执行target的run()方法。
+*** 3.实现Callable接口和Future接口创建多线程(Callable接口和FutureTask还有点儿生)
+- （1）Callable接口更像是Runnable接口的增强版，相比较Runable接口,Call()方法新增捕获和抛出异常的功能;Call()方法可以返回值
+- （2）Future接口提供了一个实现类FutureTask实现类，FutureTaks类用来保存Call()方法的返回值，并作为Thread类的target。
+- （3）调用FutureTask的get()方法来获取返回值
+#+BEGIN_SRC java
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+/**
+ * (1)创建Callable接口的实现类，并重写call()方法,该call()方法作为线程的执行体，且有返回值
+ * (2)创建了Callable接口的实现类的实例，并用FutureTask()方法包装对象，该FutureTask()对象实现了
+ *    将对象的返回值包装的功能
+ * (3)使用FutureTask对象将Thread对象的target，创建并启动线程
+ * (4)调用FutureTask对象的get()方法获得子线程执行结束后的返回值
+ * */
+public class tmp implements Callable < Integer> {    // tmp: Callable_Future
+    @Override
+        public Integer call() throws Exception {   // 重写Callable接口中的call()方法
+        int i = 0; 
+        for(; i < 20; i++) 
+            System.out.println(Thread.currentThread().getName()+" "+i); 
+        return i; 
+    }
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
+        // 创建Callable的对象
+        tmp ca = new tmp(); 
+        FutureTask < Integer> ft = new FutureTask < Integer>(ca); 
+        for(int i = 0; i < 20; i++) {
+            // 返回值主线程的名称和执行代号
+            System.out.println(Thread.currentThread().getName()+" "+i);   
+            if (i == 7) {
+                new Thread(ft, "Callable thread").start(); 
+                // 该方法将导致主线程被阻塞，直到call()方法结束并返回为止
+                // System.out.println("子线程的返回值"+ft.get());   
+            }
+        }
+        try {
+            System.out.println("sub thread return value: "+ft.get()); 
+        } catch (Exception e) {
+            e.printStackTrace(); 
+        }
+    }
+}
+#+END_SRC 
+- 上面的程序中，FutufeTask方法的get()方法将获得Call()方法的返回值，但是该方法将导致主线程受阻直到Call()方法结束并返回为止。
+- 打印结果如下： 
+#+BEGIN_SRC kotlin
+main 0
+main 1
+main 2
+main 3
+main 4
+main 5
+main 6
+main 7
+main 8
+main 9
+main 10
+main 11
+main 12
+main 13
+Callable thread 0
+main 14
+Callable thread 1
+main 15
+Callable thread 2
+main 16
+Callable thread 3
+main 17
+main 18
+main 19
+Callable thread 4
+Callable thread 5
+Callable thread 6
+Callable thread 7
+Callable thread 8
+Callable thread 9
+Callable thread 10
+Callable thread 11
+Callable thread 12
+Callable thread 13
+Callable thread 14
+Callable thread 15
+Callable thread 16
+Callable thread 17
+Callable thread 18
+Callable thread 19
+sub thread return value: 20
+#+END_SRC
+*** 4.三种实现多线程的方式对比
+|------------------+----------+--------------------+--------------------------------------------+--------------------------------------------|
+| 实现方式         | 重写方法 | 启动线程的方式     | 优点                                       | 缺点                                       |
+|------------------+----------+--------------------+--------------------------------------------+--------------------------------------------|
+| 继承Thread类     | run()    | Thread对象.start() | 编程简单，直接用this即可获取当前对象       | 继承Thread的子类不能继承其他的类           |
+|------------------+----------+--------------------+--------------------------------------------+--------------------------------------------|
+| 实现Runnable接口 | run()    | Thread对象.start() | 1.实现类可以继承其他类<br>                 | 编程复杂，                                 |
+|                  |          |                    | 2.多个对象共享一个target，形成了清晰的模型 | 必须使用Thread.currentThread()返回当前对象 |
+|------------------+----------+--------------------+--------------------------------------------+--------------------------------------------|
+| 实现Callable接口 | Call()   | Thread对象.start() | 1.同Runnable接口<br>                       | 同Runnable接口                             |
+|                  |          |                    | 2.Call()方法有返回值并能抛出异常           |                                            |
+|------------------+----------+--------------------+--------------------------------------------+--------------------------------------------|
+- 通过上面的对比发现，一般在项目中，我们使用Runnable接或者Callable接口来实现多线程。
+*** 5.线程的生命周期
+- 线程并不是创建过之后就开始执行的，也不是一直处于执行状态，一个线程的生命周期一个又五个：新建、就绪、运行、阻塞、死亡。<br>2.线程的这五种状态的原理参照《计算机组成原理2》多线程部分
+*** 6.控制线程
+**** 1.join线程
+- 1.Thread类中的成员方法，让调用join()方法的线程处于等待状态，直到子线程执行结束<br>2.join()方法通常由使用线程的程序调用，用于将一个线程拆分成若干小的线程执行，执行结束最后由主线程进行进一步的操作
+#+BEGIN_SRC java
+public class tmp extends Thread { // tmp: tmp
+    // 创建一个有参构造函数，用来为线程命名
+    public tmp(String str) {
+        super(str); 
+    } 
+    // 重写run方法
+    public void run() {
+        for(int i = 1; i < 20; i++) {
+            System.out.println(getName()+" "+i); 
+        }
+    }
+    public static void main(String[] args)throws Exception {
+        // 启动子线程
+        new tmp("Sub thread").start(); 
+        for(int i = 0; i < 20; i++) {
+            if(i == 7) {
+                tmp jt = new tmp("new thread's sub thread"); 
+                jt.start();  // 启动子线程
+                jt.join();   // 让主线程处于等待状态
+            }
+            System.out.println(Thread.currentThread().getName()+" "+i); 
+        }
+    }
+}
+#+END_SRC 
+- mian线程调用join之后，出去阻塞状态，两个子线程并发执行。直到两个子程序执行结束之后，main线程才开始执行。
+- join()线程有如下三种重载形式
+  - 1.join() :
+  - 2.join(long millis) :被join的线程的时间最长为millis毫秒，如果超过了这个millis则线程不被执行
+  - 3.join(long millis,int nanos) :被join的线程的时间最长为millis毫秒+nanos微秒，如果超过了这个时间则线程不被执行 第三种重载行驶一般用不到，因为无论是计算机系统还是计算机硬件，还没发精确到微秒
+- 打印结果如下：
+#+BEGIN_SRC kotlin
+main 0
+main 1
+main 2
+main 3
+main 4
+main 5
+main 6
+Sub thread 1
+Sub thread 2
+Sub thread 3
+new thread's sub thread 1
+new thread's sub thread 2
+Sub thread 4
+new thread's sub thread 3
+new thread's sub thread 4
+Sub thread 5
+new thread's sub thread 5
+Sub thread 6
+new thread's sub thread 6
+Sub thread 7
+new thread's sub thread 7
+Sub thread 8
+new thread's sub thread 8
+Sub thread 9
+new thread's sub thread 9
+Sub thread 10
+new thread's sub thread 10
+Sub thread 11
+new thread's sub thread 11
+Sub thread 12
+new thread's sub thread 12
+Sub thread 13
+new thread's sub thread 13
+Sub thread 14
+new thread's sub thread 14
+Sub thread 15
+new thread's sub thread 15
+Sub thread 16
+new thread's sub thread 16
+Sub thread 17
+new thread's sub thread 17
+Sub thread 18
+new thread's sub thread 18
+Sub thread 19
+new thread's sub thread 19
+main 7
+main 8
+main 9
+main 10
+main 11
+main 12
+main 13
+main 14
+main 15
+main 16
+main 17
+main 18
+main 19
+#+END_SRC
+**** 2.后台线程
+- 后台线程运行于后台，任务是为其他线程提供服务，也被称为“守护线程”或“精灵线程”。JVM的垃圾回收机制就是一个典型的后台线程。<br> 通过调用Thread类的setDaemon(true)方法将线程设置为后台线程
+#+BEGIN_SRC java
+public class tmp extends Thread { // DaemonThread
+    @Override
+        public void run() {
+        for(int i = 0; i < 2000; i++) {
+            System.out.println(getName()+" "+i); 
+        }
+    }
+    public static void main(String[] args) {
+        tmp dt = new tmp(); 
+        dt.setDaemon(true); 
+        dt.start(); 
+        for(int i = 0; i < 7; i++) {
+            System.out.println(Thread.currentThread().getName()+" "+i);  // 主线程： 10 个
+        }
+    }
+}
+#+END_SRC 
+- 运行结果：
+#+BEGIN_SRC kotlin
+Thread-0 0
+Thread-0 1
+Thread-0 2
+main 0
+Thread-0 3
+main 1
+main 2
+main 3
+main 4
+main 5
+main 6
+Thread-0 4
+Thread-0 5
+Thread-0 6
+#+END_SRC
+- 1.Thread-0的后台进程本该当i=999的时候才停止进行，但是程序中只进行到114次，这是因为所有的前台进程结束之后，后天进程的存在也就是去了意义，所以后台进程也跟着死亡。
+- 2.前台线程死亡之后，JVM会通知后台线程死亡，但是从后台线程接收指令到做出反应需要一定的时间，这就是为什么上述程序中的后台进程在main线程死亡之后后台进程还进行到114的原因。
+**** 3.线程睡眠
+- 如果需要线程停顿一段时间进入阻塞状态，可以调用Thread类的静态方法sleep()，sleep（）有两种重载形式
+  - sleep(long millis)
+    - 让当前正在执行的线程暂停mili毫秒，进入阻塞状态。该方法受到系统计时器和线程调度器精度的影响。
+  - sleep(long millis,int nanos)
+    - 让当前正在执行的线程暂停milis毫秒+nanos微秒，进入阻塞状态。该方法受到系统计时器和线程调度器精度的影响（不常用）
+#+BEGIN_SRC java
+public class tmp { // SleepThread
+    public static void main(String[] args) throws Exception {
+        for(int i = 0; i < 7; i++) {
+            System.out.println(Thread.currentThread().getName()+" "+i); 
+            Thread.sleep(2000); 
+        }
+    }
+}
+#+END_SRC (
+- 观察程序想运行过程会发现，每一个进程(_进程_ ？)之间相隔1秒。
+**** 4.线程让步
+- 调用Thrad类的静态方法 yield()方法可以实现线程让步，和sleep()方法类似，yield()方法也是让当前正在运行的线程暂停，但是不会使线程阻塞，而是让线程进入就绪状态，让线程调度器重新安排一次线程调度，完全有可能出现的状况是，刚刚调用yield()方法进入就绪状态的线程就被线程调度器重新调度出来重新执行。
+#+BEGIN_SRC java
+public class tmp extends Thread { // YieldThread
+    public tmp(String str) {
+        super(str); 
+    } 
+    @Override
+        public void run() {
+        // TODO Auto-generated method stub
+        for (int i = 0; i < 12; i++) {
+            System.out.println(getName()+" "+i); 
+            if (i == 7) 
+                Thread.yield();                   // 线程让步
+        }
+    }
+    public static void main(String[] args) {
+        tmp yt1 = new tmp("Adv"); 
+        yt1.setPriority(MAX_PRIORITY);            // 将次线程设置成最高优先级
+        yt1.start();                              // 启动线程
+        tmp yt2 = new tmp("Base"); 
+        yt2.setPriority(MIN_PRIORITY); 
+        yt2.start(); 
+    }
+}
+#+END_SRC 
+- 1.线程调用yield()方法后将执行的机会让给优先级相同的线程<br>2.高优先级的线程调用yield()方法暂停之后，系统中没有与之相同优先级和更高的优先级的线程，则线程调度器会将该线程重新调度出来，重新执行。
+- sleep()方法和yield()方法比较
+|---------+------------------------------------------------------------+----------+-------------------------+----------|
+| 方法    | 执行机会                                                   | 线程状态 | 是否抛出异常            | 可移植性 |
+|---------+------------------------------------------------------------+----------+-------------------------+----------|
+| sleep() | 线程暂停之后，会给其他线程执行的机会，不用理会线程的优先级 | 阻塞状态 | InterruptedExextion异常 | 优       |
+| yield() | 线程暂停之后，只会给优先级相同或更高优先级的线程执行的机会 | 就绪状态 | 否                      | 差       |
+|---------+------------------------------------------------------------+----------+-------------------------+----------|
+- 打印结果： 
+#+BEGIN_SRC kotlin
+Base 0
+Base 1
+Base 2
+Base 3
+Base 4
+Base 5
+Base 6
+Base 7
+Adv 0
+Adv 1
+Adv 2
+Adv 3
+Base 8
+Adv 4
+Base 9
+Adv 5
+Base 10
+Adv 6
+Base 11
+Adv 7
+Adv 8
+Adv 9
+Adv 10
+Adv 11
+#+END_SRC
+**** 5.改变线程优先级
+- 1.一般线程具有优先级，更高优先级的线程比优先级低的线程能获得更多的执行机会
+- 2.每个线程默认的优先级和创建他们的父线程的优先级相同。 
+- 3.Thread类提供了setPriorit(int newPriority)、getPriority() 方法来设置和获取线程的优先级4.也可以使用Thread类的3个静态常量来设置线程的优先级
