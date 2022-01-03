@@ -339,6 +339,7 @@ ParameterHanlder进行解析。
 * ARouter路由原理:
 - ARouter维护了一个路由表Warehouse，其中保存着全部的模块跳转关系，ARouter路由跳转实际上还 是调用了startActivity的跳转，使用了原生的Framework机制，只是通过apt注解的形式制造出跳转规 则，并人为地拦截跳转和设置跳转条件。
  
+
 * 第三方库源码总结
 ** LeakCanary 原理
 参考博客: - https://www.jianshu.com/go-wild?ac=2&url=https%3A%2F%2Fwww.cnblogs.com%2Fjymblog%2Fp%2F11656221.html
@@ -569,10 +570,12 @@ ConcurrentHashMap 和 HashMap不多的博客推荐 传送门
 - dex脚本将很多.class文件转换打包成一个.dex文件。
 - apkbuilder脚本将资源文件和.dex文件生成未签名的.apk文件。
 - jarsigner对apk进行签名。
+
 * 谈谈 Android 的 GC
 Java 语言建立了垃圾收集机制，用以跟踪正在使用的对象和发现并回收不再 使用(引用)的对象。该机制可以有效防范动态内存分配中可能发生的两个危险: 因内存垃圾过多而引发的内存耗尽，以及不恰当的内存释放所造成的内存非法引用。
 垃圾收集算法的核心思想是:对虚拟机可用内存空间，即堆空间中的对象进 行识别，如果对象正在被引用，那么称其为存活对象，反之，如果对象不再被引用，则为垃圾对象，可以回收其占据的空间，用于再分配。
 垃圾收集算法的选择 和垃圾收集系统参数的合理调节直接影响着系统性能，因此需要开发人员做比较 深入的了解。
+
 * 怎样保证 App 不被杀死？
 - 强烈建议不要这么做，不仅仅从用户角度考虑，作为 Android 开发者也有责任去维护 Android 的生态环境。当然从可行性讲，谷歌也不会让容易的实现。同 时这样的 app 一般属于流氓应用
 - 通常为了保证自己 app 避免被杀死，我们一般使用以下方法:
@@ -586,6 +589,7 @@ Java 语言建立了垃圾收集机制，用以跟踪正在使用的对象和发
     - 2.在 NDK 环境中将 1 中编写的 C 代码编译打包成可执行文件 (BUILD_EXECUTABLE)。
     - 3.主进程启动时将守护进程放入私有目录下，赋予可执行权限，启动它即可。
   - 7 联系厂商，加入白名单
+
 
 * 设计模式: Android常用设计模式及源码使用
 ** 单例模式
@@ -723,6 +727,7 @@ public Object getSystemService(String name) {
 - adapter类
 ** 装饰者模式
 - Rxjava2，或者contextThemeWapper等
+
 * 跨平台
 - Flutter 和 React Native 不同主要在于 Flutter UI 是直接通过 skia 渲染的 ，而 React Native 是将 js 中的控件转化为原生控件，通过原生去渲染的。
 - 移动端跨平台开发的深度解析
@@ -763,7 +768,9 @@ image-20200527230523455
 「HTTPS 综合地运用了对称加密与非对称加密，在进行随机数校验的阶段是使用了非对称加密来进行通信的，然后等双方都确定了三个随机数之后，就可以使用相同的算法来生成对称秘钥进行加密通信了。HTTPS 的优势在于双端分别生成了秘钥，没有经过传输，减少了秘钥泄漏的可能性」。
 https在项目的运用实践：Android HTTPS 自制证书实现双向认证(OkHttp + Retrofit + Rxjava)
 
+
 * MVC MVP MVVM
+
 * java 基础
 1.synchronized的修饰对象
 当synchronized用来修饰静态方法或者类时，将会使得这个类的所有对象都是共享一把类锁，导致线程阻塞，所以这种写法一定要规避
@@ -925,3 +932,268 @@ Weak Reference Objects are ideal to implement cache modules. In fact, a sort of 
 - https://juejin.cn/post/7007326164268105741 这个有没有时间看再说
 - 
 
+
+* 布局优化的现状与发展趋势
+** 耗时原因
+- 众所周知，布局加载一直是耗时的重灾区。特别是启动阶段，作为第一个 View 加载，更是耗时。
+- 而布局加载之所以耗时，有两个原因。
+  - 读取 xml 文件，这是一个 IO 操作。
+  - 解析 xml 对象，反射创建 View
+- 一些很常见的做法是
+  - 减少布局嵌套层数，减少过度绘制
+  - 空界面，错误界面等界面进行懒加载
+- 那除了这些做法，我们还有哪些手段可以优化呢？
+** 解决方案
+- 异步加载
+- 采用代码的方式编写布局
+** 异步加载
+- google 很久之前提供了 AsyncLayoutInflater，异步加载的方案，不过这种方式有蛮多坑的，下文会介绍
+** 采用代码的方式编写布局
+- 代码编写的方式编写布局，我们可能想到使用 java 声明布局，对于稍微复杂一点的布局，这种方式是不可取的，存在维护性查，修改困难等问题。为了解决这个问题，github 上面诞生了一系列优秀的开源库。
+  - litho: https://github.com/facebook/litho
+  - X2C: https://github.com/iReaderAndroid/X2C
+    - 为了即保留xml的优点，又解决它带来的性能问题，我们开发了X2C方案。即在编译生成APK期间，将需要翻译的layout翻译生成对应的java文件，这样对于开发人员来说写布局还是写原来的xml，但对于程序来说，运行时加载的是对应的java文件.
+    - 我们采用APT（Annotation Processor Tool）+ JavaPoet技术来完成编译期间【注解】->【解注解】->【翻译xml】->【生成java】整个流程的操作。
+- 这两个开源库在大型的项目基本不会使用，不过他们的价值是值得肯定的，核心思想很有意义。
+- xml 布局加载耗时的问题， google 也想改善这种现状，最近 Compose beta 发布了，他是采用声明式 UI 的方式来编写布局，避免了 xml 带来的耗时。同时，还支持布局实时预览。这个应该是以后的发展趋势。
+- compose-samples: https://github.com/android/compose-samples
+** 小结
+- 上面讲了布局优化的现状与发展趋势，接下来我们一起来看一下，有哪些布局优化手段，可以应用到项目中的。
+  - 渐进式加载
+  - 异步加载
+  - compose 声明式 UI
+** 渐进式加载
+*** 什么是渐进式加载
+- 渐进式加载，简单来说，就是一部分一部分加载，当前帧加载完成之后，再去加载下一帧。
+- 一种极致的做法是，加载 xml 文件，就想加载一个空白的 xml，布局全部使用 ViewStub 标签进行懒加载。
+- 这样设计的好处是可以减缓同一时刻，加载 View 带来的压力，通常的做法是我们先加载核心部分的 View，再逐步去加载其他 View。
+- 有人可能会这样问了，这样的设计很鸡肋，有什么用呢？
+- 确实，在高端机上面作用不明显，甚至可能看不出来，但是在中低端机上面，带来的效果还是很明显的。在我们项目当中，复杂的页面首帧耗时约可以减少 30%。
+  - 优点：适配成本低，在中低端机上面效果明显。
+  - 缺点：还是需要在主线程读取 xml 文件
+*** 核心伪代码
+    #+BEGIN_SRC kotlin
+start(){
+    loadA(){
+        loadB(){
+            loadC()
+        }
+    }
+}
+    #+END_SRC
+- 上面的这种写法，是可以的，但是这种做法，有一个很明显的缺点，就是会造成回调嵌套层数过多。当然，我们也可以使用 RxJava 来解决这种问题。但是，如果项目中没用 Rxjava，引用进来，会造成包 size 增加。
+- 一个简单的做法就是使用队列的思想，将所有的 ViewStubTask 添加到队列当中，当当前的 ViewStubTask 加载完成，才加载下一个，这样可以避免回调嵌套层数过多的问题。
+- 改造之后的代码见
+#+BEGIN_SRC kotlin
+val decorView = this.window.decorView
+ViewStubTaskManager.instance(decorView)
+            .addTask(ViewStubTaskContent(decorView))
+            .addTask(ViewStubTaskTitle(decorView))
+            .addTask(ViewStubTaskBottom(decorView))
+            .start()
+class ViewStubTaskManager private constructor(val decorView: View) : Runnable {
+    private var iViewStubTask: IViewStubTask? = null
+    companion object {
+        const val TAG = "ViewStubTaskManager"
+        @JvmStatic
+        fun instance(decorView: View): ViewStubTaskManager {
+            return ViewStubTaskManager(decorView)
+        }
+    }
+    private val queue: MutableList<ViewStubTask> = CopyOnWriteArrayList()
+    private val list: MutableList<ViewStubTask> = CopyOnWriteArrayList()
+
+    fun setCallBack(iViewStubTask: IViewStubTask?): ViewStubTaskManager {
+        this.iViewStubTask = iViewStubTask
+        return this
+    }
+    fun addTask(viewStubTasks: List<ViewStubTask>): ViewStubTaskManager {
+        queue.addAll(viewStubTasks)
+        list.addAll(viewStubTasks)
+        return this
+    }
+    fun addTask(viewStubTask: ViewStubTask): ViewStubTaskManager {
+        queue.add(viewStubTask)
+        list.add(viewStubTask)
+        return this
+    }
+    fun start() {
+        if (isEmpty()) {
+            return
+        }
+        iViewStubTask?.beforeTaskExecute()
+        // 指定 decorView 绘制下一帧的时候会回调里面的 runnable
+        ViewCompat.postOnAnimation(decorView, this)
+    }
+    fun stop() {
+        queue.clear()
+        list.clear()
+        decorView.removeCallbacks(null)
+    }
+    private fun isEmpty() = queue.isEmpty() || queue.size == 0
+    override fun run() {
+        if (!isEmpty()) {
+            // 当队列不为空的时候，先加载当前 viewStubTask
+            val viewStubTask = queue.removeAt(0)
+            viewStubTask.inflate()
+            iViewStubTask?.onTaskExecute(viewStubTask)
+            // 加载完成之后，再 postOnAnimation 加载下一个
+            ViewCompat.postOnAnimation(decorView, this)
+        } else {
+            iViewStubTask?.afterTaskExecute()
+        }
+    }
+    fun notifyOnDetach() {
+        list.forEach {
+            it.onDetach()
+        }
+        list.clear()
+    }
+    fun notifyOnDataReady() {
+        list.forEach {
+            it.onDataReady()
+        }
+    }
+}
+interface IViewStubTask {
+    fun beforeTaskExecute()
+    fun onTaskExecute(viewStubTask: ViewStubTask)
+    fun afterTaskExecute()
+}
+#+END_SRC
+- 源码地址：https://github.com/gdutxiaoxu/AnchorTask，核心代码主要在 ViewStubTask，ViewStubTaskManager, 有兴趣的可以看看
+** 异步加载
+- 异步加载，简单来说，就是在子线程创建 View。在实际应用中，我们通常会先预加载 View，常用的方案有：
+  - 在合适的时候，启动子线程 inflate layout。然后取的时候，直接去缓存里面查找 View 是否已经创建好了，是的话，直接使用缓存。否则，等待子线程 inlfate 完成。
+*** AsyncLayoutInflater
+- 官方提供了一个类，可以来进行异步的inflate，但是有两个缺点：
+  - 每次都要现场new一个出来
+  - 异步加载的view只能通过callback回调才能获得（死穴）
+- 因此，我们可以仿造官方的 AsyncLayoutInflater 进行改造。核心代码在 AsyncInflateManager。主要介绍两个方法。
+- asyncInflate 方法，在子线程 inflateView，并将加载结果存放到 mInflateMap 里面。
+#+BEGIN_SRC kotlin
+@UiThread
+fun asyncInflate(context: Context, vararg items: AsyncInflateItem?) {
+    items.forEach { item ->
+                        if (item == null || item.layoutResId == 0 || mInflateMap.containsKey(item.inflateKey) || item.isCancelled() || item.isInflating()) {
+                            return
+                        }
+                    mInflateMap[item.inflateKey] = item
+                    onAsyncInflateReady(item)
+                    inflateWithThreadPool(context, item)
+    }
+}
+#+END_SRC
+- getInflatedView 方法，用来获得异步inflate出来的view，核心思想如下
+  - 先从缓存结果里面拿 View，拿到了view直接返回
+  - 没拿到view，但是子线程在inflate中，等待返回
+  - 如果还没开始inflate，由UI线程进行inflate
+#+BEGIN_SRC kotlin
+/**
+ * 用来获得异步inflate出来的view
+ *
+ * @param context
+ * @param layoutResId 需要拿的layoutId
+ * @param parent      container
+ * @param inflateKey  每一个View会对应一个inflateKey，因为可能许多地方用的同一个 layout，但是需要inflate多个，用InflateKey进行区分
+ * @param inflater    外部传进来的inflater，外面如果有inflater，传进来，用来进行可能的SyncInflate，
+ * @return 最后inflate出来的view
+ */
+@UiThread
+fun getInflatedView(
+    context: Context?,
+    layoutResId: Int,
+    parent: ViewGroup?,
+    inflateKey: String?,
+    inflater: LayoutInflater
+): View {
+    if (!TextUtils.isEmpty(inflateKey) && mInflateMap.containsKey(inflateKey)) {
+        val item = mInflateMap[inflateKey]
+        val latch = mInflateLatchMap[inflateKey]
+        if (item != null) {
+            val resultView = item.inflatedView
+            if (resultView != null) {
+                // 拿到了view直接返回
+                removeInflateKey(item)
+                replaceContextForView(resultView, context)
+                Log.i(TAG, "getInflatedView from cache: inflateKey is $inflateKey")
+                return resultView
+            }
+
+            if (item.isInflating() && latch != null) {
+                // 没拿到view，但是在inflate中，等待返回
+                try {
+                    latch.await()
+                } catch (e: InterruptedException) {
+                    Log.e(TAG, e.message, e)
+                }
+                removeInflateKey(item)
+                if (resultView != null) {
+                    Log.i(TAG, "getInflatedView from OtherThread: inflateKey is $inflateKey")
+                    replaceContextForView(resultView, context)
+                    return resultView
+                }
+            }
+
+            // 如果还没开始inflate，则设置为false，UI线程进行inflate
+            item.setCancelled(true)
+        }
+    }
+    Log.i(TAG, "getInflatedView from UI: inflateKey is $inflateKey")
+    // 拿异步inflate的View失败，UI线程inflate
+    return inflater.inflate(layoutResId, parent, false)
+}
+#+END_SRC
+*** 简单 Demo 示范
+- 第一步：选择在合适的时机调用 AsyncUtils#asyncInflate 方法预加载 View，
+#+BEGIN_SRC kotlin
+object AsyncUtils {
+    fun asyncInflate(context: Context) {
+        val asyncInflateItem =
+            AsyncInflateItem(
+                LAUNCH_FRAGMENT_MAIN,
+                R.layout.fragment_asny,
+                null,
+                null
+            )
+        AsyncInflateManager.instance.asyncInflate(context, asyncInflateItem)
+    }
+    fun isHomeFragmentOpen() =
+        getSP("async_config").getBoolean("home_fragment_switch", true)
+}
+#+END_SRC
+- 第二步：在获取 View 的时候，先去缓存里面查找 View
+#+BEGIN_SRC kotlin
+override fun onCreateView(
+    inflater: LayoutInflater, container: ViewGroup?,
+    savedInstanceState: Bundle?
+): View? {
+    // Inflate the layout for this fragment
+    val startTime = System.currentTimeMillis()
+    val homeFragmentOpen = AsyncUtils.isHomeFragmentOpen()
+    val inflatedView: View
+
+    inflatedView = AsyncInflateManager.instance.getInflatedView(
+        context,
+        R.layout.fragment_asny,
+        container,
+        LAUNCH_FRAGMENT_MAIN,
+        inflater
+    )
+
+    Log.i(TAG, "onCreateView: homeFragmentOpen is $homeFragmentOpen, timeInstance is ${System.currentTimeMillis() - startTime}, ${inflatedView.context}")
+    return inflatedView
+    //        return inflater.inflate(R.layout.fragment_asny, container, false)
+}
+#+END_SRC
+*** 优缺点
+- 优点：
+  - 可以大大减少 View 创建的时间，使用这种方案之后，获取 View 的时候基本在 10ms 之内的。
+- 缺点
+  - 由于 View 是提前创建的，并且会存在在一个 map，需要根据自己的业务场景将 View 从 map 中移除，不然会发生内存泄露
+  - View 如果缓存起来，记得在合适的时候重置 view 的状态，不然有时候会发生奇奇怪怪的现象。
+** 总结
+- 参考文章：https://juejin.cn/post/6844903924965572615
+- View 的渐进式加载，在 JectPack compose 没有推广之后，推荐使用这种方案，适配成本低
+- View 的异步加载方案，虽然效果显著，但是适配成本也高，没搞好，容易发生内存泄露
+- JectPack compose 声明式 UI，基本是未来的趋势，有兴趣的可以提前了解一下他。
