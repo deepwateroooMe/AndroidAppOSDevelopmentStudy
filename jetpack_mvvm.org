@@ -1991,6 +1991,578 @@ AppInitializer.getInstance(this)
 - 最后如果让我总结一下的话，这个库的整体用法非常简单，但是可能并不适合所有人去使用。如果你是一个库开发者，并且使用了ContentProvider的方式来进行初始化操作，那么你应该接入App Startup，这样可以让接入你的库的App降低启动耗时。而如果你是一个App开发者，我认为使用ContentProvider来进行初始化操作的概率很低，所以可能App Startup对你来说用处并不大。
 - 当然，考虑到业务逻辑分离的代码结构，App的开发者也可以考虑将一些原来放在Application中的初始化代码，移动到一个Initializer中去单独执行，或许可以让你的代码结构变得更加合理与清晰。
 
+* AnchorTask: (安卓启动优化)
+- Android 启动优化，大家第一时间可能会想到异步加载。将耗时任务放到子线程加载，等到所有加载任务加载完成之后，再进入首页。
+- 多线程异步加载方案确实是 ok 的。但如果遇到前后依赖的关系呢。比如任务2 依赖于任务 1，这时候要怎么解决呢。
+- 这时候就可以使用 AnchorTask 解决，它的实现原理是构建一个有向无环图，拓扑排序之后，如果任务 B 依赖任务 A，那么 A 一定排在任务 B 之后。
+** 基本使用
+*** 第一步：在 moulde build.gradle 配置远程依赖
+#+BEGIN_SRC groovy
+implementation 'com.xj.android:anchortask:0.1.0'
+#+END_SRC
+- 最新的版本号可以看这里 lastedt version
+*** 第二步：自定义 AnchorTaskB，继承 AnchorTask，重写相应的方法
+    #+BEGIN_SRC kotlin
+class AnchorTaskB : AnchorTask() {
+    override fun isRunOnMainThread(): Boolean {
+        return false
+    }
+    override fun run() {
+        val start = System.currentTimeMillis()
+        try {
+            // 在这里进行操作，这里通过睡眠模拟耗时操作
+            Thread.sleep(300)
+        } catch (e: Exception) {
+        }
+        com.xj.anchortask.library.log.LogUtils.i(
+            TAG, "AnchorTaskOne: " + (System.currentTimeMillis() - start)
+        )
+    }
+    // 返回依赖的任务，这里是通过 class name 去找到对应的 task
+    override fun getDependsTaskList(): List<Class<out AnchorTask>>? {
+        return ArrayList<Class<out AnchorTask>>().apply {
+            add(AnchorTaskA::class.java)
+        }
+    }
+
+}
+    #+END_SRC
+- 如果任务 C 依赖任务 B，任务 A，可以这样写
+#+BEGIN_SRC kotlin
+class AnchorTaskC : AnchorTask() {
+    override fun getDependsTaskList(): List<Class<out AnchorTask>>? {
+        return ArrayList<Class<out AnchorTask>>().apply {
+            add(AnchorTaskA::class.java)
+            add(AnchorTaskB::class.java)
+        }
+    }
+
+}
+#+END_SRC
+- 最后，通过 AnchorTaskDispatcher.instance .addTask(AnchorTaskFive()) 添加任务，并调用 start() 方法启动， await() 方法表示阻塞等待所有任务执行完毕。
+#+BEGIN_SRC kotlin
+AnchorTaskDispatcher.instance.setContext(this).setLogLevel(LogUtils.LogLevel.DEBUG).setTimeOutMillion(1000L).
+            .addTask(AnchorTaskZero())
+            .addTask(AnchorTaskOne())
+            .addTask(AnchorTaskTwo())
+            .addTask(AnchorTaskThree())
+            .addTask(AnchorTaskFour())
+            .addTask(AnchorTaskFive())
+            .start()
+            .await()
+#+END_SRC
+** AnchorTaskDispatcher 介绍
+- AnchorTaskDispatcher start 方法必须在主线程调用，子线程调用会抛出异常。
+- setTimeOutMillion 方法是配合 await() 方法使用的，单独调用没有任何效果，表示 await 等待的超时时间
+- await 阻塞当前线程，等待所有任务执行完毕之后，会自动往下走
+- await() 方法必须在 start 方法之后调用
+- setThreadPoolExecutor 设置 task 执行的线程池
+** AnchorTask 介绍
+- AnchorTask 实现了 IAnchorTask 接口，主要有几个方法
+  - isRunOnMainThread(): Boolean 表示是否在主线程运行，默认值是 false
+  - priority(): Int 方法 表示线程的优先级别，默认值是 Process.THREAD_PRIORITY_FOREGROUND
+  - needWait() 表示当我们调用 AnchorTaskDispatcher await 时，是否需要等待，return true，表示需要等待改任务执行结束，AnchorTaskDispatcher await 方法才能继续往下执行。
+  - fun getDependsTaskList(): List<class&gt;?</class 方法返回前置任务依赖，默认值是返回 null.
+  - fun run() 方法，表示任务执行的时候
+#+BEGIN_SRC kotlin
+interface IAnchorTask : IAnchorCallBack {
+     // * 是否在主线程执行
+    fun isRunOnMainThread(): Boolean
+     // * 任务优先级别
+    @IntRange(
+        from = Process.THREAD_PRIORITY_FOREGROUND.toLong(),
+        to = Process.THREAD_PRIORITY_LOWEST.toLong()
+    )
+    fun priority(): Int
+    /**
+     * 调用 await 方法，是否需要等待改任务执行完成
+     * true 不需要
+     * false 需要
+     */
+    fun needWait(): Boolean
+
+    // * 当前任务的前置任务，可以用来确定顶点的入度
+    fun getDependsTaskList(): List<Class<out AnchorTask>>?
+     // * 任务被执行的时候回调
+    fun run()
+}
+AnchorTaskOne : AnchorTask() {
+    override fun isRunOnMainThread(): Boolean {
+        return false
+    }
+    override fun run() {
+        val start = System.currentTimeMillis()
+        try {
+            Thread.sleep(300)
+        } catch (e: Exception) {
+        }
+        LogUtils.i(
+            TAG, "AnchorTaskOne: " + (System.currentTimeMillis() - start)
+        )
+    }
+
+}
+#+END_SRC
+** 监听任务的回调
+   #+BEGIN_SRC kotlin
+val anchorTask = AnchorTaskTwo()
+anchorTask.addCallback(object : IAnchorCallBack {
+                           override fun onAdd() {
+                               com.xj.anchortask.LogUtils.i(TAG, "onAdd: $anchorTask")
+                           }
+                           override fun onRemove() {
+                               com.xj.anchortask.LogUtils.i(TAG, "onRemove: $anchorTask")
+                           }
+                           override fun onStart() {
+                               com.xj.anchortask.LogUtils.i(TAG, "onStart:$anchorTask ")
+                           }
+                           override fun onFinish() {
+                               com.xj.anchortask.LogUtils.i(TAG, "onFinish:$anchorTask ")
+                           }
+
+})
+   #+END_SRC
+
+* AnchorTask 是怎么实现的
+** 如何构建一个有向无环图
+- 这里我们采用 BFS 方法实现，算法思想大概是这样的
+  - 建立入度表，入度为 0 的节点先入队
+  - 当队列不为空，进行循环判断
+    - 节点出队，添加到结果 list 当中
+    - 将该节点的邻居入度减 1
+    - 若邻居课程入度为 0，加入队列
+- 若结果 list 与所有节点数量相等，则证明不存在环。否则，存在环
+** 多线程中，任务执行是随机的，那如何保证任务被依赖的任务先于任务执行呢？
+- 这里要解决的主要有三个问题
+  - 首先我们要解决一个问题，它有哪些前置任务，这个可以用 list 存储，代表它依赖的任务 list。当它所依赖的任务 list 没有执行完毕，当前任务需要等待。
+  - 当前任务执行完毕之后，所有依赖它的子任务需要感知到。我们可以用一个 map 来存储这种关系，key 是当前任务，value 是依赖于当前任务的集合（list）
+  - 多线程当中，等待和唤醒功能，有多种方式可以实现。wait、notify 机制，ReentrantLock Condition 机制，CountDownLatch 机制。这里我们选择 CountDownLatch 机制，因为 CountDownLatch 有点类似于计数器，特别适合这种场景。
+** 具体实现
+*** IAnchorTask
+- 首先，我们定义一个 IAnchorTask 接口，主要有一个方法
+  - isRunOnMainThread(): Boolean 表示是否在主线程运行，默认值是 false
+  - priority(): Int 方法 表示线程的优先级别，默认值是 Process.THREAD_PRIORITY_FOREGROUND
+  - needWait() 表示当我们调用 AnchorTaskDispatcher await 时，是否需要等待，return true，表示需要等待改任务执行结束，AnchorTaskDispatcher await 方法才能继续往下执行。
+  - fun getDependsTaskList(): List<class&gt;?</class 方法返回前置任务依赖，默认值是返回 null.
+  - fun run() 方法，表示任务执行的时候
+#+BEGIN_SRC kotlin
+interface IAnchorTask : IAnchorCallBack {
+    // * 是否在主线程执行
+    fun isRunOnMainThread(): Boolean
+    // * 任务优先级别
+    @IntRange(
+        from = Process.THREAD_PRIORITY_FOREGROUND.toLong(),
+        to = Process.THREAD_PRIORITY_LOWEST.toLong()
+    )
+    fun priority(): Int
+    /**
+     * 调用 await 方法，是否需要等待改任务执行完成
+     * true 不需要
+     * false 需要
+     */
+    fun needWait(): Boolean
+    // * 当前任务的前置任务，可以用来确定顶点的入度
+    fun getDependsTaskList(): List<Class<out AnchorTask>>?
+    // * 任务被执行的时候回调
+    fun run()
+}
+#+END_SRC
+- 它有一个实现类 AnchorTask，增加了 await 和 countdown 方法
+  - await 方法，调用它，当前任务会等待
+  - countdown() 方法，如果当前计数器值 > 0,会减一，否则，什么也不操作
+#+BEGIN_SRC kotlin
+abstract class AnchorTask : IAnchorTask {
+
+    private val countDownLatch: CountDownLatch = CountDownLatch(getListSize())
+    private fun getListSize() = getDependsTaskList()?.size ?: 0
+
+    companion object {
+        const val TAG = "AnchorTask"
+    }
+    // * self call,await
+    fun await() {
+        countDownLatch.await()
+    }
+    // * parent call, countDown
+    fun countdown() {
+        countDownLatch.countDown()
+    }
+}
+#+END_SRC
+*** 排序实现
+- 无环图的拓扑排序，这里采用的是 BFS 算法。具体的可以见 AnchorTaskUtils#getSortResult 方法，它有三个参数
+  - list 存储所有的任务
+  - taskMap: MutableMap<class, AnchorTask&gt; = HashMap()</class存储所有的任务,key 是 Class，value 是 AnchorTask
+  - taskChildMap: MutableMap<class, ArrayList<class&gt;?&gt; =<br /> HashMap()</class</class,储存当前任务的子任务， key 是当前任务的 class，value 是 AnchorTask 的 list
+- 算法思想
+  - 首先找出所有入度为 0 的队列，用 queue 变量存储
+  - 当队列不为空，进行循环判断。
+    - 从队列 pop 出，添加到结果队列
+    - 遍历当前任务的子任务，通知他们的入度减一（其实是遍历 taskChildMap），如果入度为 0，添加到队列 queue 里面
+  - 当结果队列和 list size 不相等试，证明有环
+#+BEGIN_SRC kotlin
+@JvmStatic
+fun getSortResult(
+    list: MutableList<AnchorTask>, taskMap: MutableMap<Class<out AnchorTask>, AnchorTask>,
+    taskChildMap: MutableMap<Class<out AnchorTask>, ArrayList<Class<out AnchorTask>>?>
+): MutableList<AnchorTask> {
+
+    val result = ArrayList<AnchorTask>()
+    // 入度为 0 的队列
+    val queue = ArrayDeque<AnchorTask>()
+    val taskIntegerHashMap = HashMap<Class<out AnchorTask>, Int>()
+
+    // 建立每个 task 的入度关系
+    list.forEach { anchorTask: AnchorTask ->
+                       val clz = anchorTask.javaClass
+                   if (taskIntegerHashMap.containsKey(clz)) {
+                       throw AnchorTaskException("anchorTask is repeat, anchorTask is $anchorTask, list is $list")
+                   }
+                   val size = anchorTask.getDependsTaskList()?.size ?: 0
+                   taskIntegerHashMap[clz] = size
+                   taskMap[clz] = anchorTask
+                   if (size == 0) {
+                       queue.offer(anchorTask)
+                   }
+    }
+    // 建立每个 task 的 children 关系
+    list.forEach { anchorTask: AnchorTask ->
+                       anchorTask.getDependsTaskList()?.forEach { clz: Class<out AnchorTask> ->
+                                                                      var list = taskChildMap[clz]
+                                                                  if (list == null) {
+                                                                      list = ArrayList<Class<out AnchorTask>>()
+                                                                  }
+                                                                  list.add(anchorTask.javaClass)
+                                                                  taskChildMap[clz] = list
+                       }
+    }
+    // 使用 BFS 方法获得有向无环图的拓扑排序
+    while (!queue.isEmpty()) {
+        val anchorTask = queue.pop()
+        result.add(anchorTask)
+        val clz = anchorTask.javaClass
+        taskChildMap[clz]?.forEach { // 遍历所有依赖这个顶点的顶点，移除该顶点之后，如果入度为 0，加入到改队列当中
+                                     var result = taskIntegerHashMap[it] ?: 0
+                                     result--
+                                     if (result == 0) {
+                                         queue.offer(taskMap[it])
+                                     }
+                                     taskIntegerHashMap[it] = result
+        }
+    }
+    // size 不相等，证明有环
+    if (list.size != result.size) {
+        throw AnchorTaskException("Ring appeared，Please check.list is $list, result is $result")
+    }
+    return result
+}
+#+END_SRC
+*** AnchorTaskDispatcher
+- AnchorTaskDispatcher 这个类很重要，有向无环图的拓扑排序和多线程的依赖唤醒，都是借助这个核心类完成的。
+- 它主要有几个成员变量
+#+BEGIN_SRC kotlin
+// 存储所有的任务
+private val list: MutableList<AnchorTask> = ArrayList()
+
+// 存储所有的任务,key 是 Class<out AnchorTask>，value 是 AnchorTask
+private val taskMap: MutableMap<Class<out AnchorTask>, AnchorTask> = HashMap()
+
+// 储存当前任务的子任务， key 是当前任务的 class，value 是 AnchorTask 的 list
+private val taskChildMap: MutableMap<Class<out AnchorTask>, ArrayList<Class<out AnchorTask>>?> =
+    HashMap()
+
+// 拓扑排序之后的主线程任务
+private val mainList: MutableList<AnchorTask> = ArrayList()
+
+// 拓扑排序之后的子线程任务
+private val threadList: MutableList<AnchorTask> = ArrayList()
+
+//需要等待的任务总数，用于阻塞
+private lateinit var countDownLatch: CountDownLatch
+
+//需要等待的任务总数，用于CountDownLatch
+private val needWaitCount: AtomicInteger = AtomicInteger()
+#+END_SRC
+- 它有一个比较重要的方法 setNotifyChildren(anchorTask: AnchorTask) ，有一个方法参数 AnchorTask，它的作用是通知该任务的子任务，当前任务执行完毕，入度数减一。
+#+BEGIN_SRC kotlin
+/**
+ *  通知 child countdown,当前的阻塞任务书也需要 countdown
+ */
+fun setNotifyChildren(anchorTask: AnchorTask) {
+    taskChildMap[anchorTask::class.java]?.forEach {
+        taskMap[it]?.countdown()
+    }
+    if (anchorTask.needWait()) {
+        countDownLatch.countDown()
+    }
+}
+#+END_SRC
+- 接下来看一下 start 方法
+#+BEGIN_SRC kotlin
+start(): AnchorTaskDispatcher {
+    if (Looper.myLooper() != Looper.getMainLooper()) {
+        throw AnchorTaskException("start method should be call on main thread")
+    }
+    startTime = System.currentTimeMillis()
+
+    val sortResult = AnchorTaskUtils.getSortResult(list, taskMap, taskChildMap)
+    LogUtils.i(TAG, "start: sortResult is $sortResult")
+    sortResult.forEach {
+        if (it.isRunOnMainThread()) {
+            mainList.add(it)
+        } else {
+            threadList.add(it)
+        }
+    }
+
+    countDownLatch = CountDownLatch(needWaitCount.get())
+    val threadPoolExecutor =
+        this.threadPoolExecutor ?: TaskExecutorManager.instance.cpuThreadPoolExecutor
+
+    threadList.forEach {
+        threadPoolExecutor.execute(AnchorTaskRunnable(this, anchorTask = it))
+    }
+
+    mainList.forEach {
+        AnchorTaskRunnable(this, anchorTask = it).run()
+    }
+    return this
+}
+#+END_SRC
+- 它主要干几件事
+  - 检测是否在主线程，不是抛出异常，这里为什么要检测在主线程呢？主要是构建有向无环图的过程，我们必须保证是线程安全的
+  - 获取有向无环图的拓扑排序
+  - 根据拓扑排序的排序结果，执行相应的任务。可以看到在执行任务的时候，我们使用 AnchorTaskRunnable 包裹起来
+#+BEGIN_SRC kotlin
+class AnchorTaskRunnable(
+    private val anchorTaskDispatcher: AnchorTaskDispatcher,
+    private val anchorTask: AnchorTask
+) : Runnable {
+    override fun run() {
+        Process.setThreadPriority(anchorTask.priority())
+        //  前置任务没有执行完毕的话，等待，执行完毕的话，往下走
+        anchorTask.await()
+        anchorTask.onStart()
+        // 执行任务
+        anchorTask.run()
+        anchorTask.onFinish()
+        // 通知子任务，当前任务执行完毕了，相应的计数器要减一。
+        anchorTaskDispatcher.setNotifyChildren(anchorTask)
+    }
+}
+#+END_SRC
+- AnchorTaskRunnable 有点类似于装饰者模式，多线程依赖的执行关系在这里都得到体现，只有几行代码
+  - 前置任务没有执行完毕的话，等待，执行完毕的话，往下走
+  - 执行任务
+  - 通知子任务，当前任务执行完毕了，相应的计数器（入度数）要减一。
+*** 总结
+- AnchorTask 的原理不复杂，本质是有向无环图与多线程知识的结合。
+  - 根据 BFS 构建出有向无环图，并得到它的拓扑排序
+  - 在多线程执行过程中，我们是通过任务的子任务关系和 CounDownLatch 确保先后执行关系的
+    - 前置任务没有执行完毕的话，等待，执行完毕的话，往下走
+    - 执行任务
+    - 通知子任务，当前任务执行完毕了，相应的计数器（入度数）要减一。
+
+* AnchorTask 1.0.0 版本正式发布了
+** 更新说明
+  - 之前的 0.1.0 版本 配置前置依赖任务，是通过 AnchorTask getDependsTaskList 的方式，他是通过 className 找到 AnchorTask，并且内聚在当前的 AnchorTask 中，从全局的角度看 ，这种方式不太直观，1.0.0 放弃了这种方式，参考阿里 Alpha 的方式，通过 addTask(TASK_NAME_THREE).afterTask(TASK_NAME_ZERO, TASK_NAME_ONE)
+  - 1.0.0 版本新增了 Project 类，并增加 OnProjectExecuteListener 监听
+  - 1.0.0 版本新增 OnGetMonitorRecordCallback 监听，方便统计各个任务的耗时
+** 说明
+- Android 启动优化，大家第一时间可能会想到异步加载。将耗时任务放到子线程加载，等到所有加载任务加载完成之后，再进入首页。
+- 多线程异步加载方案确实是 ok 的。但如果遇到前后依赖的关系呢。比如任务2 依赖于任务 1，这时候要怎么解决呢。
+- 假设我们有这样的任务依赖
+*** 我们要怎么使用它呢
+    #+BEGIN_SRC kotlin
+val project =
+AnchorProject.Builder().setContext(context).setLogLevel(LogUtils.LogLevel.DEBUG)
+.setAnchorTaskCreator(ApplicationAnchorTaskCreator())
+.addTask(TASK_NAME_ZERO)
+.addTask(TASK_NAME_ONE)
+.addTask(TASK_NAME_TWO)
+.addTask(TASK_NAME_THREE).afterTask(TASK_NAME_ZERO, TASK_NAME_ONE)
+.addTask(TASK_NAME_FOUR).afterTask(TASK_NAME_ONE, TASK_NAME_TWO)
+.addTask(TASK_NAME_FIVE).afterTask(TASK_NAME_THREE, TASK_NAME_FOUR)
+.build()
+
+project.start().await()
+
+ApplicationAnchorTaskCreator : IAnchorTaskCreator {
+    override fun createTask(taskName: String): AnchorTask? {
+        when (taskName) {
+            TASK_NAME_ZERO -> {
+                return AnchorTaskZero()
+            }
+
+            TASK_NAME_ONE -> {
+                return AnchorTaskOne()
+            }
+            TASK_NAME_TWO -> {
+                return AnchorTaskTwo()
+            }
+            TASK_NAME_THREE -> {
+                return AnchorTaskThree()
+            }
+            TASK_NAME_FOUR -> {
+                return AnchorTaskFour()
+            }
+            TASK_NAME_FIVE -> {
+                return AnchorTaskFive()
+            }
+        }
+        return null
+    }
+}
+    #+END_SRC
+- Demo 跑起来，可以看到预期的效果。
+
+[[./pic/anchorTask.png]]
+
+** 基本使用
+*** 第一步：在 moulde build.gradle 配置远程依赖
+    #+BEGIN_SRC groovy
+implementation 'com.xj.android:anchortask:1.0.0'
+    #+END_SRC
+- 最新的版本号可以看这里 lastedt version
+*** 第二步：自定义 AnchorTaskZero，继承 AnchorTask，并指定 taskName，注意 taskName必须是唯一的，因为我们会根据 taskName 找到相应的 AnchorTask 重写相应的方法
+    #+BEGIN_SRC kotlin
+class AnchorTaskZero() : AnchorTask(TASK_NAME_ZERO) {
+    override fun isRunOnMainThread(): Boolean {
+        return false
+    }
+    override fun run() {
+        val start = System.currentTimeMillis()
+        try {
+            Thread.sleep(300)
+        } catch (e: Exception) {
+        }
+        LogUtils.i(
+            TAG, "AnchorTaskOne: " + (System.currentTimeMillis() - start)
+        )
+    }
+}
+    #+END_SRC
+- 如果任务 三 依赖任务 二，任务 一，可以这样写
+#+BEGIN_SRC kotlin
+addTask(TASK_NAME_THREE).afterTask(TASK_NAME_ZERO, TASK_NAME_ONE)
+#+END_SRC
+*** 最后，通过 project.start() 方法启动， 如果需要阻塞等待，调用 await() 方法
+    #+BEGIN_SRC kotlin
+AnchorProject.Builder().setContext(context).setLogLevel(LogUtils.LogLevel.DEBUG)
+    .setAnchorTaskCreator(ApplicationAnchorTaskCreator())
+    .addTask(TASK_NAME_ZERO)
+    .addTask(TASK_NAME_ONE)
+    .addTask(TASK_NAME_TWO)
+    .addTask(TASK_NAME_THREE).afterTask(TASK_NAME_ZERO, TASK_NAME_ONE)
+    .addTask(TASK_NAME_FOUR).afterTask(TASK_NAME_ONE, TASK_NAME_TWO)
+    .addTask(TASK_NAME_FIVE).afterTask(TASK_NAME_THREE, TASK_NAME_FOUR)
+    .build()
+project.start().await()
+    #+END_SRC
+- 监听任务回调
+#+BEGIN_SRC kotlin
+project.addListener(object : OnProjectExecuteListener {
+                        // project 开始执行的时候
+                        override fun onProjectStart() {
+                            com.xj.anchortask.LogUtils.i(MyApplication.TAG, "onProjectStart ")
+                        }
+                        // project 执行一个 task 完成的时候
+                        override fun onTaskFinish(taskName: String) {
+                            com.xj.anchortask.LogUtils.i(
+                                MyApplication.TAG,
+                                "onTaskFinish, taskName is $taskName"
+                            )
+                        }
+                        // project 执行完成的时候
+                        override fun onProjectFinish() {
+                            com.xj.anchortask.LogUtils.i(MyApplication.TAG, "onProjectFinish ")
+                        }
+})
+#+END_SRC
+- 添加每个任务执行耗时回调
+#+BEGIN_SRC kotlin
+project.onGetMonitorRecordCallback = object : OnGetMonitorRecordCallback {
+
+    // 所有 task 执行完毕会调用这个方法，Map 存储了 task 的执行时间， key 是 taskName，value 是时间，单位毫秒
+    override fun onGetTaskExecuteRecord(result: Map<String?, Long?>?) {
+        onGetMonitorRecordCallback?.onGetTaskExecuteRecord(result)
+    }
+    // 所有 task 执行完毕会调用这个方法，costTime 执行时间
+    override fun onGetProjectExecuteTime(costTime: Long) {
+        onGetMonitorRecordCallback?.onGetProjectExecuteTime(costTime)
+    }
+}
+#+END_SRC
+** AnchorProject 介绍
+- AnchorTaskDispatcher start 方法必须在主线程调用，子线程调用会抛出异常。
+- await 阻塞当前线程，等待所有任务执行完毕之后，会自动往下走，await 方法携带一个参数，timeOutMillion 表示超时等待的时间
+- await() 方法必须在 start 方法之后调用
+- 添加任务是通过 AnchorProject.Builder().addTask 添加的，典型的构造模式
+- 设置执行的线程池，可以通过 AnchorProject.Builder().setThreadPoolExecutor(TaskExecutorManager.instance.cpuThreadPoolExecutor)
+** AnchorTask 介绍
+- AnchorTask 实现了 IAnchorTask 接口，主要有几个方法
+  - isRunOnMainThread(): Boolean表示是否在主线程运行，默认值是 false
+  - priority(): Int 方法 表示线程的优先级别，默认值是 Process.THREAD_PRIORITY_FOREGROUND
+  - needWait() 表示当我们调用 AnchorTaskDispatcher await 时，是否需要等待，return true，表示需要等待改任务执行结束，AnchorTaskDispatcher await 方法才能继续往下执行。
+  - fun run() 方法，表示任务执行的时候
+#+BEGIN_SRC kotlin
+interface IAnchorTask : IAnchorCallBack {
+    // * 是否在主线程执行
+    fun isRunOnMainThread(): Boolean
+    // * 任务优先级别
+    @IntRange(
+        from = Process.THREAD_PRIORITY_FOREGROUND.toLong(),
+        to = Process.THREAD_PRIORITY_LOWEST.toLong()
+    )
+    fun priority(): Int
+    /**
+     * 调用 await 方法，是否需要等待改任务执行完成
+     * true 不需要
+     * false 需要
+     */
+    fun needWait(): Boolean
+    // * 任务被执行的时候回调
+    fun run()
+}
+class AnchorTaskOne : AnchorTask() {
+    override fun isRunOnMainThread(): Boolean {
+        return false
+    }
+    override fun run() {
+        val start = System.currentTimeMillis()
+        try {
+            Thread.sleep(300)
+        } catch (e: Exception) {
+        }
+        LogUtils.i(
+            TAG, "AnchorTaskOne: " + (System.currentTimeMillis() - start)
+        )
+    }
+}
+#+END_SRC
+** 监听任务的回调
+   #+BEGIN_SRC kotlin
+val anchorTask = AnchorTaskTwo()
+anchorTask.addCallback(object : IAnchorCallBack {
+                           override fun onAdd() {
+                               com.xj.anchortask.LogUtils.i(TAG, "onAdd: $anchorTask")
+                           }
+                           override fun onStart() {
+                               com.xj.anchortask.LogUtils.i(TAG, "onStart:$anchorTask ")
+                           }
+                           override fun onFinish() {
+                               com.xj.anchortask.LogUtils.i(TAG, "onFinish:$anchorTask ")
+                           }
+})
+   #+END_SRC
+** 总结
+- AnchorTask 的原理不复杂，本质是有向无环图与多线程知识的结合。
+  - 根据 BFS 构建出有向无环图，并得到它的拓扑排序
+  - 在多线程执行过程中，我们是通过任务的子任务关系和 CounDownLatch 确保先后执行关系的
+    - 前置任务没有执行完毕的话，等待，执行完毕的话，往下走
+    - 执行任务
+    - 通知子任务，当前任务执行完毕了，相应的计数器（入度数）要减一。
+
 
 * Dagger Dagger2 Hilt Koin: 自动依赖注入框架
 - 有一些库通过自动执行创建和提供依赖项的过程解决此问题，实现原理有如下几种方案：
@@ -2634,3 +3206,5 @@ public final class ViewModelFactoryModules {
 *** 总结
 - Hilt在编译期改写Activity或者Fragment的父类，获取了自定义的ViewModel.Factory的方法，从而hook了ViewModle的创建过程，对ViewModel进行注入。整个实现过程借助@InstallIn以及@AndroidEntryPoint的注解，本身就是一个Hilt的最佳实践，值得学习和借鉴
 
+
+* 

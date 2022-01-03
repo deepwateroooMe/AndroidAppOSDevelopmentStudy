@@ -862,7 +862,8 @@ sub thread return value: 20
 |------------------+----------+--------------------+--------------------------------------------+--------------------------------------------|
 - 通过上面的对比发现，一般在项目中，我们使用Runnable接或者Callable接口来实现多线程。
 *** 5.线程的生命周期
-- 线程并不是创建过之后就开始执行的，也不是一直处于执行状态，一个线程的生命周期一个又五个：新建、就绪、运行、阻塞、死亡。<br>2.线程的这五种状态的原理参照《计算机组成原理2》多线程部分
+- 1.线程并不是创建过之后就开始执行的，也不是一直处于执行状态，一个线程的生命周期一个又五个：新建、就绪、运行、阻塞、死亡。
+- 2.线程的这五种状态的原理参照《计算机组成原理2》多线程部分
 *** 6.控制线程
 **** 1.join线程
 - 1.Thread类中的成员方法，让调用join()方法的线程处于等待状态，直到子线程执行结束<br>2.join()方法通常由使用线程的程序调用，用于将一个线程拆分成若干小的线程执行，执行结束最后由主线程进行进一步的操作
@@ -1079,3 +1080,16 @@ Adv 11
 - 1.一般线程具有优先级，更高优先级的线程比优先级低的线程能获得更多的执行机会
 - 2.每个线程默认的优先级和创建他们的父线程的优先级相同。 
 - 3.Thread类提供了setPriorit(int newPriority)、getPriority() 方法来设置和获取线程的优先级4.也可以使用Thread类的3个静态常量来设置线程的优先级
+
+* 两种线程池：THREAD_POOL_EXECUTOR和SERIAL_EXECUTOR
+- 线程池是管理异步任务AsyncTask所创建的队列，系统提供了两个线程池：THREAD_POOL_EXECUTOR 和 SERIAL_EXECUTOR
+  - 当一个AsyncTask执行execute()方法时，默认被加入SERIAL_EXECUTOR中，等待执行。SERIAL_EXECUTOR中的任务按照“先进先执行，依次执行”的原则，后续任务要等先前的任务执行完毕后才会执行，顺次执行。
+  - 而另一种线程池THREAD_POOL_EXECUTOR则不同，被加入线程池的任务会立刻执行，也就是所有任务并发执行。但是有个前提，如果THREAD_POOL_EXECUTOR中一起执行的任务超过了5个，那么新加入的任务会等这五个中有线程执行完毕了再执行。(这里再查验证一下，与他给出的代码不符合)
+- 使用AsyncTask.executeOnExecutor()来指定使用哪个线程池来管理AsyncTask
+#+BEGIN_SRC java
+DownloadTask task = new DownloadTask(m_progressBar[m_prgBarIndex++], MainActivity.this);
+m_taskList.add(task);
+task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, "westworld");
+#+END_SRC 
+
+
