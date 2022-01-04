@@ -2563,6 +2563,395 @@ anchorTask.addCallback(object : IAnchorCallBack {
     - 执行任务
     - 通知子任务，当前任务执行完毕了，相应的计数器（入度数）要减一。
 
+* Android - 一种新奇的冷启动速度优化思路(Fragment极度懒加载 + Layout子线程预加载)
+** 最常见的优化方案
+- 数据懒加载，比如Fragment用户不可见时不进行数据的获取
+- 优化布局层级，减少首次inflate layout的耗时
+- 将绝大部分sdk的初始化放线程池中运行
+- 能用ViewStub的就用ViewStub，按需加载layout
+- 一定要尽量避免启动过程中，出现的主线程去unpack一些全局配置的数据
+- 不仅仅是三方库可以放子线程进行，一些时效性要求没那么高的逻辑都可以放子线程
+
+** 项目结构
+- 在我们的Android项目中，应用过了闪屏之后会进入到主屏 - MainActivity，这个地方我吐槽很多次了，广告闪屏作为launcher真的不是特别靠谱，最好的方式应该是从MainActivity里面来启动AdActivity，甚至是不用Activity，采用一个全屏的AdView都可以。
+- 先简单介绍一下我们项目中MainActivity涉及到的结构：
+  
+[[./pic/tabs.png]]
+
+- 当App冷启动的时候，肉眼可见的要初始化的东西太多了，本身Fragment就是一个相对重的东西。比Activity要轻量很多，但是比View又要重
+- 我们首页大概是 4-5个tab，每个tab都是一个Fragment，且第一个tab内嵌了4个Fragment，我这一次的优化主要将目标瞄准了首页的 tab1 以及tab1内嵌的四个tab
+** 极致的懒加载
+*** 极致的懒加载
+- 平时见到的懒加载：
+  - 就是初始化fragment的时候，会连同我们写的网络请求一起执行，这样非常消耗性能，最理想的方式是，只有用户点开或滑动到当前fragment时，才进行请求网络的操作。因此，我们就产生了懒加载这样一个说法。
+- 由于我们首屏4个子Tab都是继承自一个基类BaseLoadListFragment，数据加载的逻辑非常的死，按照上述的改法，影响面太大。后续可能会徒增烦恼
+*** 懒加载方案
+  - 首屏加载时，只往ViewPager中塞入默认要展示的tab，剩余的tab用空的占位Fragment代替
+  - 当用户滑动到其他tab时，比如滑动到好友动态tab，就用FriendFragment把当前的EmptyPlaceholderFragment替换掉，然后adapter.notifyDataSetChanged
+  - 当四个Tab全部替换为数据tab时，清除掉EmptyFragment的引用，释放内存
+- 说到这里，又不得不提一个老生常谈的一个坑，因为我们的首页是用的ViewPager + FragmentPagerAdapter来进行实现的。因此就出现了一个坑：
+  - ViewPager + FragmentPagerAdapter组合使用，调用notifyDataSetChanged()方法无效，无法刷新Fragment列表
+- 下面我会对这个问题进行一下详细的介绍
+*** FragmentPagerAdapter与FragmentStatePagerAdapter
+- 当我们要使用ViewPager来加载Fragment时，官方为我们提供了这两种Adapter，都是继承自PagerAdapter。
+- 区别，上官方描述：
+- FragmentPagerAdapter
+  - This version of the pager is best for use when there are a handful of typically more static fragments to be paged through, such as a set of tabs. The fragment of each page the user visits will be kept in memory, though its view hierarchy may be destroyed when not visible. This can result in using a significant amount of memory since fragment instances can hold on to an arbitrary amount of state. For larger sets of pages, consider FragmentStatePagerAdapter.
+- FragmentStatePagerAdapter
+  - This version of the pager is more useful when there are a large number of pages, working more like a list view. When pages are not visible to the user, their entire fragment may be destroyed, only keeping the saved state of that fragment. This allows the pager to hold on to much less memory associated with each visited page as compared toFragmentPagerAdapter at the cost of potentially more overhead when switching between pages
+- 总结：
+  - 使用FragmentStatePagerAdapter时，如果tab对于用户不可见了，Fragment就会被销毁，FragmentPagerAdapter则不会，使用FragmentPagerAdapter时，所有的tab上的Fragment都会hold在内存里
+  - 当tab非常多时，推荐使用FragmentStatePagerAdapter
+  - 当tab不多，且固定时，推荐用FragmentPagerAdapter
+- 我们项目中就是使用的ViewPager+FragmentPagerAdapter。
+*** FragmentPagerAdapter的刷新问题
+- 正常情况，我们使用adapter时，想要刷新数据只需要：
+  - 更新dataSet
+  - 调用notifyDataSetChanged()
+- 但是，这个在这个Adapter中是不适用的。因为（这一步没耐心的可以直接看后面的总结）：
+  - 默认的PagerAdapter的destoryItem只会把Fragment detach掉，而不会remove
+  - 当再次调用instantiateItem的时候，之前detach掉的Fragment，又会从mFragmentManager中取出，又可以attach了
+- _这里关于 instantiateItem()方法以及dataSetChanged()以及getItemPosition()源码我省略掉了，改天需要进阶的时候再搜一遍自己review一遍_
+- 简单总结一下：
+  - 1，ViewPager的dataSetChanged()中会去用adapter.getItemPosition来判断是否要移除当前Item（position = POSITION_NONE时remove）
+  - 2，PagerAdapter的getItemPosition默认实现为POSITION_UNCHANGED
+- 上述两点导致ViewPager构建完成Adapter之后，不会有机会调用到Adapter的instantiateItem了。
+- 再者，即使重写了getItemPosition方法，每次返回POSITION_NONE，还是不会替换掉Fragment，这是因为instantiateItem方法中，会根据getItemId()去从FragmetnManager中找到已经创建好的Fragment返回回去，而getItemId()的默认实现是return position。
+*** FragmentPagerAdapter刷新的正确姿势
+- 重写getItemId()和getItemPosition()
+#+BEGIN_SRC java
+class TabsAdapter extends FragmentPagerAdapter {
+    private ArrayList<Fragment> mFragmentList;
+    private ArrayList<String> mPageTitleList;
+    private int mCount;
+    TabsAdapter(FragmentManager fm, ArrayList<Fragment> fragmentList, ArrayList<String> pageTitleList) {
+        super(fm);
+        mFragmentList = fragmentList;
+        mCount = fragmentList.size();
+        mPageTitleList = pageTitleList;
+    }
+    @Override public Fragment getItem(int position) {
+        return mFragmentList.get(position);
+    }
+    @Override public CharSequence getPageTitle(int position) {
+        return mPageTitleList.get(position);
+    }
+    @Override public int getCount() {
+        return mCount;
+    }
+    @Override public long getItemId(int position) {
+        //这个地方的重写非常关键，super中是返回position，
+        //如果不重写，还是会继续找到FragmentManager中缓存的Fragment
+        return mFragmentList.get(position).hashCode();
+    }
+    @Override public int getItemPosition(@NonNull Object object) {
+        //不在数据集合里面的话，return POSITION_NONE，进行item的重建
+        int index = mFragmentList.indexOf(object);
+        if (index == -1) {
+            return POSITION_NONE;
+        } else {
+            return mFragmentList.indexOf(object);
+        }
+    }
+    void refreshFragments(ArrayList<Fragment> fragmentList) {
+        mFragmentList = fragmentList;
+        notifyDataSetChanged();
+    }
+}#+END_SRC 
+- 其他的相关代码：
+**** （1）实现ViewPager.OnPageChangeListener，来监控ViewPager的滑动状态，才可以在滑动到下一个tab的时候进行Fragment替换的操作，其中mDefaultTab是我们通过接口返回的当前启动展示的tab序号
+     #+BEGIN_SRC java
+  @Override
+    public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
+    }
+    @Override
+    public void onPageSelected(int position) {
+        mCurrentSelectedTab = position;
+    }
+    @Override
+    public void onPageScrollStateChanged(int state) {
+        if (!hasReplacedAllEmptyFragments && mCurrentSelectedTab != mDefaultTab && state == 0) {
+            //当满足： 1. 没有全部替换完 2. 当前tab不是初始化的默认tab（默认tab不会用空的Fragment去替换） 3. 滑动结束了，即state = 0
+            replaceEmptyFragmentsIfNeed(mCurrentSelectedTab);
+        }
+    }
+     #+END_SRC   
+- 备注：
+  - onPageScrollStateChanged接滑动的状态值。一共有三个取值：
+    - 0：什么都没做
+    - 1：开始滑动
+    - 2：滑动结束
+  - 一次引起页面切换的滑动，state的顺序分别是： 1  ->  2  ->  0
+**** （2）进行Fragment的替换，这里因为我们的tab数量是可能根据全局config信息而改变的，所以这个地方写的稍微纠结了一些。
+     #+BEGIN_SRC java
+    /**
+     * 如果全部替换完了，直接return
+     * 替换过程：
+     * 1. 找到当前空的tab在mEmptyFragmentList 中的实际下标
+     *
+     * @param tabId 要替换的tab的tabId - （当前空的Fragment在adapter数据列表mFragmentList的下标）
+     */
+    private void replaceEmptyFragmentsIfNeed(int tabId) {
+        if (hasReplacedAllEmptyFragments) {
+            return;
+        }
+        int tabRealIndex = mEmptyFragmentList.indexOf(mFragmentList.get(tabId)); //找到当前的空Fragment在 mEmptyFragmentList 是第几个
+        if (tabRealIndex > -1) {
+            if (Collections.replaceAll(mFragmentList, mEmptyFragmentList.get(tabRealIndex), mDataFragmentList.get(tabRealIndex))) {
+                mTabsAdapter.refreshFragments(mFragmentList); //将mFragmentList中的相应empty fragment替换完成之后刷新数据
+                boolean hasAllReplaced = true;
+                for (Fragment fragment : mFragmentList) {
+                    if (fragment instanceof EmptyPlaceHolderFragment) {
+                        hasAllReplaced = false;
+                        break;
+                    }
+                }
+                if (hasAllReplaced) {
+                    mEmptyFragmentList.clear(); //全部替换完成的话，释放引用
+                }
+                hasReplacedAllEmptyFragments = hasAllReplaced;
+            }
+        }
+    }
+     #+END_SRC 
+
+** 神奇的的预加载（预加载View，而不是data）
+- Android在启动过程中可能涉及到的一些View的预加载方案：
+  - WebView提前创建好，因为webview创建的耗时较长，如果首屏有h5的页面，可以提前创建好。
+  - Application的onCreate时，就可以开始在子线程中进行后面要用到的Layout的inflate工作了，最先想到的应该是官方提供的AsyncLayoutInflater
+  - 填充View的数据的预加载，今天的内容不涉及这一项
+*** 需要预加载什么
+- 直接看图，这个是首页四个子Tab Fragment的基类的layout，因为某些东西设计的不合理，导致层级是非常的深，直接导致了首页上的三个tab加上FeedMainFragment自身，光将这个View inflate出来的时间就非常长。因此我们考虑在子线程中提前inflate layout
+*** 修改AsyncLayoutInflater
+- 官方提供了一个类，可以来进行异步的inflate，但是有两个缺点：
+- 每次都要现场new一个出来
+- 异步加载的view只能通过callback回调才能获得（死穴）
+- 因此决定自己封装一个AsyncInflateManager，内部使用线程池，且对于inflate完成的View有一套缓存机制。而其中最核心的LayoutInflater则直接copy出来就好。
+- 先看AsyncInflateManager的实现，这里我直接将代码copy进来，而不是截图了，这样你们如果想用其中部分东西，可以直接copy：
+#+BEGIN_SRC java
+/**
+ * 用来提供子线程inflate view的功能，避免某个view层级太深太复杂，主线程inflate会耗时很长，
+ * 实就是对 AsyncLayoutInflater进行了抽取和封装
+ */
+public class AsyncInflateManager {
+    private static AsyncInflateManager sInstance;
+
+    private ConcurrentHashMap<String, AsyncInflateItem> mInflateMap; //保存inflateKey以及InflateItem，里面包含所有要进行inflate的任务
+    private ConcurrentHashMap<String, CountDownLatch> mInflateLatchMap;
+    private ExecutorService mThreadPool; //用来进行inflate工作的线程池
+
+    private AsyncInflateManager() {
+        mThreadPool = new ThreadPoolExecutor(4, 4, 0, TimeUnit.MILLISECONDS, new LinkedBlockingDeque<Runnable>());
+        mInflateMap = new ConcurrentHashMap<>();
+        mInflateLatchMap = new ConcurrentHashMap<>();
+    }
+    public static AsyncInflateManager getInstance() {
+        // 单例
+    }
+    /**
+     * 用来获得异步inflate出来的view
+     * @param context
+     * @param layoutResId 需要拿的layoutId
+     * @param parent      container
+     * @param inflateKey  每一个View会对应一个inflateKey，因为可能许多地方用的同一个 layout，但是需要inflate多个，用InflateKey进行区分
+     * @param inflater    外部传进来的inflater，外面如果有inflater，传进来，用来进行可能的SyncInflate，
+     * @return 最后inflate出来的view
+     */
+    @UiThread
+        @NonNull
+        public View getInflatedView(Context context, int layoutResId, @Nullable ViewGroup parent, String inflateKey, @NonNull LayoutInflater inflater) {
+        if (!TextUtils.isEmpty(inflateKey) && mInflateMap.containsKey(inflateKey)) {
+            AsyncInflateItem item = mInflateMap.get(inflateKey);
+            CountDownLatch latch = mInflateLatchMap.get(inflateKey);
+            if (item != null) {
+                View resultView = item.inflatedView;
+                if (resultView != null) { // 拿到了view直接返回
+                    removeInflateKey(inflateKey);
+                    replaceContextForView(resultView, context);
+                    return resultView;
+                }
+                if (item.isInflating() && latch != null) { // 没拿到view，但是在inflate中，等待返回
+                    try {
+                        latch.wait();
+                    } catch (InterruptedException e) {
+                        Log.e(TAG, e.getMessage(), e);
+                    }
+                    removeInflateKey(inflateKey);
+                    if (resultView != null) {
+                        replaceContextForView(resultView, context);
+                        return resultView;
+                    }
+                }
+                item.setCancelled(true); // 如果还没开始inflate，则设置为false，UI线程进行inflate
+            }
+        }
+        // 拿异步inflate的View失败，UI线程inflate
+        return inflater.inflate(layoutResId, parent, false);
+    }
+    /**
+     * inflater初始化时是传进来的application，inflate出来的view的context没法用来startActivity，
+     * 因此用MutableContextWrapper进行包装，后续进行替换
+     */
+    private void replaceContextForView(View inflatedView, Context context) {
+        if (inflatedView == null || context == null) return;
+        Context cxt = inflatedView.getContext();
+        if (cxt instanceof MutableContextWrapper) 
+            ((MutableContextWrapper) cxt).setBaseContext(context);
+    }
+    @UiThread
+        private void asyncInflate(Context context, AsyncInflateItem item) {
+        if (item == null || item.layoutResId == 0 || mInflateMap.containsKey(item.inflateKey) || item.isCancelled() || item.isInflating()) 
+            return;
+        onAsyncInflateReady(item);
+        inflateWithThreadPool(context, item);
+    }
+
+    private void onAsyncInflateReady(AsyncInflateItem item) { }
+    private void onAsyncInflateStart(AsyncInflateItem item) { }
+    private void onAsyncInflateEnd(AsyncInflateItem item, boolean success) {
+        item.setInflating(false);
+        CountDownLatch latch = mInflateLatchMap.get(item.inflateKey);
+        if (latch != null)  // 释放锁
+            latch.countDown();
+    }
+    private void removeInflateKey(String inflateKey) { }
+    private void inflateWithThreadPool(Context context, AsyncInflateItem item) {
+        mThreadPool.execute(new Runnable() {
+                @Override
+                public void run() {
+                    if (!item.isInflating() && !item.isCancelled()) {
+                        try {
+                            onAsyncInflateStart(item);
+                            item.inflatedView = new BasicInflater(context).inflate(item.layoutResId, item.parent, false);
+                            onAsyncInflateEnd(item, true);
+                        } catch (RuntimeException e) {
+                            Log.e(TAG, "Failed to inflate resource in the background! Retrying on the UI thread", e);
+                            onAsyncInflateEnd(item, false);
+                        }
+                    }
+                }
+            });
+    }
+    /**
+     * copy from AsyncLayoutInflater - actual inflater
+     */
+    private static class BasicInflater extends LayoutInflater {
+        private static final String[] sClassPrefixList = new String[]{"android.widget.", "android.webkit.", "android.app."};
+        BasicInflater(Context context) {
+            super(context);
+        }
+        public LayoutInflater cloneInContext(Context newContext) {
+            return new BasicInflater(newContext);
+        }
+        protected View onCreateView(String name, AttributeSet attrs) throws ClassNotFoundException {
+            for (String prefix : sClassPrefixList) {
+                try {
+                    View view = this.createView(name, prefix, attrs);
+                    if (view != null) {
+                        return view;
+                    }
+                } catch (ClassNotFoundException ignored) {
+                }
+            }
+            return super.onCreateView(name, attrs);
+        }
+    }
+}
+#+END_SRC 
+- 这里我用一个AsyncInflateItem来管理一次要inflate的一个单位，
+#+BEGIN_SRC java
+public class AsyncInflateItem {
+    String inflateKey;
+    int layoutResId;
+    ViewGroup parent;
+    OnInflateFinishedCallback callback;
+    View inflatedView;
+    private boolean cancelled;
+    private boolean inflating;
+    //还有一些set get方法
+}
+#+END_SRC 
+- 以及最后inflate的回调callback：
+#+BEGIN_SRC java
+public interface OnInflateFinishedCallback {
+    void onInflateFinished(AsyncInflateItem result);
+}
+#+END_SRC 
+- 经过这样的封装，外面可以直接在Application的onCreate中，开始异步的inflate view的任务。调用如下：
+#+BEGIN_SRC java
+AsyncInflateUtil.startTask();
+public class AsyncInflateUtil {
+    public static void startTask() {
+        Context context = new MutableContextWrapper(CommonContext.getApplication());
+        AsyncInflateManager.getInstance().asyncInflateViews(context,
+                new AsyncInflateItem(InflateKey.TAB_1_CONTAINER_FRAGMENT, R.layout.fragment_main),
+                new AsyncInflateItem(InflateKey.SUB_TAB_1_FRAGMENT, R.layout.fragment_load_list),
+                new AsyncInflateItem(InflateKey.SUB_TAB_2_FRAGMENT, R.layout.fragment_load_list),
+                new AsyncInflateItem(InflateKey.SUB_TAB_3_FRAGMENT, R.layout.fragment_load_list),
+                new AsyncInflateItem(InflateKey.SUB_TAB_4_FRAGMENT, R.layout.fragment_load_list));
+    }
+    public class InflateKey {
+        public static final String TAB_1_CONTAINER_FRAGMENT = "tab1";
+        public static final String SUB_TAB_1_FRAGMENT = "sub1";
+        public static final String SUB_TAB_2_FRAGMENT = "sub2";
+        public static final String SUB_TAB_3_FRAGMENT = "sub3";
+        public static final String SUB_TAB_4_FRAGMENT = "sub4";
+    }
+}
+#+END_SRC 
+- 注意：这里会有一个坑。就是在Application的onCreate中，能拿到的Context只有Application，这样inflate的View，View持有的Context就是Application，这会导致一个问题。
+- 如果用View.getContext()这个context去进行Activity的跳转就会。。抛异常
+- Calling startActivity() from outside of an Activity context requires the FLAG_ACTIVITY_NEW_TASK flag. Is this really what you want?
+- 而如果想要传入Activity来创建LayoutInflater，时机又太晚。众所周知，Context是一个抽象类，实现它的包装类就是ContextWrapper，而Activity、Appcation等都是ContextWrapper的子类，然而，ContextWrapper还有一个神奇的子类，
+#+BEGIN_SRC java
+ package android.content;
+/**
+ * Special version of {@link ContextWrapper} that allows the base context to
+ * be modified after it is initially set.
+ */
+public class MutableContextWrapper extends ContextWrapper {
+    public MutableContextWrapper(Context base) {
+        super(base);
+    }
+    
+    /**
+     * Change the base context for this ContextWrapper. All calls will then be
+     * delegated to the base context.  Unlike ContextWrapper, the base context
+     * can be changed even after one is already set.
+     * 
+     * @param base The new base context for this wrapper.
+     */
+    public void setBaseContext(Context base) {
+        mBase = base;
+    }
+}
+#+END_SRC 
+*** 装饰器模式
+- 可以看到Android上Context的设计采用了装饰器模式，装饰器模式极大程度的提高了灵活性。这个例子对我最大的感受就是，当官方没有提供MutableContextWrapper这个类时，其实我们自己也完全可以通过同样的方式去进行实现。思维一定要灵活~
+** 总结
+- 常见的启动速度优化的方案有：
+  - 数据懒加载，比如Fragment用户不可见时不进行数据的获取
+  - 优化布局层级，减少首次inflate layout的耗时
+  - 将绝大部分sdk的初始化放线程池中运行
+  - 能用ViewStub的就用ViewStub，按需加载layout
+  - 一定要尽量避免启动过程中，出现的主线程去unpack一些全局配置的数据
+  - 不仅仅是三方库可以放子线程进行，一些时效性要求没那么高的逻辑都可以放子线程
+- 这些都可以在网上找到大量的文章以及各个大佬的实现方案。
+- 首先，优化的大方向肯定先定好：
+  - 懒加载
+  - 预加载
+- 懒加载：
+  - 首屏加载时，只往ViewPager中塞入默认要展示的tab，剩余的tab用空的占位Fragment代替
+  - 当用户滑动到其他tab时，比如滑动到好友动态tab，就用FriendFragment把当前的EmptyPlaceholderFragment替换掉，然后adapter.notifyDataSetChanged
+  - 当四个Tab全部替换为数据tab时，清除掉EmptyFragment的引用，释放内存
+- 预加载：
+  - Application onCreate方法中，针对后续所有的Fragment，在子线程中将Layout先给inflate出来
+  - 针对inflate完成的View加入一套缓存的存取机制，以及等待机制
+    - 如果正在inflate，则进行阻塞等待
+    - 如果已经inflate完成了，取出view，并释放缓存对于View的引用
+    - 如果还没有开始Inflate，则在UI线程直接进行inflate
+- 从ContextWrapper、MutableContextWrapper类的设计中学到了  ↓
+- 写代码的时候，首先要进行设计，选用最合适的设计模式，这样后续赚到的远远大于写一个文档、想一个设计所耗费的时间和脑力成本
 
 * Dagger Dagger2 Hilt Koin: 自动依赖注入框架
 - 有一些库通过自动执行创建和提供依赖项的过程解决此问题，实现原理有如下几种方案：
@@ -3206,5 +3595,3 @@ public final class ViewModelFactoryModules {
 *** 总结
 - Hilt在编译期改写Activity或者Fragment的父类，获取了自定义的ViewModel.Factory的方法，从而hook了ViewModle的创建过程，对ViewModel进行注入。整个实现过程借助@InstallIn以及@AndroidEntryPoint的注解，本身就是一个Hilt的最佳实践，值得学习和借鉴
 
-
-* 

@@ -692,13 +692,11 @@ FragAdapter adapter = new FragAdapter(getSupportFragmentManager(), fragments);
       //  taken care of restoring the fragments we previously had instantiated.
       if (mFragments.size() > position) {
           Fragment f = mFragments.get(position);// fragment被释放后这里得到的null值
-          if (f != null) {
+          if (f != null) 
               return f;
-          }
       }
-      if (mCurTransaction == null) {
+      if (mCurTransaction == null) 
           mCurTransaction = mFragmentManager.beginTransaction();
-      }
       Fragment fragment = getItem(position);// fragment被释放后或者是初次进入页面拿到新的Fragment实例
       if (DEBUG) Log.v(TAG, "Adding item #" + position + ": f=" + fragment);
       if (mSavedState.size() > position) {
@@ -707,9 +705,8 @@ FragAdapter adapter = new FragAdapter(getSupportFragmentManager(), fragments);
               fragment.setInitialSavedState(fss);
           }
       }
-      while (mFragments.size() <= position) {
+      while (mFragments.size() <= position) 
           mFragments.add(null);
-      }
       fragment.setMenuVisibility(false);
       fragment.setUserVisibleHint(false);
       mFragments.set(position, fragment);
@@ -766,6 +763,18 @@ FragAdapter adapter = new FragAdapter(getSupportFragmentManager(), fragments);
   }
 #+END_SRC 
 - 从源码中我们可以看出FragmentStatePagerAdapter中fragment实例在destroyItem的时候被真正释放，所以FragmentStatePagerAdapter省内存。FragmentPagerAdapter中的fragment实例在destroyItem的时候并没有真正释放fragment对象只是detach，所以FragmentPagerAdapter消耗更多的内存，带来的好处就是效率更高一些。所以得出这样的结论：FragmentPagerAdapter适用于页面比较少的情况，FragmentStatePagerAdapter适用于页面比较多的情况，因此不同的场合选择合适的适配器才是正确的做法。
+- FragmentPagerAdapter适合在较少Fragment滑动切换的界面使用的，划过的fragment会保存在内存中，尽管已经划过。而FragmentStatePagerAdapter和ListView有点类似，只会保存当前界面，以及下一个界面和上一个界面（如果有），最多保存3个，其他会被销毁掉。
+  - 最后要注意的是FragmentStatePagerAdapter可能不经意间会造成内存未正常回收，严重导致内存溢出，比如图片资源没有释放，资源引用问题。（之前在网上看到过EditText由于保存焦点导致Fragment未被释放而导致OOM，设置edtText.saveEanble(false)就可以解决此问题)。最后PagerAdapter都只是数据集，数据集的改变只能发生在主线程里并且以必须调用notifyDataSetChanged() 来通知完成更新。
+*** 关于使用中发现，在删除或者修改数据的时候，PagerAdapter无法像BaseAdapter那样仅通过notifyDataSetChanged方法通知刷新View。
+- 通常情况下调用notifyDataSetChanged方法会让ViewPager通过Adapter的getItemPosition方法查询一遍所有child view，如果所有child view位置均为POSITION_NONE，表示所有的child view都不存在，ViewPager会调用destroyItem方法销毁，并且重新生成，从而加大系统开销，并在一些复杂情况下导致逻辑问题。特别是对于只是希望更新child view内容的时候，但造成了完全不必要的开销，
+- 列表内容如果是针对于child view比较简单的情况（例如仅有TextView、ImageView等，没有ListView等展示数据的情况），可以重写PagerAdapter的方法getItemPosition
+#+BEGIN_SRC java
+@Override    
+public int getItemPosition(Object object) {    
+    return POSITION_NONE;    
+}
+#+END_SRC 
+- 但复杂的情况则需要根据自己的需求来实现notifyDataSetChanged的功能，比如，在仅需要对某个View内容进行更新时，在instantiateItem()时，用View.setTag方法加入标志，在需要更新信息时，通过findViewWithTag的方法找到对应的View进行局部更新。
 ** ViewPager 动画
 -    本节介绍ViewPager动画，可以分为两类，第一类是针对于ViewPager的界面滑动动画(这个是PageTransformer的真正用途)，分析并比较了AndroidImageSlider和JazzyViewPager两种实现，第二类是对ViewPager中的内容进行动画处理，这个是这个是PageTransformer的巧妙应用，处理好了可以达到很棒的交互效果，示例是Yahoo天气的视差效果。
 *** AndroidImageSlider
@@ -1355,3 +1364,20 @@ mViewPager.setPageMargin(20);
 // 设置缓存的页面数量
 mViewPager.setOffscreenPageLimit(4);
     #+END_SRC 
+*** PagerTabStrip与PagerTitleStrip添加标题栏
+- 在Android.support.v4包中的两个控件PagerTabStrip与PagerTitleStrip，他们都是用来实现标题栏的，但各自有些不同，在这篇文章中，我们就讲讲它们各自都能实现怎样的功能，又有哪些异同点
+- PagerTitleStrip的官方解释
+  - PagerTitleStrip是ViewPager的一个关于当前页面、上一个页面和下一个页面的一个非交互的指示器。它经常作为ViewPager控件的一个子控件被被添加在XML布局文件中。在你的布局文件中，将它作为子控件添加在ViewPager中。而且要将它的
+  #+BEGIN_SRC xml
+  android:layout_gravity
+  #+END_SRC
+  - 属性设置为TOP或BOTTOM来将它显示在ViewPager的顶部或底部。每个页面的标题是通过适配器的getPageTitle(int)函数提供给ViewPager的
+- PagerTabStrip
+  - PagerTabStrip的官方解释
+    - PagerTabStrip是ViewPager的一个关于当前页面、上一个页面和下一个页面的一个可交互的指示器。它经常作为ViewPager控件的一个子控件被被添加在XML布局文件中。在你的布局文件中，将它作为子控件添加在ViewPager中。而且要将它的
+    - android:layout_gravity
+    - 属性设置为TOP或BOTTOM来将它显示在ViewPager的顶部或底部。每个页面的标题是通过适配器的getPageTitle(int)函数提供给ViewPager的
+    - PagerTabStrip与PagerTitleStrip的不同
+- 除了第一句以外的其它句与PagerTitleStrip的解释完全相同。只是PagerTabStrip是可交互的，而PagerTitleStrip是不可交互的区别。
+  - 1、PagerTabStrip在当前页面下，会有一个下划线条来提示当前页面的Tab是哪个。
+  - 2、PagerTabStrip的Tab是可以点击的，当用户点击某一个Tab时，当前页面就会跳转到这个页面，而PagerTitleStrip则没这个功能。
