@@ -1,7 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{\PYGZlt{}manifest} \PYG{err}{...} \PYG{n+nt}{\PYGZgt{}}
-  \PYG{n+nt}{\PYGZlt{}application} \PYG{err}{...} \PYG{n+nt}{\PYGZgt{}}
-      \PYG{n+nt}{\PYGZlt{}service} \PYG{n+na}{android:name=}\PYG{l+s}{\PYGZdq{}.ExampleService\PYGZdq{}} \PYG{n+nt}{/\PYGZgt{}}
-  \PYG{n+nt}{\PYGZlt{}/application\PYGZgt{}}
-\PYG{n+nt}{\PYGZlt{}/manifest\PYGZgt{}}
-\end{Verbatim}

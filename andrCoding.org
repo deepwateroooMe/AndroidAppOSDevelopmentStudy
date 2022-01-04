@@ -731,6 +731,7 @@ A 再到 B
 - androidX 一文读懂 Fragment 的方方面面
   - https://juejin.cn/post/7006970844542926855 androidX很值得一读
 
+
 * Android Fragment 之间数据传递
 ** 获得对方的引用强转: 这种方式不推荐
 - 通过findFragmentByTag或者getActivity获得对方的引用（强转）之后，再相互调用对方的public方法，但是这样做一是引入了“强转”的丑陋代码，另外两个类之间各自持有对方的强引用，耦合较大，容易造成内存泄漏。
@@ -936,6 +937,7 @@ fragment.show(getSupportFragmentManager(), "tag");
         android:radius="20dp"/>
 </shape>
 #+END_SRC
+
 
 * 启动模式与任务栈
 - 安卓有四种启动模式：standard、singleTop、singleTask和singleInstance，想要更改模式可以在AndroidManifest.xml中activity标签下添加launchMode标签。下面是各种模式的详细介绍(下文中所有的栈，均指任务栈)：
@@ -1802,6 +1804,7 @@ public final void publishContentProviders(IApplicationThread caller,
 Uri uri_user = Uri.parse("content://cn.scu.myprovider/user");
   #+END_SRC
   - 这里设置uri的“content://AUTHORITY/tablename”需要与服务器端manifest中的<provider>android:authorities相契合
+
 
 * Services:文件夹里有一个文件总结，但是太杂乱，需要删改和总结
 

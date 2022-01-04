@@ -1,5 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n}{Intent} \PYG{n}{i} \PYG{o}{=} \PYG{k}{new} \PYG{n}{Intent}\PYG{o}{(}\PYG{k}{this}\PYG{o}{,}\PYG{n}{ＮewActivity}\PYG{o}{.}\PYG{n+na}{class}\PYG{o}{);}
-\PYG{n}{i}\PYG{o}{.}\PYG{n+na}{setFlags}\PYG{o}{(}\PYG{n}{Intent}\PYG{o}{.}\PYG{n+na}{FLAG\PYGZus{}ACTIVITY\PYGZus{}NEW\PYGZus{}TASK}\PYG{o}{);}
-\PYG{n}{startActivity}\PYG{o}{(}\PYG{n}{i}\PYG{o}{);}
-\end{Verbatim}

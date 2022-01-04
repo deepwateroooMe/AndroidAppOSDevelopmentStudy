@@ -1,3 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n}{ExampleFragment} \PYG{n}{fragment} \PYG{o}{=} \PYG{o}{(}\PYG{n}{ExampleFragment}\PYG{o}{)} \PYG{n}{getFragmentManager}\PYG{o}{().}\PYG{n+na}{findFragmentById}\PYG{o}{(}\PYG{n}{R}\PYG{o}{.}\PYG{n+na}{id}\PYG{o}{.}\PYG{n+na}{example\PYGZus{}fragment}\PYG{o}{);}
-\end{Verbatim}

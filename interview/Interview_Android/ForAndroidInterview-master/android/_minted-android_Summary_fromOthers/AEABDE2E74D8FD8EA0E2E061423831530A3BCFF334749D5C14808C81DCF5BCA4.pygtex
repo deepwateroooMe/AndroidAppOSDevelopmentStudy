@@ -1,7 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{\PYGZlt{}intent\PYGZhy{}filter} \PYG{n+nt}{\PYGZgt{}}
- \PYG{n+nt}{\PYGZlt{}action} \PYG{n+na}{android:name=}\PYG{l+s}{\PYGZdq{}android.intent.action.MAIN\PYGZdq{}} \PYG{n+nt}{/\PYGZgt{}}
- \PYG{n+nt}{\PYGZlt{}action} \PYG{n+na}{android:name=}\PYG{l+s}{\PYGZdq{}com.scu.amazing7Action\PYGZdq{}} \PYG{n+nt}{/\PYGZgt{}}
-……
- \PYG{n+nt}{\PYGZlt{}/intent\PYGZhy{}filter\PYGZgt{}}
-\end{Verbatim}

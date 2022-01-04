@@ -3,6 +3,9 @@
 #+author: deepwaterooo
 
 * Content Provider 内存承载器 
+- 希望对底层实现中内存映射binder机制能够有更清楚的认知，Messenger方式IPC进程间通信都用到，binder需要有一个独篇自己的文件
+  - https://blog.csdn.net/universus/article/details/6211589
+
 - ContentProvider的底层是采用 Android中的Binder机制
 ** 统一资源标识符（URI）
 - 定义：Uniform Resource Identifier，即统一资源标识符

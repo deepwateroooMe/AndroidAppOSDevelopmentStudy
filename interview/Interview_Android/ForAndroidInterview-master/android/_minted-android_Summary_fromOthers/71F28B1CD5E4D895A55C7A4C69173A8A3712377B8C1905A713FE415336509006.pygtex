@@ -1,6 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{c+c1}{// 设置全屏模式}
- \PYG{n}{getWindow}\PYG{o}{().}\PYG{n+na}{setFlags}\PYG{o}{(}\PYG{n}{WindowManager}\PYG{o}{.}\PYG{n+na}{LayoutParams}\PYG{o}{.}\PYG{n+na}{FLAG\PYGZus{}FULLSCREEN}\PYG{o}{,} \PYG{n}{WindowManager}\PYG{o}{.}\PYG{n+na}{LayoutParams}\PYG{o}{.}\PYG{n+na}{FLAG\PYGZus{}FULLSCREEN}\PYG{o}{);}
- \PYG{c+c1}{// 去除标题栏}
- \PYG{n}{requestWindowFeature}\PYG{o}{(}\PYG{n}{Window}\PYG{o}{.}\PYG{n+na}{FEATURE\PYGZus{}NO\PYGZus{}TITLE}\PYG{o}{);}
-\end{Verbatim}

@@ -1,4 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n}{FragmentManager} \PYG{n}{fragmentManager} \PYG{o}{=} \PYG{n}{getFragmentManager}\PYG{o}{()}　
-\PYG{n}{FragmentTransaction} \PYG{n}{fragmentTransaction} \PYG{o}{=} \PYG{n}{fragmentManager}\PYG{o}{.}\PYG{n+na}{beginTransaction}\PYG{o}{();}
-\end{Verbatim}

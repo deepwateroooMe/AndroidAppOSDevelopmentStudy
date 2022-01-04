@@ -1,5 +1,0 @@
-\begin{Verbatim}[commandchars=\\\{\}]
-\PYG{n+nt}{\PYGZlt{}activity}
-    \PYG{n+na}{android:launchMode=}\PYG{l+s}{\PYGZdq{}standard\PYGZdq{}}
-\PYG{err}{\PYGZlt{}/activity}\PYG{n+nt}{\PYGZgt{}}
-\end{Verbatim}
