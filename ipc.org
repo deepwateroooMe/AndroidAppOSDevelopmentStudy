@@ -45,7 +45,10 @@ u0_a65    3039  249   856408 102248    ep_poll e8b89bb9 S com.ryg.chapter_2
 u0_a65    3056  249   837576 85156    ep_poll e8b89bb9 S com.ryg.chapter_2:remote
 u0_a65    3098  249   836072 82460    ep_poll e8b89bb9 S com.ryg.chapter_2.remote
 #+END_SRC
-- 不知道读者朋友有没有注意到，SecondActivity和ThirdActivity的android:process属性分别为“：remote”和“com.ryg.chapter_2.remote”，那么这两种方式有区别吗？其实是有区别的，区别有两方面：首先，“：”的含义是指要在当前的进程名前面附加上当前的包名，这是一种简写的方法，对于SecondActivity来说，它完整的进程名为com.ryg.chapter_2：remote，这可以从上面图片的进程信息也能看出来，而对于ThirdActivity中的声明方式，它是一种完整的命名方式，不会附加包名信息；其次，进程名以“：”开头的进程属于当前应用的私有进程，其他应用的组件不可以和它跑在同一个进程中，而进程名不以“：”开头的进程属于全局进程，其他应用通过ShareUID方式可以和它跑在同一个进程中。
+- 不知道读者朋友有没有注意到，SecondActivity和ThirdActivity的android:process属性分别为“：remote”和“com.ryg.chapter_2.remote”，那么这两种方式有区别吗？
+- 其实是有区别的，区别有两方面：
+  - 首先，“：”的含义是指要在当前的进程名前面附加上当前的包名，这是一种简写的方法，对于SecondActivity来说，它完整的进程名为com.ryg.chapter_2：remote，这可以从上面图片的进程信息也能看出来，而对于ThirdActivity中的声明方式，它是一种完整的命名方式，不会附加包名信息；
+  - 其次，进程名以“：”开头的进程属于当前应用的私有进程，其他应用的组件不可以和它跑在同一个进程中，而进程名不以“：”开头的进程属于全局进程，其他应用通过ShareUID方式可以和它跑在同一个进程中。
 - 我们知道Android系统会为每个应用分配一个唯一的UID，具有相同UID的应用才能共享数据。这里要说明的是，两个应用通过ShareUID跑在同一个进程中是有要求的，需要这两个应用有相同的ShareUID并且签名相同才可以。在这种情况下，它们可以互相访问对方的私有数据，比如data目录、组件信息等，不管它们是否跑在同一个进程中。当然如果它们跑在同一个进程中，那么除了能共享data目录、组件信息，还可以共享内存数据，或者说它们看起来就像是一个应用的两个部分。
 *** 多进程模式的运行机制
 - 如果用一句话来形容多进程，那笔者只能这样说：“当应用开启了多进程以后，各种奇怪的现象都出现了”。为什么这么说呢？这是有原因的。大部分人都认为开启多进程是很简单的事情，只需要给四大组件指定androidprocess属性即可。比如说在实际的产品开发中，可能会有多进程的需求，需要把某些组件放在单独的进程中去运行，很多人都会觉得这不很简单吗？
@@ -228,6 +231,7 @@ public class Book implements Parcelable {
 //Book.aidl
 package com.ryg.chapter_2.aidl;
 parcelable Book;
+
 //IBookManager.aidl
 package com.ryg.chapter_2.aidl;
 import com.ryg.chapter_2.aidl.Book;
@@ -239,61 +243,74 @@ interface IBookManager {
 - 上面三个文件中，Book.java是一个表示图书信息的类，它实现了Parcelable接口。Book.aidl 是Book类在AIDL中的声明。IBookManageraidl是我们定义的一个接口，里面有两个方法：getBookList和addBook，其getBookList用于从远程服务端获取图书列表，而addBook用于往图书列表中添加一本书，当然这两个方法主要是示例用，不一定要有实际意义。我们可以看到，尽管Book类已经和IBookManager位于相同的包中，但是在IBookManager 中仍然要导入Book类，这就是AIDL的特殊之处。下面我们先看一下系统为IBookManageraidl生产的Binder类，在gen目录下的com.ryg.chapter_2.aidl包中有一个IBookManager.java的类，这就是我们要找的类。接下来我们需要根据这个系统生成的Binder类来分析Binder的工作原理，代码如下：
 - aidl 编译生成的代码：
 #+BEGIN_SRC java
-package com.ryg.chapter_2.aidl;
-public interface IBookManager extends android.os.IInterface {
-    /**
-     * Local-side IPC implementation stub class.
-     */
-    public static abstract class Stub extends android.os.Binder implements com.ryg.chapter_2.aidl.IBookManager {
-        private static final java.lang.String DESCRIPTOR = "com.ryg.chapter_2.aidl.IBookManager";
-        /**
-         * Construct the stub at attach it to the interface.
-         */
+package com.me.ipc;
+// Declare any non-default types here with import statements
+public interface IGameManager extends android.os.IInterface {
+    
+    /** Default implementation for IGameManager. */
+    public static class Default implements com.me.ipc.IGameManager {
+        // 首先，它声明了两个方法getBookList和addBook，显然这就是我们在IBookManageraidl中所声明的方法
+        @Override public java.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException {
+            return null;
+        }
+        @Override public void addGame(com.me.ipc.Game game) throws android.os.RemoteException {}
+        @Override public android.os.IBinder asBinder() {
+            return null;
+        }
+    }
+    
+    /** Local-side IPC implementation stub class. */
+    // 声明了一个内部类Stub，这个Stub就是一个Binder类
+    // 当客户端和服务端都位于同一个进程时，方法调用不会走跨进程的transact过程
+    public static abstract class Stub extends android.os.Binder implements com.me.ipc.IGameManager {
+
+        private static final java.lang.String DESCRIPTOR = "com.me.ipc.IGameManager"; // Binder的唯一标识，一般用当前Binder的类名表示
+
+        /** Construct the stub at attach it to the interface. */
         public Stub() {
             this.attachInterface(this, DESCRIPTOR);
         }
         /**
-         * Cast an IBinder object into an com.ryg.chapter_2.aidl.IBookManager interface,
+         * Cast an IBinder object into an com.me.ipc.IGameManager interface,
          * generating a proxy if needed.
          */
-        public static com.ryg.chapter_2.aidl.IBookManager asInterface(android.os.IBinder obj) {
-            if ((obj == null)) {
-                return null;
-            }
+        // 用于将服务端的Binder对象转换成客户端所需的AIDL接口类型的对象，这种转换过程是区分进程的:
+        // 如果客户端和服务端位于同一进程，那么此方法返回的就是服务端的Stub对象本身，否则返回的是系统封装后的Stub.proxy对象
+        public static com.me.ipc.IGameManager asInterface(android.os.IBinder obj) {
+            if ((obj==null)) return null;
             android.os.IInterface iin = obj.queryLocalInterface(DESCRIPTOR);
-            if (((iin != null) && (iin instanceof com.ryg.chapter_2.aidl.IBookManager))) {
-                return ((com.ryg.chapter_2.aidl.IBookManager) iin);
-            }
-            return new com.ryg.chapter_2.aidl.IBookManager.Stub.Proxy(obj);
+            if (((iin!=null)&&(iin instanceof com.me.ipc.IGameManager))) 
+                return ((com.me.ipc.IGameManager)iin);
+            return new com.me.ipc.IGameManager.Stub.Proxy(obj);
         }
-        @Override
-        public android.os.IBinder asBinder() {
+        
+        @Override public android.os.IBinder asBinder() { // 返回当前Binder对象
             return this;
         }
-        @Override
-        public boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) throws android.os.RemoteException {
+        // 而当两者位于不同进程时，方法调用需要走transact过程，这个逻辑由Stub的内部代理类Proxy来完成
+        @Override public boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) throws android.os.RemoteException {
             java.lang.String descriptor = DESCRIPTOR;
             switch (code) {
                 case INTERFACE_TRANSACTION: {
                     reply.writeString(descriptor);
                     return true;
                 }
-                case TRANSACTION_getBookList: {
+                case TRANSACTION_getGameList: {
                     data.enforceInterface(descriptor);
-                    java.util.List<com.ryg.chapter_2.aidl.Book> _result = this.getBookList();
+                    java.util.List<com.me.ipc.Game> _result = this.getGameList();
                     reply.writeNoException();
                     reply.writeTypedList(_result);
                     return true;
                 }
-                case TRANSACTION_addBook: {
+                case TRANSACTION_addGame: {
                     data.enforceInterface(descriptor);
-                    com.ryg.chapter_2.aidl.Book _arg0;
-                    if ((0 != data.readInt())) {
-                        _arg0 = com.ryg.chapter_2.aidl.Book.CREATOR.createFromParcel(data);
+                    com.me.ipc.Game _arg0;
+                    if ((0!=data.readInt())) {
+                        _arg0 = com.me.ipc.Game.CREATOR.createFromParcel(data);
                     } else {
                         _arg0 = null;
                     }
-                    this.addBook(_arg0);
+                    this.addGame(_arg0);
                     reply.writeNoException();
                     return true;
                 }
@@ -302,76 +319,117 @@ public interface IBookManager extends android.os.IInterface {
                 }
             }
         }
-        private static class Proxy implements com.ryg.chapter_2.aidl.IBookManager {
+        private static class Proxy implements com.me.ipc.IGameManager {
             private android.os.IBinder mRemote;
             Proxy(android.os.IBinder remote) {
                 mRemote = remote;
             }
-            @Override
-            public android.os.IBinder asBinder() {
+            @Override public android.os.IBinder asBinder() {
                 return mRemote;
             }
             public java.lang.String getInterfaceDescriptor() {
                 return DESCRIPTOR;
             }
-            @Override
-            public java.util.List<com.ryg.chapter_2.aidl.Book> getBookList() throws android.os.RemoteException {
+
+            @Override public java.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException { // 这个方法运行在客户端
+                // 首先创建该方法所需要的输入型Parcel对象_data、输出型Parcel对象_reply和返回值对象List
                 android.os.Parcel _data = android.os.Parcel.obtain();
                 android.os.Parcel _reply = android.os.Parcel.obtain();
-                java.util.List<com.ryg.chapter_2.aidl.Book> _result;
+                java.util.List<com.me.ipc.Game> _result;
                 try {
-                    _data.writeInterfaceToken(DESCRIPTOR);
-                    mRemote.transact(Stub.TRANSACTION_getBookList, _data, _reply, 0);
+                    _data.writeInterfaceToken(DESCRIPTOR); // 把该方法的参数信息写入_data中（如果有参数的话）
+                    // 接着调用transact方法来发起RPC（远程过程调用）请求，同时当前线程挂起
+                    boolean _status = mRemote.transact(Stub.TRANSACTION_getGameList, _data, _reply, 0);
+                    // 然后服务端的onTransact方法会被调用，直到RPC过程返回后，当前线程继续执行，并从reply中取出RPC过程的返回结果；
+                    if (!_status && getDefaultImpl() != null) {
+                        return getDefaultImpl().getGameList();
+                    }
                     _reply.readException();
-                    _result = _reply.createTypedArrayList(com.ryg.chapter_2.aidl.Book.CREATOR);
-                } finally {
+                    _result = _reply.createTypedArrayList(com.me.ipc.Game.CREATOR); // 最后返回_reply中的数据
+                }
+                finally {
                     _reply.recycle();
                     _data.recycle();
                 }
-                return _result;
+                return _result; // 最后返回_reply中的数据
             }
-            @Override
-            public void addBook(com.ryg.chapter_2.aidl.Book book) throws android.os.RemoteException {
+            @Override public void addGame(com.me.ipc.Game game) throws android.os.RemoteException { // 这个方法运行在客户端
                 android.os.Parcel _data = android.os.Parcel.obtain();
                 android.os.Parcel _reply = android.os.Parcel.obtain();
                 try {
                     _data.writeInterfaceToken(DESCRIPTOR);
-                    if ((book != null)) {
+                    if ((game!=null)) {
                         _data.writeInt(1);
-                        book.writeToParcel(_data, 0);
+                        game.writeToParcel(_data, 0);
                     } else {
                         _data.writeInt(0);
                     }
-                    mRemote.transact(Stub.TRANSACTION_addBook, _data, _reply, 0);
+                    boolean _status = mRemote.transact(Stub.TRANSACTION_addGame, _data, _reply, 0);
+                    if (!_status && getDefaultImpl() != null) {
+                        getDefaultImpl().addGame(game);
+                        return;
+                    }
                     _reply.readException();
-                } finally {
+                }
+                finally {
                     _reply.recycle();
                     _data.recycle();
                 }
             }
+            public static com.me.ipc.IGameManager sDefaultImpl;
         }
-		//标识方法的 整型变量
-        static final int TRANSACTION_getBookList = (android.os.IBinder.FIRST_CALL_TRANSACTION + 0);
-        static final int TRANSACTION_addBook = (android.os.IBinder.FIRST_CALL_TRANSACTION + 1);
+        // 标识方法的 整型变量
+        // 声明了两个整型的id分别用于标识这两个方法，这两个id用于标识在transact过程中客户端所请求的到底是哪个方法
+        static final int TRANSACTION_getGameList = (android.os.IBinder.FIRST_CALL_TRANSACTION + 0);
+        static final int TRANSACTION_addGame = (android.os.IBinder.FIRST_CALL_TRANSACTION + 1);
+        
+        public static boolean setDefaultImpl(com.me.ipc.IGameManager impl) {
+            // Only one user of this interface can use this function
+            // at a time. This is a heuristic to detect if two different
+            // users in the same process use this function.
+            if (Stub.Proxy.sDefaultImpl != null) {
+                throw new IllegalStateException("setDefaultImpl() called twice");
+            }
+            if (impl != null) {
+                Stub.Proxy.sDefaultImpl = impl;
+                return true;
+            }
+            return false;
+        }
+        public static com.me.ipc.IGameManager getDefaultImpl() {
+            return Stub.Proxy.sDefaultImpl;
+        }
     }
-    public java.util.List<com.ryg.chapter_2.aidl.Book> getBookList() throws android.os.RemoteException;
-    public void addBook(com.ryg.chapter_2.aidl.Book book) throws android.os.RemoteException;
+    
+    public java.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException;
+    public void addGame(com.me.ipc.Game game) throws android.os.RemoteException;
 }
 #+END_SRC 
-- 上述代码是系统生成的，为了方便查看笔者稍微做了一下格式上的调整。在gen目录下，可以看到根据IBookManager.aidl系统为我们生成了IBookManager.java这个类，它继承了IInterface这个接口，同时它自己也还是个接口，所有可以在Binder中传输的接口都需要继承Interface接口。这个类刚开始看起来逻辑混乱，但是实际上还是很清晰的，通过它我们可以清楚地了解到Binder的工作机制。这个类的结构其实很简单，首先，它声明了两个方法getBookList和addBook，显然这就是我们在IBookManageraidl中所声明的方法，同时它还声明了两个整型的id分别用于标识这两个方法，这两个id用于标识在transact过程中客户端所请求的到底是哪个方法。接着，它声明了一个内部类Stub，这个Stub就是一个Binder类，当客户端和服务端都位于同一个进程时，方法调用不会走跨进程的transact过程，而当两者位于不同进程时，方法调用需要走transact过程，这个逻辑由Stub的内部代理类Proxy来完成。这么来看，IBookManager这个接口的确很简单，但是我们也应该认识到，这个接口的核心实现就是它的内部类Stub和Stub的内部代理类Proxy，下面详细介绍针对这两个类的每个方法的含义。
+- 上述代码是系统生成的，为了方便查看笔者稍微做了一下格式上的调整。在gen目录下，可以看到根据IBookManager.aidl系统为我们生成了IBookManager.java这个类，它继承了IInterface这个接口，同时它自己也还是个接口，所有可以在Binder中传输的接口都需要继承Interface接口。
+- 这个类刚开始看起来逻辑混乱，但是实际上还是很清晰的，通过它我们可以清楚地了解到Binder的工作机制。这个类的结构其实很简单:
+  - 首先，它声明了两个方法getBookList和addBook，显然这就是我们在IBookManageraidl中所声明的方法，
+  - 同时它还声明了两个整型的id分别用于标识这两个方法，这两个id用于标识在transact过程中客户端所请求的到底是哪个方法。
+  - 接着，它声明了一个内部类Stub，这个Stub就是一个Binder类，当客户端和服务端都位于同一个进程时，方法调用不会走跨进程的transact过程，而当两者位于不同进程时，方法调用需要走transact过程，这个逻辑由Stub的内部代理类Proxy来完成。
+- 这么来看，IBookManager这个接口的确很简单，但是我们也应该认识到，这个接口的核心实现就是它的内部类Stub和Stub的内部代理类Proxy，下面详细介绍针对这两个类的每个方法的含义。
 - DESCRIPTOR
   - Binder的唯一标识，一般用当前Binder的类名表示，比如本例中的 “com.ryg.chapter_2.aidl.IBookManager”。
-  - asInterface(android.os.IBinder obj)
+- asInterface(android.os.IBinder obj)
   - 用于将服务端的Binder对象转换成客户端所需的AIDL接口类型的对象，这种转换过程是区分进程的，如果客户端和服务端位于同一进程，那么此方法返回的就是服务端的Stub对象本身，否则返回的是系统封装后的Stub.proxy对象。
 - asBinder
   - 此方法用于返回当前Binder对象。
 - onTransact
-  - 这个方法运行在服务端中的Binder线程池中，当客户端发起跨进程请求时，远程请求会通过系统底层封装后交由此方法来处理。该方法的原型为public Boolean onTransact（int code，android.os.Parcel data，android.os.Parcel reply，int flags）。服务端通过code可以确定客户端所请求的目标方法是什么，接着从data中取出目标方法所需的参数（如果目标方法有参数的话），然后执行目标方法。当目标方法执行完毕后，就向reply中写入返回值（如果目标方法有返回值的话），onTransact方法的执行过程就是这样的。需要注意的是，如果此方法返回false，那么客户端的请求会失败，因此我们可以利用这个特性来做权限验证，毕竟我们也不希望随便一个进程都能远程调用我们的服务。
+  - 这个方法运行在服务端中的Binder线程池中，当客户端发起跨进程请求时，远程请求会通过系统底层封装后交由此方法来处理。该方法的原型为
+#+BEGIN_SRC java
+public Boolean onTransact(int code，android.os.Parcel data，android.os.Parcel reply，int flags)
+#+END_SRC 
+  - 服务端通过code可以确定客户端所请求的目标方法是什么，接着从data中取出目标方法所需的参数（如果目标方法有参数的话），然后执行目标方法。当目标方法执行完毕后，就向reply中写入返回值（如果目标方法有返回值的话），onTransact方法的执行过程就是这样的。需要注意的是，如果此方法返回false，那么客户端的请求会失败，因此我们可以利用这个特性来做权限验证，毕竟我们也不希望随便一个进程都能远程调用我们的服务。
 - Proxy#getBookList
   - 这个方法运行在客户端，当客户端远程调用此方法时，它的内部实现是这样的：首先创建该方法所需要的输入型Parcel对象_data、输出型Parcel对象_reply和返回值对象List；然后把该方法的参数信息写入_data中（如果有参数的话）；接着调用transact方法来发起RPC（远程过程调用）请求，同时当前线程挂起；然后服务端的onTransact方法会被调用，直到RPC过程返回后，当前线程继续执行，并从reply中取出RPC过程的返回结果；最后返回_reply中的数据。
 - Proxy#addBook
   - 这个方法运行在客户端，它的执行过程和getBookList是一样的，addBook没有返回值，所以它不需要从_reply中取出返回值。
-- 通过上面的分析，读者应该已经了解了Binder的工作机制，但是有两点还是需要额外说明一下：首先，当客户端发起远程请求时，由于当前线程会被挂起直至服务端进程返回数据，所以如果一个远程方法是很耗时的，那么不能在UI线程中发起此远程请求；其次，由于服务端的Binder方法运行在Binder的线程池中，所以Binder方法不管是否耗时都应该采用同步的方式去实现，因为它已经运行在一个线程中了。为了更好地说明Binder，下面给出一个Binder的工作机制图，如图。
+- 通过上面的分析，读者应该已经了解了Binder的工作机制，但是有两点还是需要额外说明一下：
+  - 首先，当客户端发起远程请求时，由于当前线程会被挂起直至服务端进程返回数据，所以如果一个远程方法是很耗时的，那么不能在UI线程中发起此远程请求；
+  - 其次，由于服务端的Binder方法运行在Binder的线程池中，所以Binder方法不管是否耗时都应该采用同步的方式去实现，因为它已经运行在一个线程中了。为了更好地说明Binder，下面给出一个Binder的工作机制。
 
 **** 手写Binder
 - 从上述分析过程来看，我们完全可以不提供AIDL文件即可实现Binder，之所以提供AIDL文件，是为了方便系统为我们生成代码。系统根据AIDL文件生成Java文件的格式是固定的，我们可以抛开AIDL文件直接写一个Binder出来，接下来我们就介绍如何手动写一个Binder。还是上面的例子，但是这次我们不提供AIDL文件。参考上面系统自动生成的IBookManager.java这个类的代码，可以发现这个类是相当有规律的，根据它的特点，我们完全可以自己写一个和它一模一样的类出来，然后这个不借助AIDL文件的Binder就完成了。但是我们发现系统生成的类看起来结构不清晰，我们想试着对它进行结构上的调整，可以发现这个类主要由两部分组成，首先它本身是一个Binder的接口（继承了IInterface），其次它的内部由个Stub类，这个类就是个Binder。还记得我们怎么写一个Binder的服务端吗？代码如下所示。
@@ -2041,3 +2099,181 @@ private void doWork() {
 | Socket    | 功能强大，可以通过网络传输字节流，         | 实现细节稍微有点繁琐，不支持直接的RPC             | 网络数据交换                        |
 |           | 支持一对多并发实时通信                     |                                                   |                                     |
 |-----------+--------------------------------------------+---------------------------------------------------+-------------------------------------|
+
+* 多进程应用的缺点
+** 静态成员和单例模式的完全失效
+- Android为每个应用分配一个独立的虚拟机，或者说为每一个进程分配一个独立的虚拟机，不同的虚拟机在内存分配上有不同的地址空间，这就导致在不同虚拟机中访问同一个类的对象会产生多份副本。
+** 线程同步机制完全失效
+- 因为都不是同一块内存空间，所以不管是锁对象还是锁全局类都无法保证线程同步，因为不同进程锁的不是同一个对象。
+** Application的onCreate()多次执行
+多进程被创建好了，应用运行时就会对进程进行初始化，如果一个application中有多个进程，在进行全局初始化时，多进程会被初始化多次。
+        解决方法:通过判断当前进程是不是 应用包名(默认进程名就是应用包名)，来决定需不需要进行初始化相关的操作。
+private String getCurrentProcessName() {
+     String currentProcName = "";
+     int pid = android.os.Process.myPid();
+     ActivityManager manager = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE);
+     for (ActivityManager.RunningAppProcessInfo processInfo : manager.getRunningAppProcesses()) {
+        if (processInfo.pid == pid) {
+            currentProcName = processInfo.processName;
+            break;
+        }
+      }
+      return currentProcName;
+}
+        如果子进程也需要一些初始化，则可根据进程名称来分别做对应的 初始化 即可，并且只初始化当前进程需要的业务，即按照进程按需初始化。
+ 
+** 调试麻烦
+- 多进程开发，调试起来很麻烦，比如希望在子进程创建后的首行代码里 添加断点，这是做不到。 因为Android Studio添加调试器的时候，会让你选一个调试的进程，而这时这个子进程还没有启动起来， 一旦你启动起来后，首行代码就执行完毕了，就无法再添加调试了
+- 解决方法：
+  - 1可以在子进程启动后， 添加几秒的延迟 再来启动业务逻辑， 比如延迟5秒，而这5秒就是留给你去Android Studio中添加 断点的
+  - 2调试时关闭子进程，例如某些操作是在一个  Service时执行的，这时先把 service放到主进程中，等业务代码写完了，再放到子进程 进行 功能测试。
+** 不能内存共享
+-  同一个进程的多个线程是共享该进程的所有资源，但多个进程间内存是不可见的，也就是说多个进程间内存是不共享的。    会引起一些问题，如：静态成员的失效。 
+** 文件共享问题。
+- 多进程情况下会出现两个进程在同一时刻访问同一个数据库文件的情况。这就可能造成资源的竞争访问，导致诸如数据库损坏数据丢失等。在多线程的情况下我们有锁机制控制资源的共享，但是在多进程中比较难，虽然有文件锁排队等机制，但是在Android里很难实现。解决办法就是多进程的时候不并发访问同一个文件，比如子进程涉及到操作数据库，就可以考虑调用主进程进行数据库的操作。
+** sharePreference不能在多进程中通用
+- 在主进程中往sharePreference存的值，在子进程不能立即可见。
+- 解决方法
+  - 1：使用SharedPreferences时，SharedPreferences 在MODE_PRIVATE MODE_PUBLIC 之外其实还可以设置多进程的Flag，即 MODE_MULTI_PROCESS。
+#+BEGIN_SRC java
+SharedPreferences myPrefs = context.getSharedPreferences(MY_FILE_NAME, Context.MODE_MULTI_PROCESS | Context.MODE_PRIVATE);
+#+END_SRC 
+    - 一旦我们设置了这个Flag，每次调用Context.getSharedPreferences 的时候系统会重新从SP文件中读入数据，因此我们在使用的时候每次读取和存入都要使用Context.getSharedPreferences 重新获取SP实例。即使是这样，由于SP本质上并不是多进程安全的，所以还是无法保证数据的同步，因此该方法我们并没有使用，我们也不推荐使用。
+  - 2: tray安卓多进程安全的sharePreferences - https://github.com/GCX-HCI/tray
+    - 如果SP不是多进程安全的，那么是否有多进程安全的，又有SP功能的第三方项目呢。答案是有的，Tray——一个多进程安全的SharedPreferences，我们可以在Github上找到它，如果是AndroidStudio,可以直接使用Gradle引入，可谓是十分方便，如下是使用的代码，十分简单，没有apply commit，看起来比SP还要简单。
+    - 但是最终我们并没有选择使用它，主要的原因是它需要minSdk 为15，而我们是支持sdk14的，所以只能果断放弃了。
+** 多进程的通信问题
+- 同一个进程的多个线程是共享该进程的所有资源，但多个进程间内存是不可见的，也就是说多个进程间内存是不共享的。    但通常我们的业务代码都是有关联，很少有 能开启多进程同时又不需要进程进程通信的 业务场景，因此这就需要多进程之间进行通信。
+- Android中提供了三种进程通信方法：
+  - 系统实现。
+  - AIDL（Android Interface Definition Language，Android接口定义语言）：大部分应用程序不应该使用AIDL去创建一个绑定服务，因为它需要多线程能力，并可能导致一个更复杂的实现。
+  - Messenger：利用Handler实现。（适用于多进程单线程，不需要考虑线程安全），其底层基于AIDL。
+** 多进程暖启动的恢复问题 
+- 在主进程的MainActivity退出后，子进程还在运行，这时用户又从手机桌面上点击应用图标启动了主进程，若业务功能中 主进程 与 子进程 有通信，那么此时 应该让 上次断开的主进程与子进程连接  再 重新连接上。  这里就需要额外的判断。
+** 内存共享：
+- 不同进程之间内存不能共享，最大的弊端是他们之间通信麻烦，不能将公用数据放在Application中，堆栈信息、文件操作也是独立的，如果他们之间传递的数据不大并且是可序列
+
+* Android进程保活招式大全
+- 目前市面上的应用，貌似除了微信和QQ都会比较担心被用户或者系统厂商杀死的问题。Android 进程拉活包括两个层面：（1）提供进程优先级，降低进程被杀死的概率。（2）在进程被杀死后，进行拉活。本文下面就从这两个方面做一下总结。
+** 提高进程优先级方面
+*** 进程优先级介绍
+- Android 系统将尽量长时间地保持应用进程，但为了新建进程或运行更重要的进程，需要清除旧进程来回收内存。为了确定保留或终止哪些进程，系统会根据进程中正在运行的组件以及这些组件的状态，将每个进程赋予“重要性”。必要时系统会首先消除重要性最低的进程以回收系统资源。进程的重要性从高到低可以划分为以下五级：
+- （1）前台进程(Foreground process)，即用户当前操作所必需的进程，通常数量不多。举例如下：
+  - //拥有用户正在交互的 Activity（已调用 onResume()）
+  - //拥有某个 Service，后者绑定到用户正在交互的 Activity
+  - //拥有正在“前台”运行的 Service（服务已调用startForeground()）
+  - //拥有正执行一个生命周期回调的 Service（onCreate()、onStart() 或 onDestroy()）
+  - //拥有正执行其 onReceive() 方法的BroadcastReceiver
+- （ 2 ）可见进程 (Visible process) ， 没有任何前台组件、但仍会影响用户在屏幕上所见内容的进程 。举例如下：
+  - //拥有不在前台、但仍对用户可见的 Activity（已调用 onPause()）
+  - //拥有绑定到可见（或前台）Activity 的 Service
+- （3）服务进程(Service process)，尽管服务进程与用户所见内容没有直接关联，但是它们通常在执行一些用户关心的操作（例如在后台播放音乐或从网络下载数据）。举例如下：
+  - //正在运行通过 startService() 方法启动的服务，且不属于上述两个更高类别进程的进程
+- （ 4 ）后台进程 (Background process) ， 后台进程对用户体验没有直接影响，系统可能随时终止它们 。通常会有很多后台进程在运行，因此它们会保存在 LRU 列表中，以确保包含用户最近查看的 Activity 所在进程最后一个被终止。举例如下：
+  - //对用户不可见的 Activity 的进程（已调用 Activity的onStop() 方法）
+- （ 5 ）空进程 (Empty process) ， 保留这种进程的的唯一目的是用作缓存，以缩短下次在其中运行组件所需的启动时间 。 为使总体系统资源在进程缓存和底层内核缓存之间保持平衡，系统往往会终止这些进程。举例如下：
+  - //不含任何活动应用组件的进程
+**** Low Memory Killer
+- Android的Low Memory Killer基于Linux的OOM机制，Low Memory Killer会根据进程的adj级别以及所占的内存，来决定是否杀掉该进程，adj越大，占用内存越多，进程越容易被杀掉。
+- 关于adj的分级，我们可以参考ProcessList.java，这里的常量定义了ADJ的分级。
+#+BEGIN_SRC java
+UNKNOWN_ADJ = 16
+//级别最低级的进程，通常是被缓存的进程，但是系统也不清楚缓存的内容
+ 
+CACHED_APP_MAX_ADJ = 15
+//这是一个只托管不可见的活动的进程，因此可以在没有任何中断的情况下被杀死
+ 
+CACHED_APP_MIN_ADJ = 9
+//缓存进程，没有英文解释
+ 
+SERVICE_B_ADJ = 8
+//不活跃的服务，不像adj=5的服务那么活跃
+//在root以后，有的系统优化大师会把所有服务都调成adj=8来达到内存优化的目的
+//因为当所有人adj都比较高时，这样才能保证名正言顺的杀进程
+ 
+PREVIOUS_APP_ADJ = 7
+//被切换的进程，一般是用户前一个使用的进程。两个应用来回切换，那么前一个应用一般adj设置为7
+ 
+HOME_APP_ADJ = 6
+//与主应用程序有交互的进程
+ 
+SERVICE_ADJ = 5
+//活跃的服务进程
+ 
+HEAVY_WEIGHT_APP_ADJ = 4
+//高权重进程
+ 
+BACKUP_APP_ADJ = 3
+//正在备份的进程
+ 
+PERCEPTIBLE_APP_ADJ = 2
+//可感知进程,通常是前台Service进程
+ 
+VISIBLE_APP_ADJ = 1
+//可见进程
+ 
+FOREGROUND_APP_ADJ = 0
+//前台进程
+#+END_SRC 
+- 剩下的就是adj值为负数的进程，基本上都是系统集成，不在本文的讨论范围内。负数进程是不会被lmk杀掉的。
+- Android进程调度之adj算法
+  - http://gityuan.com/2016/08/07/android-adj/
+*** 如何提高 进程优先级
+**** 1   利用Activity提升权限
+- 本方案针对的是某些工具或应用会在检测到锁屏事件后会杀死后台进程，（已达到省电的目的问题）。因此本方案可以监控手机锁屏解锁事件，在屏幕锁屏时启动1个像素的 Activity，在用户解锁时将 Activity 销毁掉。通过该方案，可以使进程的优先级在屏幕锁屏时间提升为最高优先级。
+- 具体实现方案如下：
+  - 首先定义 Activity，并设置 Activity 的大小为1像素：
+  - 其次，从 AndroidManifest 中通过如下属性，避免 Activity 在 RecentTask 中的显示：
+  - 最后，控制 Activity 为透明：
+- Activity 启动与销毁时机的控制：
+**** 2  后台Service设置为前台Service
+- 通过 setForeground可以将后台Service设置为前台Service，使进程的优先级由4提升为2，使进程被杀死的概率大大降低。
+- 但是从Android3开始调用setForeground将后台Service设置为前台Service时，必须在系统的通知栏发送一条通知，也就是说前台 Service 与一条可见的通知是绑定在一起的。解决方案的话，可以增加一个内部Service，在Service和它内部的Service中，同时发送具有相同ID 的 Notification，然后再将这个内部Service结束掉。随着内部 Service 的结束，通知将会消失，但系统优先级依然保持为
+** 进程死后拉活方案
+*** 利用系统广播拉活
+- 在发生特定系统事件时，系统会发出响应的广播，通过在Manifest中静态注册对应的广播监听器，即可在发生响应事件时拉活。常用的用于拉活的广播事件包括：
+*** 利用系统Service机制拉活
+- 在service的onStartCommand方法里返回STATR_STICK，系统会重新创建这个服务并且调用onStartCommand()方法，当然了它不会重新传递Intent对象。
+- 但是这种方案有弊端：
+  - （1）Service 第一次被异常杀死后会在5秒内重启，第二次被杀死会在10秒内重启，第三次会在20秒内重启，一旦在短时间内Service被杀死达到5次，则系统不再拉起。
+  - （2）如果我们的进程被取得Root 权限的管理工具强制停止（forestop）后也无法重启。
+*** 覆写Service的onDestroy方法
+- 这种方案针对的是在设置里面，对正在运行的应用点击关闭，会走onDestroy方法，可以在这里可以把自己启动起来。
+- 但是如果被取得Root权限的管理工具强制停止（forestop）的话，压根不会走到onDestory这个方法。
+*** 利用Native守护进程拉活
+- 原理就是，在Android中所有进程和系统组件的生命周期受ActivityManagerService的统一管理。但是通过Linux 的fork机制创建的进程是Native进程，生命周期不受Android的管理。在Native守护进程中监控主进程的存活，当主进程挂掉后，在Native进程中立即对主进程进行拉活。
+- 该方案主要适用于 Android5.0 以下版本的手机，并且不受 强制停止的影响。
+- 对于Android5.0 以上手机，系统杀死进程的时候，不仅把主进程给杀死了，另外把主进程所属的进程组一并杀死，因此native进程可能会被杀死，但是这种情况不一定就拉不活。因为这其实是一个系统依次杀死进程的时间与拉活逻辑执行时间赛跑的问题，如果可以跑的比系统逻辑快，依然可以有效拉起。
+- 记得网上有人做过实验，该结论在某些 Android 5.0 以上机型是成立的。该方案中的几个重要问题补充如下：
+**** Native 进程中如何感知主进程死亡
+- （1）在 Native 进程中通过死循环或定时器，轮询判断主进程是否存活，当主进程不存活时进行拉活。但是缺点也很明显，就是轮询判断逻辑会非常耗电。
+- （2）具体判断主进程存活的方案是，在主进程中创建一个监控文件，并且在主进程中持有文件锁。在拉活进程启动后就去申请这个文件锁，然后就将会被堵塞，一旦拉活进程可以成功获取到锁，说明主进程挂掉，即可进行拉活。
+- 由于Java 层的文件锁与 Linux 层的文件锁是不同的，需要封装Linux层的文件锁供上层调用。
+**** Native 进程中如何拉活主进程
+- 在Native 进程进行拉活的时候，本质上是通过am命令进行拉活。（通过指定“–include-stopped-packages”参数拉活主进程被forestop的情况）
+*** 利用JobScheduler机制拉活
+- Android5.0以上提供了一个叫JobScheduler的接口，可以把它理解成是一个操作系统层面的全局定时器，而不是像Alarm一样是以APP为界限的。它会定时唤醒进程，使应用进行一些逻辑操作。该方案在 Android5.0 以上版本中不受 forcestop 影响，被强制停止的应用依然可以被拉活，在 Android5.0 以上版本拉活效果非常好。仅在小米手机可能会出现有时无法拉活的问题。
+*** 利用帐号同步机制拉活
+- Android系统里有一个帐号系统，系统会通过账户同步机制，定期进行帐号的同步，我们可以自己设定同步的事件间隔。当系统发起更新后进行进程的拉活。
+- 这个方案适用于除Android 7.0以外所有的 Android 版本，包括被 forestop 掉的进程也可以进行拉活。
+- 但是这个方案弊端太多了：
+  - （1）在7.0上系统对帐号同步做了一些变动。
+  - （2）从用户角度来说，用户会在系统设置里的账户列表上看到一个不认识的账户；而且某些手机比如note3需要手动设置账户。
+  - （3）从设备商角度看，同步的事件间隔是有限制的，最短1分钟，见源码，而且各种国产机怎么改的源码我们未知，是不是都能用仍然未知；
+  - （4）从Google的角度来看，Google提供这个机制是让用于同步账户信息，必须联网，不联网则无法同步。
+- 添加账号和设置同步周期的代码如下：
+- 该方案需要在 AndroidManifest 中定义账号授权与同步服务。
+*** 推送拉活
+- 根据终端不同，在小米手机（包括 MIUI）接入小米推送、华为手机接入华为推送，可以作为拉活方案的有效补充。
+*** 终极武器——客户粘性
+- 为什么QQ、微信这些应用推送服务不会被杀死呢，是因为手机厂商不让它死，如果一个人买了个手机然后收不到QQ消息，估计这款手机就卖不出去了。
+- 这就是客户粘性带来的效益，应用的客户粘性越高，就越有可能出现在手机厂商进程保活的白名单里。
+** 使用多进程的其他场景补充
+- 多进程还有一种非常有用的场景，就是多模块应用。比如我做的应用大而全，里面肯定会有很多模块，假如有地图模块、大图浏览、自定义WebView等等（这些都是吃内存大户），一个成熟的应用一定是多模块化的。首先多进程开发能为应用解决了OOM问题，因为Android对内存的限制是针对于进程的，所以，当我们需要加载大图之类的操作，可以在新的进程中去执行，避免主进程OOM。而且假如图片浏览进程打开了一个过大的图片，java heap 申请内存失败，该进程崩溃并不影响我主进程的使用。
+- 举个例子，现在要做一款音乐播放器，现在有以下几种方案：
+  - A. 在Activity中直接播放音乐。
+  - B. 启动后台Service，播放音乐。
+  - C. 启动前台Service，播放音乐。
+  - D. 在新的进程中，启动后台Service，播放音乐。
+  - E. 在新的进程中，启动前台Service，播放音乐。
+- E也是使用了多进程，并且在新进程中，使用了前台service.这个进程的值是2，像C方案，非常小，非常稳定，而且我们还可以在系统进入后台后，手动杀掉主进程，使整个应用的内存消耗降到最低。内存低，优先级又高，E获得了今天的“最稳定方案奖”。
