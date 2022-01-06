@@ -26,7 +26,7 @@
 - Activity — Activity Lifecycle, Tasks & Back Stack
 - Service
 - Broadcast Receiver
-- Content Provider: IPC 需要项目加强
+- Content Provider: IPC - ContentProvider, AIDL, Messenger, Intent, Binder, Socket
 ** Intents
 - Types of Intent - Implicit, Explicit
 - Intent Filter
@@ -37,8 +37,8 @@
   - ConstraintLayout : Google 新推的布局，目前已经取代 RelativeLayout 成为默认的 App 布局
 ** Dynamic User Interface
 - RecyclerView: 理论清楚，需要项目锻炼
-- ViewPager： 拼凑bug纠错了简易版的ViewPager轮播指示器
-- Spinner： 
+- ViewPager： 拼凑项目、bug纠错了简易版的ViewPager轮播指示器（不带粘附性）
+- Spinner： 有点儿像ListView，但功能简单，可以自定义（拼凑小顶目，可能还需要深入一下）
 ** CustomView: Android 默认的布局很多时候都没法满足设计的需求，这时候就需要自定义 View，你需要掌握下面几个知识点的使用
 - Canvas
 - Bitmap

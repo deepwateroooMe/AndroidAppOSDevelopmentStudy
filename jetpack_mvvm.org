@@ -1830,6 +1830,649 @@ public ViewModelStore getViewModelStore() {
   - 当 Activity 真正销毁的时候，而不是配置改变会调用ViewModelStore的 clear进而调用了ViewModel的onCleared，具体内容看第 9.2 小节
 
 
+* Dagger Dagger2 Hilt Koin: 自动依赖注入框架
+- 有一些库通过自动执行创建和提供依赖项的过程解决此问题，实现原理有如下几种方案：
+  - 1. 通过反射，在运行时连接依赖项;
+  - 2. 通过注解，编译时生成连接依赖项的代码;
+  - 3. kotlin 强大的语法糖和函数式编程;
+- 1. Dagger：
+- Android领域最广为熟知的依赖注入框架，可以说大名鼎鼎了
+  - Dagger 1.x版本：Square基于反射实现的，有两个缺点一个是反射的耗时，另一个是反射是运行时的，编译期不会报错。而使用难度较高，刚接触时有经常容易写错，造成开发效率底；
+  - Dagger 2.x版本：Google基于Java注解实现的，完美解决了上述问题，
+- Koin
+  - 为 Kotlin 开发者提供的一个实用型轻量级依赖注入框架，采用纯 Kotlin 语言编写而成，仅使用功能解析，无代理、无代码生成、无反射(通过kotlin 强大的语法糖（例如 Inline、Reified 等等）和函数式编程实现)；
+- Hilt
+  - Hilt 通过为项目中的每个 Android 类提供容器并自动为您管理其生命周期，定义了一种在应用中执行 DI 的标准方法。
+  - Hilt 在热门 DI 库 Dagger 的基础上构建而成，因而能够受益于 Dagger 提供的编译时正确性、运行时性能、可伸缩性和 Android Studio 支持。
+** Hilt使用流程
+*** 添加依赖项
+    #+BEGIN_SRC groovy
+//1. 配置Hilt的插件路径
+buildscript {
+    ...
+    dependencies {
+        ...
+        classpath 'com.google.dagger:hilt-android-gradle-plugin:2.28-alpha'
+    }
+}
+//2. 引入Hilt的插件
+plugins {
+    ...
+    id 'dagger.hilt.android.plugin'
+    id 'kotlin-kapt'
+}
+//3. 添加Hilt的依赖库及Java8
+android {
+  ...
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+  //对于 Kotlin 项目，需要添加 kotlinOptions
+  kotlinOptions {
+      jvmTarget = "1.8"
+  }
+}
+dependencies {
+    ...
+    implementation "com.google.dagger:hilt-android:2.28-alpha"
+    kapt "com.google.dagger:hilt-android-compiler:2.28-alpha"
+}
+    #+END_SRC
+** Hilt 应用类
+- 用@HiltAndroidApp注解Application;
+- @HiltAndroidApp注解 会触发 Hilt 的代码生成操作，生成的代码包括应用的一个基类，该基类充当应用级依赖项容器;
+#+BEGIN_SRC kotlin
+@HiltAndroidApp
+class MyApplication : MultiDexApplication() {
+}
+#+END_SRC
+** 将依赖项注入 Android 类
+- 1. 用@AndroidEntryPoint注释类;
+  - 目前支持6类入口点：Application（通过使用 @HiltAndroidApp），Activity，Fragment，View，Service，BroadcastReceiver
+  - 使用 @AndroidEntryPoint 注解 Android 类，还必须为依赖于该类的 Android 类添加注释，例如为注解 fragment ，则还必须为该 fragment 依赖的 Activity 添加@AndroidEntryPoint注释。
+- 2. 使用 @Inject 注释执行字段
+  - @AndroidEntryPoint 会为项目中的每个 Android 类生成一个单独的 Hilt 组件。这些组件可以从它们各自的父类接收依赖项, 如需从组件获取依赖项，请使用 @Inject 注释执行字段注入， 注意：Hilt注入的字段是不可以声明成private的；
+- 3. 构造函数中使用 @Inject 注释
+  - 为了执行字段注入，需要在类的构造函数中使用 @Inject 注释，以告知 Hilt 如何提供该类的实例：
+#+BEGIN_SRC kotlin
+@AndroidEntryPoint
+class HiltDemoActivity : AppCompatActivity() {
+    @Inject
+    lateinit var cpu: CPU
+}
+class CPU @Inject constructor() {
+    var name: String = ""
+    fun run() {
+        LjyLogUtil.d("$name run...")
+    }
+}
+#+END_SRC
+** 带参数的依赖注入：
+- 如果构造函数中带有参数，Hilt要如何进行依赖注入呢？
+- 需要构造函数中所依赖的所有其他对象都支持依赖注入
+#+BEGIN_SRC kotlin
+class CPU @Inject constructor() {
+    var name: String = ""
+    fun run() {
+        LjyLogUtil.d("$name run...")
+    }
+}
+class Phone @Inject constructor(val cpu: CPU) {
+    fun use() {
+        cpu.run()
+    }
+}
+@AndroidEntryPoint
+class HiltActivity : AppCompatActivity() {
+    @Inject
+    lateinit var phone: Phone
+    fun test() {
+        phone.cpu.name = "麒麟990"
+        phone.use()
+    }
+}
+#+END_SRC
+** Hilt Module
+- 有时一些类型参数不能通过构造函数注入, 如 接口 或 来自外部库的类，此时可以使用 Hilt模块 向Hilt提供绑定信息；
+- Hilt 模块是一个带有 @Module 注释的类，并使用 @InstallIn 设置作用域
+*** 使用 @Binds 注入接口实例
+    #+BEGIN_SRC kotlin
+//1. 接口
+interface ICPU {
+    fun run()
+}
+//2. 实现类
+class KylinCPU @Inject constructor() : ICPU {
+    override fun run() {
+        LjyLogUtil.d("kylin run...")
+    }
+}
+//3. 被注入的类，入参是接口类型
+class Phone @Inject constructor(val cpu: ICPU) {
+    fun use() {
+        cpu.run()
+    }
+}
+//4. 使用@Binds注入接口实例
+@Module
+@InstallIn(ActivityComponent::class)
+abstract class CPUModel {
+    @Binds
+    abstract fun bindCPU(cpu: KylinCPU): ICPU
+}
+//5. 使用注入的实例
+@AndroidEntryPoint
+class HiltActivity : AppCompatActivity() {
+    @Inject
+    lateinit var phone: Phone
+    fun test() {
+        phone.cpu.name = "麒麟990"
+        phone.use()
+    }
+}
+    #+END_SRC
+*** 使用 @Provides 注入实例
+- 如果某个类不归您所有（因为它来自外部库，如 Retrofit、OkHttpClient 或 Room 数据库等类），或者必须使用构建器模式创建实例，也无法通过构造函数注入。
+#+BEGIN_SRC kotlin
+@Module
+@InstallIn(ApplicationComponent::class)
+class NetworkModel {
+    @Provides
+    fun provideOkHttpClient(): OkHttpClient {
+        return OkHttpClient().newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build()
+    }
+}
+#+END_SRC
+*** 为同一类型提供多个绑定
+- 比如网络请求中可能需要不同配置的OkHttpClient，或者不同BaseUrl的Retrofit
+- 使用@Qualifier注解实现
+#+BEGIN_SRC kotlin
+//1. 接口和实现类
+interface ICPU {
+    fun run()
+}
+
+class KylinCPU @Inject constructor() : ICPU {
+    override fun run() {
+        LjyLogUtil.d("kylin run...")
+    }
+}
+class SnapdragonCPU @Inject constructor() : ICPU {
+    override fun run() {
+        LjyLogUtil.d("snapdragon run...")
+    }
+}
+//2. 创建多个类型的注解
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class BindKylinCPU
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class BindSnapdragonCPU
+//@Retention:注解的生命周期
+//AnnotationRetention.SOURCE：仅编译期，不存储在二进制输出中
+//AnnotationRetention.BINARY：存储在二进制输出中，但对反射不可见
+//AnnotationRetention.RUNTIME：存储在二进制输出中，对反射可见
+
+//3. 在Hilt模块中使用注解
+@Module
+@InstallIn(ActivityComponent::class)
+abstract class CPUModel {
+    @BindKylinCPU
+    @Binds
+    abstract fun bindKylinCPU(cpu: KylinCPU): ICPU
+    @BindSnapdragonCPU
+    @Binds
+    abstract fun bindSnapdragonCPU(cpu: SnapdragonCPU): ICPU
+}
+//4. 使用依赖注入获取实例，可以用在字段注解，也可以用在构造函数或者方法入参中
+class Phone5 @Inject constructor(@BindSnapdragonCPU private val cpu: ICPU) {
+    @BindKylinCPU
+    @Inject
+    lateinit var cpu1: ICPU
+    @BindSnapdragonCPU
+    @Inject
+    lateinit var cpu2: ICPU
+    fun use() {
+        cpu.run()
+        cpu1.run()
+        cpu2.run()
+    }
+    fun use(@BindKylinCPU cpu: ICPU) {
+        cpu.run()
+    }
+}
+#+END_SRC
+** 组件默认绑定
+- 由于可能需要来自 Application 或 Activity 的 Context 类，因此 Hilt 提供了 @ApplicationContext 和 @ActivityContext 限定符。
+- 每个 Hilt 组件都附带一组默认绑定，Hilt 可以将其作为依赖项注入您自己的自定义绑定
+#+BEGIN_SRC kotlin
+class Test1 @Inject constructor(@ApplicationContext private val context: Context)
+class Test2 @Inject constructor(@ActivityContext private val context: Context)
+#+END_SRC
+- 对于Application和Activity这两个类型，Hilt也是给它们预置好了注入功能(必须是这两个，即使子类也不可以)
+#+BEGIN_SRC kotlin
+class Test3 @Inject constructor(val application: Application)
+class Test4 @Inject constructor(val activity: Activity)
+#+END_SRC
+** Hilt内置组件类型
+- 上面使用Hilt Module时，有用到@InstallIn(), 意思是把这个模块安装到哪个组件中
+- Hilt内置了7种组件可选：
+  - ApplicationComponent：对应Application，依赖注入实例可以在全项目中使用
+  - ActivityRetainedComponent：对应ViewModel（在配置更改后仍然存在，因此它在第一次调用 Activity#onCreate() 时创建，在最后一次调用 Activity#onDestroy() 时销毁）
+  - ActivityComponent：对应Activity，Activity中包含的Fragment和View也可以使用；
+  - FragmentComponent：对应Fragment
+  - ViewComponent：对应View
+  - ViewWithFragmentComponent：对应带有 @WithFragmentBindings 注释的 View
+  - ServiceComponent：对应Service
+- Hilt 没有为 broadcast receivers 提供组件，因为 Hilt 直接从 ApplicationComponent 注入 broadcast receivers；
+|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
+| Component                 | Description                                                  | Created at             | Destroyed at            |
+|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
+| ApplicationComponent      | 为App提供依赖                                                | Application#onCreate() | Application#onDestroy() |
+| ActivityComponent         | 为Activity提供依赖                                           | Activity#onCreate()    | Activity#onDestroy()    |
+|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
+| ActivityRetainedComponent | Retained顾名思义，其生命周期更长，不会因屏幕旋转等因素重建， | Activity#onCreate()    | Activity#onDestroy()    |
+|                           | 实际上是借助ViewModel实现的                                  |                        |                         |
+|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
+| FragmentComponent         | 为Fragment提供依赖                                           | Fragment#onAttach()    | Fragment#onDestroy()    |
+| ViewComponent             | 为View提供依赖，构造函数中进行注入                           | View#super()           | View destroyed          |
+| ViewWithFragmentComponent | 为Fragment中的View提供依赖                                   | View#super()           | View destroyed          |
+| ServiceComponent          | 为Service提供依赖                                            | Service#onCreate()     | Service#onDestroy()     |
+|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
+
+** 组件作用域
+- Hilt默认会为每次的依赖注入行为都创建不同的实例。
+- Hilt内置7种组件作用域注解
+  - @Singleton：对应组件ApplicationComponent，整个项目共享同一个实例
+  - @ActivityRetainedScope：对应组件ActivityRetainedComponent
+  - @ActivityScoped：对应组件ActivityComponent，在同一个Activity（包括其包含的Fragment和View中）内部将会共享同一个实例
+  - @FragmentScoped：对应组件FragmentComponent
+  - @ViewScoped：对应组件ViewComponent和ViewWithFragmentComponent；
+  - @ServiceScopedService：对应ServiceComponent
+- 比如我们经常会需要一个全局的OkhttpClient或者Retrofit,就可以如下实现
+#+BEGIN_SRC kotlin
+ interface ApiService {
+    @GET("search/repositories?sort=stars&q=Android")
+    suspend fun searRepos(@Query("page") page: Int, @Query("per_page") perPage: Int): RepoResponse
+}
+@Module
+@InstallIn(ApplicationComponent::class)
+class NetworkModel {
+    companion object {
+        private const val BASE_URL = "https://api.github.com/"
+    }
+    @Singleton
+    @Provides
+    fun provideApiService(retrofit: Retrofit): ApiService {
+        return retrofit.create(ApiService::class.java)
+    }
+    //组件作用域:Hilt默认会为每次的依赖注入行为都创建不同的实例。
+    @Singleton
+    @Provides
+    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+        return Retrofit.Builder()
+            .addConverterFactory(GsonConverterFactory.create())
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .build()
+    }
+    @Singleton
+    @Provides
+    fun provideOkHttpClient(): OkHttpClient {
+        return OkHttpClient().newBuilder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build()
+    }
+}
+#+END_SRC
+- 或是使用Room操作本地数据库
+#+BEGIN_SRC kotlin
+@Database(entities = [RepoEntity::class], version = Constants.DB_VERSION)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun repoDao(): RepoDao
+}
+@Module
+@InstallIn(ApplicationComponent::class)
+object RoomModule {
+    @Provides
+    @Singleton
+    fun provideAppDatabase(application: Application): AppDatabase {
+        return Room
+            .databaseBuilder(
+                application.applicationContext,
+                AppDatabase::class.java,
+                Constants.DB_NAME
+            )
+            .allowMainThreadQueries() //允许在主线程中查询
+            .build()
+    }
+    @Provides
+    @Singleton
+    fun provideRepoDao(appDatabase: AppDatabase):RepoDao{
+        return appDatabase.repoDao()
+    }
+}
+#+END_SRC
+** ViewModel的依赖注入
+- 通过上面的学习，那我们如果在ViewModel中创建Repository要如何实现呢，可以如下:
+#+BEGIN_SRC kotlin
+//1. 仓库层
+class Repository @Inject constructor(){
+    @Inject
+    lateinit var apiService: ApiService
+    suspend fun getData(): RepoResponse {
+        return apiService.searRepos(1, 5)
+    }
+}
+//2. ViewModel层
+@ActivityRetainedScoped
+class MyViewModel @Inject constructor(private val repository: Repository): ViewModel() {
+    var result: MutableLiveData<String> = MutableLiveData()
+    fun doWork() {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO){
+                    repository.getData()
+                }
+            }.onSuccess {
+                result.value="RepoResponse=${gson().toJson(it)}"
+            }.onFailure {
+                result.value=it.message
+            }
+        }
+    }
+}
+//3. Activity层
+@AndroidEntryPoint
+class HiltMvvmActivity : AppCompatActivity() {
+    @Inject
+    lateinit var viewModel: MyViewModel
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_hilt_mvvm)
+        viewModel.result.observe(this, Observer {
+            LjyLogUtil.d("result:$it")
+        })
+        lifecycleScope
+        viewModel.doWork()
+    }
+}
+#+END_SRC
+*** ViewModel 和 @ViewModelInject 注解
+- 这种改变了获取ViewModel实例的常规方式, 为此Hilt专门为其提供了一种独立的依赖注入方式: @ViewModelInject
+#+BEGIN_SRC kotlin
+//1. 添加两个额外的依赖
+implementation 'androidx.hilt:hilt-lifecycle-viewmodel:1.0.0-alpha02'
+kapt 'androidx.hilt:hilt-compiler:1.0.0-alpha02'
+//2. 修改MyViewModel: 去掉@ActivityRetainedScoped注解，把@Inject改为@ViewModelInject
+class MyViewModel @ViewModelInject constructor(private val repository: Repository): ViewModel() {
+}
+//3. activity中viewModel获取改为常规写法
+@AndroidEntryPoint
+class HiltMvvmActivity : AppCompatActivity() {
+//    @Inject
+//    lateinit var viewModel: MyViewModel
+    val viewModel: MyViewModel by viewModels()
+//  或  val viewModel: MyViewModel by lazy { ViewModelProvider(this).get(MyViewModel::class.java) }
+}
+#+END_SRC
+*** SavedStateHandle 和 @assist注解
+- Activity/Fragment被销毁一般有三种情况：
+  - 界面关闭或退出应用
+  - Activity 配置 (configuration) 被改变，如旋转屏幕时；
+  - 在后台时因运行内存不足被系统回收；
+- ViewModel 会处理2的情况，而3的情况就需要使用onSaveInstanceState()保存数据，重建时用SavedStateHandle恢复数据，就要用@assist 注解添加 SavedStateHandle 依赖项
+#+BEGIN_SRC kotlin
+class MyViewModel @ViewModelInject constructor(
+    private val repository: Repository,
+    //SavedStateHandle 用于进程被终止时，保存和恢复数据
+    @Assisted private val savedStateHandle: SavedStateHandle
+) : ViewModel() {
+    var result: MutableLiveData<String> = MutableLiveData()
+    private val userId: MutableLiveData<String> = savedStateHandle.getLiveData("userId")
+    fun doWork() {
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    repository.getData(userId)
+                }
+            }.onSuccess {
+                result.value = "RepoResponse=${Gson().toJson(it)}"
+            }.onFailure {
+                result.value = it.message
+            }
+        }
+    }
+}
+#+END_SRC
+** 在 Hilt 不支持的类中注入依赖项
+- 可以使用 @EntryPoint 注释创建入口点, 调用EntryPointAccessors的静态方法来获得自定义入口点的实例
+- EntryPointAccessors提供了四个静态方法：fromActivity、fromApplication、fromFragment、fromView，根据自定义入口的MyEntryPoint的注解@InstallIn所指定的范围选择对应的获取方法；
+#+BEGIN_SRC kotlin
+@EntryPoint
+@InstallIn(ApplicationComponent::class)
+interface MyEntryPoint{
+    fun getRetrofit():Retrofit
+}
+#+END_SRC
+*** 在ContentProvider中使用
+- Hilt支持的入口点中少了一个关键的Android组件：ContentProvider, 主要原因就是ContentProvider.onCreate() 在Application的onCreate() 之前执行，因此很多人会利用这个特性去进行提前初始化, 详见Android Jetpack系列--5. App Startup使用详解, 而Hilt的工作原理是从Application.onCreate()中开始的，即ContentProvider.onCreate()执行之前，Hilt的所有功能都还无法正常工作；
+#+BEGIN_SRC kotlin
+class MyContentProvider : ContentProvider() {
+    override fun onCreate(): Boolean {
+        context?.let {
+            val appContext = it.applicationContext
+            //调用EntryPointAccessors.fromApplication()函数来获得自定义入口点的实例
+            val entryPoint = EntryPointAccessors.fromApplication(appContext,MyEntryPoint::class.java)
+            //再调用入口点中定义的getRetrofit()函数就能得到Retrofit的实例
+            val retrofit = entryPoint.getRetrofit()
+            LjyLogUtil.d("retrofit:$retrofit")
+        }
+        return true
+    }
+}
+#+END_SRC
+*** 在 App Startup 中使用
+- App Startup 会默认提供一个 InitializationProvider，InitializationProvider 继承 ContentProvider；
+#+BEGIN_SRC kotlin
+class LjyInitializer : Initializer<Unit> {
+    override fun create(context: Context) {
+        //调用EntryPointAccessors.fromApplication()函数来获得自定义入口点的实例
+        val entryPoint = EntryPointAccessors.fromApplication(context, MyEntryPoint::class.java)
+        //再调用入口点中定义的getRetrofit()函数就能得到Retrofit的实例
+        val retrofit = entryPoint.getRetrofit()
+        LjyLogUtil.d("retrofit:$retrofit")
+    }
+    override fun dependencies(): List<Class<out Initializer<*>>> {
+        return emptyList()
+    }
+}
+#+END_SRC
+- 报错解决
+  - Expected @HiltAndroidApp to have a value. Did you forget to apply the Gradle Plugin?
+#+BEGIN_SRC groovy
+android {
+    defaultConfig {
+            javaCompileOptions {
+            annotationProcessorOptions {
+                arguments  =  ["room.schemaLocation":
+                             "$projectDir/schemas".toString()]
+            }
+        }
+    }
+}
+//If so, try changing from "arguments  = " to "arguments + = ", as just using equals overwrites anything set previously.
+#+END_SRC
+** Dagger Hilt - ViewModel的依赖注入及实现原理
+- ViewModel的注入方法，使用起来非常简单：
+#+BEGIN_SRC kotlin
+class ActivityViewModel @ViewModelInject constructor(
+    private val repository: Repository,
+    @Assisted private val savedState: SavedStateHandle
+) : ViewModel() {
+
+}
+@AndroidEntryPoint
+class MainActivity : AppCompatActivity(R.layout.activity_main) {
+
+    private val viewModel by viewModels<ActivityViewModel>()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+    }
+}
+#+END_SRC
+- ViewModle创建需要借助ViewModel.Factory、而非构造函数直接创建。上面整个注入过程并没有自定义任何factory，仅仅@ViewModelInject一个注解就搞定了，这是怎么实现的呢？
+*** viewModels{…}
+- viewModels{...}是一个继承Lazy<>的ktx扩展，可以通过by关键字方便地创建ViewModel，以前我在airbnb的Mvrx中见到过类似用法，看来是被Jetpack借鉴了。
+- 官方自然不只是简单的借(chao)鉴(xi)，里面自有其玄机
+#+BEGIN_SRC kotlin
+@MainThread
+inline fun <reified VM : ViewModel> ComponentActivity.viewModels(
+    noinline factoryProducer: (() -> Factory)? = null
+): Lazy<VM> {
+    val factoryPromise = factoryProducer ?: {
+        // ComponentActivity#getDefaultViewModelProviderFactory()
+        defaultViewModelProviderFactory
+    }
+
+    return ViewModelLazy(VM::class, { viewModelStore }, factoryPromise)
+}
+#+END_SRC
+- 通过源码知道，ViewModel.Factory默认使用了defaultViewModelProviderFactory。所以只要重写这个defaultViewModelProviderFactory，就可以hook自定义实现进去
+*** 重写getDefaultViewModelProviderFactory
+- 通过前一篇文章我们知道，Hilt会在编译期修改被注入对象的父类，
+#+BEGIN_SRC kotlin
+@AndroidEntryPoint
+class MainActivity : AppCompatActivity(R.layout.activity_main) {
+#+END_SRC
+- MainActivity原本继承自AppCompatActivity，但经Hilt处理后父类变为了Hilt_MainActivity
+#+BEGIN_SRC java
+@Generated("dagger.hilt.android.processor.internal.androidentrypoint.ActivityGenerator")
+public abstract class Hilt_MainActivity extends AppCompatActivity implements GeneratedComponentManager<Object> {
+  private volatile ActivityComponentManager componentManager;
+...
+  @Override
+  public ViewModelProvider.Factory getDefaultViewModelProviderFactory() {
+    ViewModelProvider.Factory factory = DefaultViewModelFactories.getActivityFactory(this);
+    if (factory != null) {
+      return factory;
+    }
+    return super.getDefaultViewModelProviderFactory();
+  }
+}
+#+END_SRC 
+- HIlt_MainActivity中通过DefaultViewModelFactories.getActivityFactory(this)返回ViewModel.Factory。
+#+BEGIN_SRC java
+public final class DefaultViewModelFactories {
+  @Nullable
+  public static ViewModelProvider.Factory getActivityFactory(ComponentActivity activity) {
+    return getFactoryFromSet(
+        EntryPoints.get(activity, ActivityEntryPoint.class).getActivityViewModelFactory());
+  }
+}
+#+END_SRC 
+- 一句话概括：Hilt通过Dagger生成的Component获取ViewModelFactory
+  - EntryPoints.get(activity, ActivityEntryPoint.class)创建并获取ActivityComponent，
+  - getActivityViewModelFactory()通过Component内的Module获取Factory
+*** 创建ActivityComponent
+    #+BEGIN_SRC kotlin
+public final class EntryPoints {
+  @Nonnull
+  public static <T> T get(Object component, Class<T> entryPoint) {
+    if (component instanceof GeneratedComponent) {
+      return entryPoint.cast(component);
+    } else if (component instanceof GeneratedComponentManager) {
+      return entryPoint.cast(((GeneratedComponentManager<?>) component).generatedComponent());
+    } 
+  }
+}
+#+END_SRC
+- javas
+#+BEGIN_SRC java
+@Generated("dagger.hilt.android.processor.internal.androidentrypoint.ActivityGenerator")
+public abstract class Hilt_MainActivity extends AppCompatActivity implements GeneratedComponentManager<Object> {
+  private volatile ActivityComponentManager componentManager;
+...
+  @Override
+  public final Object generatedComponent() {
+    return componentManager().generatedComponent();
+  }
+  
+  protected ActivityComponentManager createComponentManager() {
+    return new ActivityComponentManager(this);
+  }
+  protected final ActivityComponentManager componentManager() {
+    if (componentManager == null) {
+      synchronized (componentManagerLock) {
+        if (componentManager == null) {
+          componentManager = createComponentManager();
+        }
+      }
+    }
+    return componentManager;
+  }
+#+END_SRC 
+- 如上，Hilt_MainActivity继承自GeneratedComponentManager，ActivityComponentManager获取generatedComponent
+#+BEGIN_SRC java
+public class ActivityComponentManager implements GeneratedComponentManager<Object> {
+ //...
+  protected Object createComponent() {
+    return ((ActivityComponentBuilderEntryPoint)
+            activityRetainedComponentManager.generatedComponent())
+        .activityComponentBuilder()
+        .activity(activity)
+        .build();
+  }
+}
+#+END_SRC 
+- 最终通过Hilt_MainActivity的ActivityComponentManager获创建ActivityComponent，ActivityComponentManager内部通过activityRetainedComponentManager（借助ViewModel）保证了ActivityComponent的复用。
+*** 获取ViewModelFactory
+- 获取ActivityComponent后，通过内部的Model获取ViewModelFactory。
+- Hilt中提供了ActivityModule，可以InstallIn到ActivityComponent。ActivityModule中定义了Factory的Provider
+#+BEGIN_SRC java
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP_PREFIX)
+public final class ViewModelFactoryModules {
+    /**
+     * Hilt Modules for providing the activity level ViewModelFactory
+     */
+    @Module
+    @InstallIn(ActivityComponent.class)
+    public abstract static class ActivityModule {
+        @NonNull
+        @Multibinds
+        abstract Map<String, ViewModelAssistedFactory<? extends ViewModel>> viewModelFactoriesMap();
+        @Provides
+        @IntoSet
+        @NonNull
+        @DefaultActivityViewModelFactory
+        static ViewModelProvider.Factory provideFactory(
+                @NonNull Activity activity,
+                @NonNull Application application,
+                @NonNull Map<String, Provider<ViewModelAssistedFactory<? extends ViewModel>>>
+                        viewModelFactories) {
+            // Hilt guarantees concrete activity is a subclass of ComponentActivity.
+            SavedStateRegistryOwner owner = (ComponentActivity) activity;
+            Bundle defaultArgs = activity.getIntent() != null
+                    ? activity.getIntent().getExtras() : null;
+            SavedStateViewModelFactory delegate =
+                    new SavedStateViewModelFactory(application, owner, defaultArgs);
+            return new HiltViewModelFactory(owner, defaultArgs, delegate, viewModelFactories)
+#+END_SRC 
+- 通过SavedStateViewModelFactory的defaultArgs，将ViewModel所需的参数进行注入
+*** 总结
+- Hilt在编译期改写Activity或者Fragment的父类，获取了自定义的ViewModel.Factory的方法，从而hook了ViewModle的创建过程，对ViewModel进行注入。整个实现过程借助@InstallIn以及@AndroidEntryPoint的注解，本身就是一个Hilt的最佳实践，值得学习和借鉴
+
+
 * App Startup: 这块儿内容需要找个开源项目实练一下代码
 - App Startup是一个可以用于加速App启动速度的一个库。很多人一听到可以加速App的启动速度？那这是好东西啊，迫不及待地想要将这个库引入到自己的项目当中，结果研究了半天，发现越看越不明白，怎么学着学着还和ContentProvider扯上关系了？
 - 所以，在学习App Startup的用法之前，首先我们需要搞清楚的是，App Startup具体是用来解决什么问题的。
@@ -2953,645 +3596,86 @@ public class MutableContextWrapper extends ContextWrapper {
 - 从ContextWrapper、MutableContextWrapper类的设计中学到了  ↓
 - 写代码的时候，首先要进行设计，选用最合适的设计模式，这样后续赚到的远远大于写一个文档、想一个设计所耗费的时间和脑力成本
 
-* Dagger Dagger2 Hilt Koin: 自动依赖注入框架
-- 有一些库通过自动执行创建和提供依赖项的过程解决此问题，实现原理有如下几种方案：
-  - 1. 通过反射，在运行时连接依赖项;
-  - 2. 通过注解，编译时生成连接依赖项的代码;
-  - 3. kotlin 强大的语法糖和函数式编程;
-- 1. Dagger：
-- Android领域最广为熟知的依赖注入框架，可以说大名鼎鼎了
-  - Dagger 1.x版本：Square基于反射实现的，有两个缺点一个是反射的耗时，另一个是反射是运行时的，编译期不会报错。而使用难度较高，刚接触时有经常容易写错，造成开发效率底；
-  - Dagger 2.x版本：Google基于Java注解实现的，完美解决了上述问题，
-- Koin
-  - 为 Kotlin 开发者提供的一个实用型轻量级依赖注入框架，采用纯 Kotlin 语言编写而成，仅使用功能解析，无代理、无代码生成、无反射(通过kotlin 强大的语法糖（例如 Inline、Reified 等等）和函数式编程实现)；
-- Hilt
-  - Hilt 通过为项目中的每个 Android 类提供容器并自动为您管理其生命周期，定义了一种在应用中执行 DI 的标准方法。
-  - Hilt 在热门 DI 库 Dagger 的基础上构建而成，因而能够受益于 Dagger 提供的编译时正确性、运行时性能、可伸缩性和 Android Studio 支持。
-** Hilt使用流程
-*** 添加依赖项
-    #+BEGIN_SRC groovy
-//1. 配置Hilt的插件路径
-buildscript {
-    ...
-    dependencies {
-        ...
-        classpath 'com.google.dagger:hilt-android-gradle-plugin:2.28-alpha'
-    }
-}
-//2. 引入Hilt的插件
-plugins {
-    ...
-    id 'dagger.hilt.android.plugin'
-    id 'kotlin-kapt'
-}
-//3. 添加Hilt的依赖库及Java8
-android {
-  ...
-  compileOptions {
-    sourceCompatibility JavaVersion.VERSION_1_8
-    targetCompatibility JavaVersion.VERSION_1_8
-  }
-  //对于 Kotlin 项目，需要添加 kotlinOptions
-  kotlinOptions {
-      jvmTarget = "1.8"
-  }
-}
-dependencies {
-    ...
-    implementation "com.google.dagger:hilt-android:2.28-alpha"
-    kapt "com.google.dagger:hilt-android-compiler:2.28-alpha"
-}
-    #+END_SRC
-** Hilt 应用类
-- 用@HiltAndroidApp注解Application;
-- @HiltAndroidApp注解 会触发 Hilt 的代码生成操作，生成的代码包括应用的一个基类，该基类充当应用级依赖项容器;
-#+BEGIN_SRC kotlin
-@HiltAndroidApp
-class MyApplication : MultiDexApplication() {
-}
-#+END_SRC
-** 将依赖项注入 Android 类
-- 1. 用@AndroidEntryPoint注释类;
-  - 目前支持6类入口点：Application（通过使用 @HiltAndroidApp），Activity，Fragment，View，Service，BroadcastReceiver
-  - 使用 @AndroidEntryPoint 注解 Android 类，还必须为依赖于该类的 Android 类添加注释，例如为注解 fragment ，则还必须为该 fragment 依赖的 Activity 添加@AndroidEntryPoint注释。
-- 2. 使用 @Inject 注释执行字段
-  - @AndroidEntryPoint 会为项目中的每个 Android 类生成一个单独的 Hilt 组件。这些组件可以从它们各自的父类接收依赖项, 如需从组件获取依赖项，请使用 @Inject 注释执行字段注入， 注意：Hilt注入的字段是不可以声明成private的；
-- 3. 构造函数中使用 @Inject 注释
-  - 为了执行字段注入，需要在类的构造函数中使用 @Inject 注释，以告知 Hilt 如何提供该类的实例：
-#+BEGIN_SRC kotlin
-@AndroidEntryPoint
-class HiltDemoActivity : AppCompatActivity() {
-    @Inject
-    lateinit var cpu: CPU
-}
-class CPU @Inject constructor() {
-    var name: String = ""
-    fun run() {
-        LjyLogUtil.d("$name run...")
-    }
-}
-#+END_SRC
-** 带参数的依赖注入：
-- 如果构造函数中带有参数，Hilt要如何进行依赖注入呢？
-- 需要构造函数中所依赖的所有其他对象都支持依赖注入
-#+BEGIN_SRC kotlin
-class CPU @Inject constructor() {
-    var name: String = ""
-    fun run() {
-        LjyLogUtil.d("$name run...")
-    }
-}
-class Phone @Inject constructor(val cpu: CPU) {
-    fun use() {
-        cpu.run()
-    }
-}
-@AndroidEntryPoint
-class HiltActivity : AppCompatActivity() {
-    @Inject
-    lateinit var phone: Phone
-    fun test() {
-        phone.cpu.name = "麒麟990"
-        phone.use()
-    }
-}
-#+END_SRC
-** Hilt Module
-- 有时一些类型参数不能通过构造函数注入, 如 接口 或 来自外部库的类，此时可以使用 Hilt模块 向Hilt提供绑定信息；
-- Hilt 模块是一个带有 @Module 注释的类，并使用 @InstallIn 设置作用域
-*** 使用 @Binds 注入接口实例
-    #+BEGIN_SRC kotlin
-//1. 接口
-interface ICPU {
-    fun run()
-}
-//2. 实现类
-class KylinCPU @Inject constructor() : ICPU {
-    override fun run() {
-        LjyLogUtil.d("kylin run...")
-    }
-}
-//3. 被注入的类，入参是接口类型
-class Phone @Inject constructor(val cpu: ICPU) {
-    fun use() {
-        cpu.run()
-    }
-}
-//4. 使用@Binds注入接口实例
-@Module
-@InstallIn(ActivityComponent::class)
-abstract class CPUModel {
-    @Binds
-    abstract fun bindCPU(cpu: KylinCPU): ICPU
-}
-//5. 使用注入的实例
-@AndroidEntryPoint
-class HiltActivity : AppCompatActivity() {
-    @Inject
-    lateinit var phone: Phone
-    fun test() {
-        phone.cpu.name = "麒麟990"
-        phone.use()
-    }
-}
-    #+END_SRC
-*** 使用 @Provides 注入实例
-- 如果某个类不归您所有（因为它来自外部库，如 Retrofit、OkHttpClient 或 Room 数据库等类），或者必须使用构建器模式创建实例，也无法通过构造函数注入。
-#+BEGIN_SRC kotlin
-@Module
-@InstallIn(ApplicationComponent::class)
-class NetworkModel {
-    @Provides
-    fun provideOkHttpClient(): OkHttpClient {
-        return OkHttpClient().newBuilder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(90, TimeUnit.SECONDS)
-            .build()
-    }
-}
-#+END_SRC
-*** 为同一类型提供多个绑定
-- 比如网络请求中可能需要不同配置的OkHttpClient，或者不同BaseUrl的Retrofit
-- 使用@Qualifier注解实现
-#+BEGIN_SRC kotlin
-//1. 接口和实现类
-interface ICPU {
-    fun run()
-}
 
-class KylinCPU @Inject constructor() : ICPU {
-    override fun run() {
-        LjyLogUtil.d("kylin run...")
-    }
-}
-class SnapdragonCPU @Inject constructor() : ICPU {
-    override fun run() {
-        LjyLogUtil.d("snapdragon run...")
-    }
-}
-//2. 创建多个类型的注解
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class BindKylinCPU
-@Qualifier
-@Retention(AnnotationRetention.BINARY)
-annotation class BindSnapdragonCPU
-//@Retention:注解的生命周期
-//AnnotationRetention.SOURCE：仅编译期，不存储在二进制输出中
-//AnnotationRetention.BINARY：存储在二进制输出中，但对反射不可见
-//AnnotationRetention.RUNTIME：存储在二进制输出中，对反射可见
-
-//3. 在Hilt模块中使用注解
-@Module
-@InstallIn(ActivityComponent::class)
-abstract class CPUModel {
-    @BindKylinCPU
-    @Binds
-    abstract fun bindKylinCPU(cpu: KylinCPU): ICPU
-    @BindSnapdragonCPU
-    @Binds
-    abstract fun bindSnapdragonCPU(cpu: SnapdragonCPU): ICPU
-}
-//4. 使用依赖注入获取实例，可以用在字段注解，也可以用在构造函数或者方法入参中
-class Phone5 @Inject constructor(@BindSnapdragonCPU private val cpu: ICPU) {
-    @BindKylinCPU
-    @Inject
-    lateinit var cpu1: ICPU
-    @BindSnapdragonCPU
-    @Inject
-    lateinit var cpu2: ICPU
-    fun use() {
-        cpu.run()
-        cpu1.run()
-        cpu2.run()
-    }
-    fun use(@BindKylinCPU cpu: ICPU) {
-        cpu.run()
-    }
-}
-#+END_SRC
-** 组件默认绑定
-- 由于可能需要来自 Application 或 Activity 的 Context 类，因此 Hilt 提供了 @ApplicationContext 和 @ActivityContext 限定符。
-- 每个 Hilt 组件都附带一组默认绑定，Hilt 可以将其作为依赖项注入您自己的自定义绑定
+* 启动优化
+** 启动速度的测量
+- 当然，我们而已通过自己的感觉判断启动的快慢，但量化还是非常重要的，不然你都无法向 PM 交差不是。所以，我们有必要了解下 Android 中的启动速度是如何测量的。
+*** 方式 1：使用 ADB
+- 获取启动速度的第一种方式是使用 ADB，使用下面的指令的时候在启动应用的时候会使用 AMS 进行统计。但是缺点是统计时间不够准确：
 #+BEGIN_SRC kotlin
-class Test1 @Inject constructor(@ApplicationContext private val context: Context)
-class Test2 @Inject constructor(@ActivityContext private val context: Context)
+adb shell am start -n ｛包名｝/｛包名｝.{活动名}
 #+END_SRC
-- 对于Application和Activity这两个类型，Hilt也是给它们预置好了注入功能(必须是这两个，即使子类也不可以)
-#+BEGIN_SRC kotlin
-class Test3 @Inject constructor(val application: Application)
-class Test4 @Inject constructor(val activity: Activity)
-#+END_SRC
-** Hilt内置组件类型
-- 上面使用Hilt Module时，有用到@InstallIn(), 意思是把这个模块安装到哪个组件中
-- Hilt内置了7种组件可选：
-  - ApplicationComponent：对应Application，依赖注入实例可以在全项目中使用
-  - ActivityRetainedComponent：对应ViewModel（在配置更改后仍然存在，因此它在第一次调用 Activity#onCreate() 时创建，在最后一次调用 Activity#onDestroy() 时销毁）
-  - ActivityComponent：对应Activity，Activity中包含的Fragment和View也可以使用；
-  - FragmentComponent：对应Fragment
-  - ViewComponent：对应View
-  - ViewWithFragmentComponent：对应带有 @WithFragmentBindings 注释的 View
-  - ServiceComponent：对应Service
-- Hilt 没有为 broadcast receivers 提供组件，因为 Hilt 直接从 ApplicationComponent 注入 broadcast receivers；
-|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
-| Component                 | Description                                                  | Created at             | Destroyed at            |
-|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
-| ApplicationComponent      | 为App提供依赖                                                | Application#onCreate() | Application#onDestroy() |
-| ActivityComponent         | 为Activity提供依赖                                           | Activity#onCreate()    | Activity#onDestroy()    |
-|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
-| ActivityRetainedComponent | Retained顾名思义，其生命周期更长，不会因屏幕旋转等因素重建， | Activity#onCreate()    | Activity#onDestroy()    |
-|                           | 实际上是借助ViewModel实现的                                  |                        |                         |
-|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
-| FragmentComponent         | 为Fragment提供依赖                                           | Fragment#onAttach()    | Fragment#onDestroy()    |
-| ViewComponent             | 为View提供依赖，构造函数中进行注入                           | View#super()           | View destroyed          |
-| ViewWithFragmentComponent | 为Fragment中的View提供依赖                                   | View#super()           | View destroyed          |
-| ServiceComponent          | 为Service提供依赖                                            | Service#onCreate()     | Service#onDestroy()     |
-|---------------------------+--------------------------------------------------------------+------------------------+-------------------------|
-
-** 组件作用域
-- Hilt默认会为每次的依赖注入行为都创建不同的实例。
-- Hilt内置7种组件作用域注解
-  - @Singleton：对应组件ApplicationComponent，整个项目共享同一个实例
-  - @ActivityRetainedScope：对应组件ActivityRetainedComponent
-  - @ActivityScoped：对应组件ActivityComponent，在同一个Activity（包括其包含的Fragment和View中）内部将会共享同一个实例
-  - @FragmentScoped：对应组件FragmentComponent
-  - @ViewScoped：对应组件ViewComponent和ViewWithFragmentComponent；
-  - @ServiceScopedService：对应ServiceComponent
-- 比如我们经常会需要一个全局的OkhttpClient或者Retrofit,就可以如下实现
-#+BEGIN_SRC kotlin
- interface ApiService {
-    @GET("search/repositories?sort=stars&q=Android")
-    suspend fun searRepos(@Query("page") page: Int, @Query("per_page") perPage: Int): RepoResponse
-}
-@Module
-@InstallIn(ApplicationComponent::class)
-class NetworkModel {
-    companion object {
-        private const val BASE_URL = "https://api.github.com/"
-    }
-    @Singleton
-    @Provides
-    fun provideApiService(retrofit: Retrofit): ApiService {
-        return retrofit.create(ApiService::class.java)
-    }
-    //组件作用域:Hilt默认会为每次的依赖注入行为都创建不同的实例。
-    @Singleton
-    @Provides
-    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
-        return Retrofit.Builder()
-            .addConverterFactory(GsonConverterFactory.create())
-            .baseUrl(BASE_URL)
-            .client(okHttpClient)
-            .build()
-    }
-    @Singleton
-    @Provides
-    fun provideOkHttpClient(): OkHttpClient {
-        return OkHttpClient().newBuilder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(90, TimeUnit.SECONDS)
-            .build()
-    }
-}
-#+END_SRC
-- 或是使用Room操作本地数据库
-#+BEGIN_SRC kotlin
-@Database(entities = [RepoEntity::class], version = Constants.DB_VERSION)
-abstract class AppDatabase : RoomDatabase() {
-    abstract fun repoDao(): RepoDao
-}
-@Module
-@InstallIn(ApplicationComponent::class)
-object RoomModule {
-    @Provides
-    @Singleton
-    fun provideAppDatabase(application: Application): AppDatabase {
-        return Room
-            .databaseBuilder(
-                application.applicationContext,
-                AppDatabase::class.java,
-                Constants.DB_NAME
-            )
-            .allowMainThreadQueries() //允许在主线程中查询
-            .build()
-    }
-    @Provides
-    @Singleton
-    fun provideRepoDao(appDatabase: AppDatabase):RepoDao{
-        return appDatabase.repoDao()
-    }
-}
-#+END_SRC
-** ViewModel的依赖注入
-- 通过上面的学习，那我们如果在ViewModel中创建Repository要如何实现呢，可以如下:
-#+BEGIN_SRC kotlin
-//1. 仓库层
-class Repository @Inject constructor(){
-    @Inject
-    lateinit var apiService: ApiService
-    suspend fun getData(): RepoResponse {
-        return apiService.searRepos(1, 5)
-    }
-}
-//2. ViewModel层
-@ActivityRetainedScoped
-class MyViewModel @Inject constructor(private val repository: Repository): ViewModel() {
-    var result: MutableLiveData<String> = MutableLiveData()
-    fun doWork() {
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO){
-                    repository.getData()
-                }
-            }.onSuccess {
-                result.value="RepoResponse=${gson().toJson(it)}"
-            }.onFailure {
-                result.value=it.message
-            }
-        }
-    }
-}
-//3. Activity层
-@AndroidEntryPoint
-class HiltMvvmActivity : AppCompatActivity() {
-    @Inject
-    lateinit var viewModel: MyViewModel
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_hilt_mvvm)
-        viewModel.result.observe(this, Observer {
-            LjyLogUtil.d("result:$it")
-        })
-        lifecycleScope
-        viewModel.doWork()
-    }
-}
-#+END_SRC
-*** ViewModel 和 @ViewModelInject 注解
-- 这种改变了获取ViewModel实例的常规方式, 为此Hilt专门为其提供了一种独立的依赖注入方式: @ViewModelInject
-#+BEGIN_SRC kotlin
-//1. 添加两个额外的依赖
-implementation 'androidx.hilt:hilt-lifecycle-viewmodel:1.0.0-alpha02'
-kapt 'androidx.hilt:hilt-compiler:1.0.0-alpha02'
-//2. 修改MyViewModel: 去掉@ActivityRetainedScoped注解，把@Inject改为@ViewModelInject
-class MyViewModel @ViewModelInject constructor(private val repository: Repository): ViewModel() {
-}
-//3. activity中viewModel获取改为常规写法
-@AndroidEntryPoint
-class HiltMvvmActivity : AppCompatActivity() {
-//    @Inject
-//    lateinit var viewModel: MyViewModel
-    val viewModel: MyViewModel by viewModels()
-//  或  val viewModel: MyViewModel by lazy { ViewModelProvider(this).get(MyViewModel::class.java) }
-}
-#+END_SRC
-*** SavedStateHandle 和 @assist注解
-- Activity/Fragment被销毁一般有三种情况：
-  - 界面关闭或退出应用
-  - Activity 配置 (configuration) 被改变，如旋转屏幕时；
-  - 在后台时因运行内存不足被系统回收；
-- ViewModel 会处理2的情况，而3的情况就需要使用onSaveInstanceState()保存数据，重建时用SavedStateHandle恢复数据，就要用@assist 注解添加 SavedStateHandle 依赖项
-#+BEGIN_SRC kotlin
-class MyViewModel @ViewModelInject constructor(
-    private val repository: Repository,
-    //SavedStateHandle 用于进程被终止时，保存和恢复数据
-    @Assisted private val savedStateHandle: SavedStateHandle
-) : ViewModel() {
-    var result: MutableLiveData<String> = MutableLiveData()
-    private val userId: MutableLiveData<String> = savedStateHandle.getLiveData("userId")
-    fun doWork() {
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    repository.getData(userId)
-                }
-            }.onSuccess {
-                result.value = "RepoResponse=${Gson().toJson(it)}"
-            }.onFailure {
-                result.value = it.message
-            }
-        }
-    }
-}
-#+END_SRC
-** 在 Hilt 不支持的类中注入依赖项
-- 可以使用 @EntryPoint 注释创建入口点, 调用EntryPointAccessors的静态方法来获得自定义入口点的实例
-- EntryPointAccessors提供了四个静态方法：fromActivity、fromApplication、fromFragment、fromView，根据自定义入口的MyEntryPoint的注解@InstallIn所指定的范围选择对应的获取方法；
-#+BEGIN_SRC kotlin
-@EntryPoint
-@InstallIn(ApplicationComponent::class)
-interface MyEntryPoint{
-    fun getRetrofit():Retrofit
-}
-#+END_SRC
-*** 在ContentProvider中使用
-- Hilt支持的入口点中少了一个关键的Android组件：ContentProvider, 主要原因就是ContentProvider.onCreate() 在Application的onCreate() 之前执行，因此很多人会利用这个特性去进行提前初始化, 详见Android Jetpack系列--5. App Startup使用详解, 而Hilt的工作原理是从Application.onCreate()中开始的，即ContentProvider.onCreate()执行之前，Hilt的所有功能都还无法正常工作；
-#+BEGIN_SRC kotlin
-class MyContentProvider : ContentProvider() {
-    override fun onCreate(): Boolean {
-        context?.let {
-            val appContext = it.applicationContext
-            //调用EntryPointAccessors.fromApplication()函数来获得自定义入口点的实例
-            val entryPoint = EntryPointAccessors.fromApplication(appContext,MyEntryPoint::class.java)
-            //再调用入口点中定义的getRetrofit()函数就能得到Retrofit的实例
-            val retrofit = entryPoint.getRetrofit()
-            LjyLogUtil.d("retrofit:$retrofit")
-        }
-        return true
-    }
-}
-#+END_SRC
-*** 在 App Startup 中使用
-- App Startup 会默认提供一个 InitializationProvider，InitializationProvider 继承 ContentProvider；
-#+BEGIN_SRC kotlin
-class LjyInitializer : Initializer<Unit> {
-    override fun create(context: Context) {
-        //调用EntryPointAccessors.fromApplication()函数来获得自定义入口点的实例
-        val entryPoint = EntryPointAccessors.fromApplication(context, MyEntryPoint::class.java)
-        //再调用入口点中定义的getRetrofit()函数就能得到Retrofit的实例
-        val retrofit = entryPoint.getRetrofit()
-        LjyLogUtil.d("retrofit:$retrofit")
-    }
-    override fun dependencies(): List<Class<out Initializer<*>>> {
-        return emptyList()
-    }
-}
-#+END_SRC
-- 报错解决
-  - Expected @HiltAndroidApp to have a value. Did you forget to apply the Gradle Plugin?
-#+BEGIN_SRC groovy
-android {
-    defaultConfig {
-            javaCompileOptions {
-            annotationProcessorOptions {
-                arguments  =  ["room.schemaLocation":
-                             "$projectDir/schemas".toString()]
-            }
-        }
-    }
-}
-//If so, try changing from "arguments  = " to "arguments + = ", as just using equals overwrites anything set previously.
-#+END_SRC
-** Dagger Hilt - ViewModel的依赖注入及实现原理
-- ViewModel的注入方法，使用起来非常简单：
-#+BEGIN_SRC kotlin
-class ActivityViewModel @ViewModelInject constructor(
-    private val repository: Repository,
-    @Assisted private val savedState: SavedStateHandle
-) : ViewModel() {
-
-}
-@AndroidEntryPoint
-class MainActivity : AppCompatActivity(R.layout.activity_main) {
-
-    private val viewModel by viewModels<ActivityViewModel>()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-    }
-}
-#+END_SRC
-- ViewModle创建需要借助ViewModel.Factory、而非构造函数直接创建。上面整个注入过程并没有自定义任何factory，仅仅@ViewModelInject一个注解就搞定了，这是怎么实现的呢？
-*** viewModels{…}
-- viewModels{...}是一个继承Lazy<>的ktx扩展，可以通过by关键字方便地创建ViewModel，以前我在airbnb的Mvrx中见到过类似用法，看来是被Jetpack借鉴了。
-- 官方自然不只是简单的借(chao)鉴(xi)，里面自有其玄机
-#+BEGIN_SRC kotlin
-@MainThread
-inline fun <reified VM : ViewModel> ComponentActivity.viewModels(
-    noinline factoryProducer: (() -> Factory)? = null
-): Lazy<VM> {
-    val factoryPromise = factoryProducer ?: {
-        // ComponentActivity#getDefaultViewModelProviderFactory()
-        defaultViewModelProviderFactory
-    }
-
-    return ViewModelLazy(VM::class, { viewModelStore }, factoryPromise)
-}
-#+END_SRC
-- 通过源码知道，ViewModel.Factory默认使用了defaultViewModelProviderFactory。所以只要重写这个defaultViewModelProviderFactory，就可以hook自定义实现进去
-*** 重写getDefaultViewModelProviderFactory
-- 通过前一篇文章我们知道，Hilt会在编译期修改被注入对象的父类，
-#+BEGIN_SRC kotlin
-@AndroidEntryPoint
-class MainActivity : AppCompatActivity(R.layout.activity_main) {
-#+END_SRC
-- MainActivity原本继承自AppCompatActivity，但经Hilt处理后父类变为了Hilt_MainActivity
+*** 方式 2：代码埋点
+- 在 Application 的 attachBaseContext() 方法中记录开始时间，第一个 Activity 的 onWindowFocusChanged() 中记录结束时间。缺点是统计不完全，因为在 attachBaseContext() 之前还有许多操作。
+*** 方式 3：TraceView
+- 在 AS 中打开 DDMS，或者到 SDK 安装目录的 tools 目录下面使用 monitor.bat 打开 DDMS。
+- TraceView 工具的使用可以参考这篇文章：《Android 性能分析之TraceView使用(应用耗时分析)》
+- 通过 TraceView 主要可以得到两种数据：单次执行耗时的方法以及执行次数多的方法。但 TraceView 性能耗损太大，不能比较正确反映真实情况。
+*** 方式 4：Systrace
+- Systrace 能够追踪关键系统调用的耗时情况，如系统的 IO 操作、内核工作队列、CPU 负载、Surface 渲染、GC 事件以及 Android 各个子系统的运行状况等。但是不支持应用程序代码的耗时分析。
+*** 方式 5：Systrace + 插桩
+- 类似于 AOP，通过切面为每个函数统计执行时间。这种方式的好处是能够准确统计各个方法的耗时。
+- 原理就是
 #+BEGIN_SRC java
-@Generated("dagger.hilt.android.processor.internal.androidentrypoint.ActivityGenerator")
-public abstract class Hilt_MainActivity extends AppCompatActivity implements GeneratedComponentManager<Object> {
-  private volatile ActivityComponentManager componentManager;
-...
-  @Override
-  public ViewModelProvider.Factory getDefaultViewModelProviderFactory() {
-    ViewModelProvider.Factory factory = DefaultViewModelFactories.getActivityFactory(this);
-    if (factory != null) {
-      return factory;
+    public void method() {
+        TraceMethod.i();
+        // Real work
+        TraceMethod.o();
     }
-    return super.getDefaultViewModelProviderFactory();
-  }
-}
 #+END_SRC 
-- HIlt_MainActivity中通过DefaultViewModelFactories.getActivityFactory(this)返回ViewModel.Factory。
-#+BEGIN_SRC java
-public final class DefaultViewModelFactories {
-  @Nullable
-  public static ViewModelProvider.Factory getActivityFactory(ComponentActivity activity) {
-    return getFactoryFromSet(
-        EntryPoints.get(activity, ActivityEntryPoint.class).getActivityViewModelFactory());
-  }
-}
-#+END_SRC 
-- 一句话概括：Hilt通过Dagger生成的Component获取ViewModelFactory
-  - EntryPoints.get(activity, ActivityEntryPoint.class)创建并获取ActivityComponent，
-  - getActivityViewModelFactory()通过Component内的Module获取Factory
-*** 创建ActivityComponent
-    #+BEGIN_SRC kotlin
-public final class EntryPoints {
-  @Nonnull
-  public static <T> T get(Object component, Class<T> entryPoint) {
-    if (component instanceof GeneratedComponent) {
-      return entryPoint.cast(component);
-    } else if (component instanceof GeneratedComponentManager) {
-      return entryPoint.cast(((GeneratedComponentManager<?>) component).generatedComponent());
-    } 
-  }
-}
-#+END_SRC
-- javas
-#+BEGIN_SRC java
-@Generated("dagger.hilt.android.processor.internal.androidentrypoint.ActivityGenerator")
-public abstract class Hilt_MainActivity extends AppCompatActivity implements GeneratedComponentManager<Object> {
-  private volatile ActivityComponentManager componentManager;
-...
-  @Override
-  public final Object generatedComponent() {
-    return componentManager().generatedComponent();
-  }
-  
-  protected ActivityComponentManager createComponentManager() {
-    return new ActivityComponentManager(this);
-  }
-  protected final ActivityComponentManager componentManager() {
-    if (componentManager == null) {
-      synchronized (componentManagerLock) {
-        if (componentManager == null) {
-          componentManager = createComponentManager();
-        }
-      }
-    }
-    return componentManager;
-  }
-#+END_SRC 
-- 如上，Hilt_MainActivity继承自GeneratedComponentManager，ActivityComponentManager获取generatedComponent
-#+BEGIN_SRC java
-public class ActivityComponentManager implements GeneratedComponentManager<Object> {
- //...
-  protected Object createComponent() {
-    return ((ActivityComponentBuilderEntryPoint)
-            activityRetainedComponentManager.generatedComponent())
-        .activityComponentBuilder()
-        .activity(activity)
-        .build();
-  }
-}
-#+END_SRC 
-- 最终通过Hilt_MainActivity的ActivityComponentManager获创建ActivityComponent，ActivityComponentManager内部通过activityRetainedComponentManager（借助ViewModel）保证了ActivityComponent的复用。
-*** 获取ViewModelFactory
-- 获取ActivityComponent后，通过内部的Model获取ViewModelFactory。
-- Hilt中提供了ActivityModule，可以InstallIn到ActivityComponent。ActivityModule中定义了Factory的Provider
-#+BEGIN_SRC java
-@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP_PREFIX)
-public final class ViewModelFactoryModules {
-    /**
-     * Hilt Modules for providing the activity level ViewModelFactory
-     */
-    @Module
-    @InstallIn(ActivityComponent.class)
-    public abstract static class ActivityModule {
-        @NonNull
-        @Multibinds
-        abstract Map<String, ViewModelAssistedFactory<? extends ViewModel>> viewModelFactoriesMap();
-        @Provides
-        @IntoSet
-        @NonNull
-        @DefaultActivityViewModelFactory
-        static ViewModelProvider.Factory provideFactory(
-                @NonNull Activity activity,
-                @NonNull Application application,
-                @NonNull Map<String, Provider<ViewModelAssistedFactory<? extends ViewModel>>>
-                        viewModelFactories) {
-            // Hilt guarantees concrete activity is a subclass of ComponentActivity.
-            SavedStateRegistryOwner owner = (ComponentActivity) activity;
-            Bundle defaultArgs = activity.getIntent() != null
-                    ? activity.getIntent().getExtras() : null;
-            SavedStateViewModelFactory delegate =
-                    new SavedStateViewModelFactory(application, owner, defaultArgs);
-            return new HiltViewModelFactory(owner, defaultArgs, delegate, viewModelFactories)
-#+END_SRC 
-- 通过SavedStateViewModelFactory的defaultArgs，将ViewModel所需的参数进行注入
-*** 总结
-- Hilt在编译期改写Activity或者Fragment的父类，获取了自定义的ViewModel.Factory的方法，从而hook了ViewModle的创建过程，对ViewModel进行注入。整个实现过程借助@InstallIn以及@AndroidEntryPoint的注解，本身就是一个Hilt的最佳实践，值得学习和借鉴
+*** 方式 6：录屏
+- 录屏方式收集到的时间，更接近于用户的真实体感。可以在录屏之后按帧来进行统计分析。
+** 怎么记录安卓app的启动速度
+- 1）Android Profiler，可以设置从启动开始监控，得到cpu内存等信息
+- 2）Perfetto UI，开发者模式新增加了一个“系统跟踪”的功能，只有安卓10可以用
+- 3）MethodTracing  Debug.startMethodTracing() 和 stopMethodTracing() 方法来开始和结束 Tracing。Traceview打开
+- 4）profilo可以做线上监控
+** 启动优化
+*** 一般解决办法
+**** 延迟初始化
+- 一些逻辑，如果没必要在程序启动的时候就立即初始化，那么可以将其推迟到需要的时候再初始化。比如，我们可以使用单例的方式来获取类的实例，然后在获取实例的时候再进行初始化操作。
+- **但是需要注意的是，懒加载要防止集中化，否则容易出现首页显示后用户无法操作的情形。可以按照耗时和是否必要将业务划分到四个维度：必要且耗时，必要不耗时，非必要但耗时，非必要不耗时。**然后对应不同的维度来决定是否有必要在程序启动的时候立即初始化。
+**** 防止主线程阻塞
+- 一般我们也不会把耗时操作放在主线程里面，毕竟现在有了 RxJava 之后，在程序中使用异步代价并不高。这种耗时操作包括，大量的计算、IO、数据库查询和网络访问等。
+- 另外，关于开启线程池的问题下面的话总结得比较好，除了一般意义上线程池和使用普通线程的区别，还要考虑应用启动这个时刻的特殊性：
+- 如何开启线程同样也有学问：Thread、ThreadPoolExecutor、AsyncTask、HandlerThread、IntentService 等都各有利弊；例如通常情况下 ThreadPoolExecutor 比 Thread 更加高效、优势明显，但是特定场景下单个时间点的表现 Thread 会比 ThreadPoolExecutor 好：同样的创建对象，ThreadPoolExecutor 的开销明显比 Thread 大。
+来自：https://www.jianshu.com/p/f5514b1a826c
+**** 布局优化
+- 比如，之前我在使用 Fragment 和 ViewPager 搭配的时候，发现虽然 Fragment 可以被复用，但是如果通过 Adapter 为 ViewPager 的每个项目指定了标题，那么这些标题控件不会被复用。当 ViewPager 的条目比较多的时候，甚至会造成 ANR.
+- 对于这种布局优化相关的东西，可以参考性能优化的 Android性能优化-布局优化 模块。
+**** 使用启动页面防止白屏
+- 这种方法只是治标不治本的方法，就是在应用启动的时候避免白屏，可以通过设置自定义主题来实现。
+- 这种实现方式可以参考我的开源项目 MarkNote 的实现。
+*** 其他借鉴办法
+**** 使用 BlockCanary 检测卡顿
+BlockCanary 是一个开源项目，类似于 LeakCanary （很多地方也借鉴了 LeakCanary 的东西），主要用来检测程序中的卡顿，项目地址是 Github-BlockCanary. 它的原理是对 Looper 中的 loop() 方法打处的日志进行处理，通过一个自定义的日志输出 Printer 监听方法执行的开始和结束。可以通过该项目作者的文章来了解这个项目：
+BlockCanary — 轻松找出Android App界面卡顿元凶
+**** GC 优化
+- GC 优化的思想就是减少垃圾回收的时间间隔，所以在启动的过程中不要频繁创建对象，特别是大对象，避免进行大量的字符串操作，特别是序列化跟反序列化过程。一些频繁创建的对象，例如网络库和图片库中的 Byte 数组、Buffer 可以复用。如果一些模块实在需要频繁创建对象，可以考虑移到 Native 实现。
+**** 类重排
+- 如果我们的代码在打包的时候被放进了不同的 dex 里面，当启动的时候，如果需要用到的类分散在各个 dex 里面，那么系统要花额外的时间到各个 dex 里加载类。因此，我们可以通过类重排调整类在 Dex 中的排列顺序，把启动时用到的类放进主 dex 里。
+- 目前可以使用 ReDex 的 Interdex 调整类在 Dex 中的排列顺序。
+- 可以参考下面这篇文章来了解类重拍在手 Q 中的应用以及他们遇到的各种问题：
+- Redex 初探与 Interdex：Andorid 冷启动优化
+**** 资源文件重排
+- 对应于类重排，还有资源的重排。可以参考下阿里的资源重排优化方案：
+- 支付宝 App 构建优化解析：通过安装包重排布优化 Android 端启动性能
+- 这种方案的原理时先通过测试找出程序启动过程中需要加载的资源，然后再打包的时候通过修改 7z 压缩工具将上述热点资源放在一起。这样，在系统进行资源加载的时候，这些资源将要用到的资源会一起被加载进程内存当中并缓存，减少了 IO 的次数，同时不需要从磁盘读取文件，来提高应用启动的速度。
+**** 类的加载
+- 通过 Hook 来去掉应用启动过程中的 verify 来减少启动过程中的耗时。但是这种方式存在虚拟机兼容的问题，在 ART 虚拟机上面进行 Hook 需要兼容几个版本。
+** 启动优化方法
+- 1、I/O 优化
+  - 启动过程不建议出现网络 I/O，相比之下，磁盘 I/O 是启动优化一定要抠的点
+- 2、数据重排
+  -  Dex 文件用的到的类和安装包 APK 里面各种资源文件一般都比较小，但是读取非常频繁。我们可以利用系统这个机制将它们按照读取顺序重新排列，减少真实的磁盘 I/O 次数。
+- 3、类重排
+  - 启动过程类加载顺序可以通过复写 ClassLoader 得到。然后通过 ReDex 的Interdex调整类在 Dex 中的排列顺序
+- 4、资源文件重排
+  - 它们都是通过修改 Kernel 源码，单独编译了一个特殊的 ROM，支付宝安装包重排布优化 Android 
+  - 适合出海项目，低端机型
+- 5、类的加载
+  - 加载类的过程有一个 verify class 的步骤，可以通过 Hook 来去掉 verify 这个步骤，Dalvik比较好用，art平台比较复杂，需要兼容。这对启动速度有几十毫秒的优化。其实最大的优化场景在于首次和覆盖安装时。
+- 6、加固会对启动速度有影响
+- 7、支付宝GC抑制，Dalvik比较好使，Android 5.0 以下的系统占比已经不高，其次这也会带来一些兼容性问题。一是设备厂商没有加密内存中的 Dalvik 库文件，二是设备厂商没有改动 Google 的 Dalvik 源码。PLT hook，阻止gc线程唤醒。
+- 8、无需等待 ODEX 优化的直接 DEX 加载方案，优化低端 Dalvik机型
 
