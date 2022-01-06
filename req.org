@@ -130,7 +130,6 @@ app/build.gradle
 - 5、切换线程: 使用了 _适配器模式_ 通过检测不同的Platform使用不同的回调执行器，然后使用回调执行器切换线程，这里同样是使用了装饰模式。
 - 6、处理结果
 
-
 * SQLite Datebase
 
 
@@ -638,6 +637,101 @@ ViewHolder tryGetViewHolderForPositionByDeadline(int position, boolean dryRun, l
     return holder; 
 } 
 #+END_SRC
+- 终于到了缓存机制最核心的地方，为了方便大家阅读，我对这部分源码进行了删减，直接从官方给的注释里面看。
+#+BEGIN_SRC java
+// (0) If there is a changed scrap, try to find from there
+if (mState.isPreLayout()) {
+    holder = getChangedScrapViewForPosition(position);
+    fromScrapOrHiddenOrCache = holder != null;
+}
+#+END_SRC 
+- 这里面只有设置动画以后才会为true，跟咱们讲的缓存也没有多大关系，直接略过。
+#+BEGIN_SRC java
+ // 1) Find by position from scrap/hidden list/cache
+if (holder == null) {
+    holder = getScrapOrHiddenOrCachedHolderForPosition(position, dryRun);
+}
+#+END_SRC 
+- 这里就开始拿第一级和第二级缓存了getScrapOrHiddenOrCachedHolderForPosition（）这个方法可以深入去看以下，注意这里传的参数是position（dryRun这个参数不用管），就跟我之前说的，Scrap和Cache是根据position拿到缓存。
+#+BEGIN_SRC java
+if (holder == null && mViewCacheExtension != null) {
+    // We are NOT sending the offsetPosition because LayoutManager does not
+    // know it.
+    final View view = mViewCacheExtension
+            .getViewForPositionAndType(this, position, type);
+    if (view != null) {
+        holder = getChildViewHolder(view);
+
+    }
+}
+#+END_SRC 
+- 这里开始拿第三级缓存了，这里我们不自定义ViewCacheExtension就不会进入判断条件，还是那句话慎用。
+#+BEGIN_SRC java
+if (holder == null) { // fallback to pool
+    if (DEBUG) {
+        Log.d(TAG, "tryGetViewHolderForPositionByDeadline("
+              + position + ") fetching from shared pool");
+    }
+    holder = getRecycledViewPool().getRecycledView(type);
+    if (holder != null) {
+        holder.resetInternal();
+        if (FORCE_INVALIDATE_DISPLAY_LIST) {
+            invalidateDisplayListInt(holder);
+        }
+    }
+}
+#+END_SRC 
+- 这里到了第四级缓存RecycledViewPool，getRecycledViewPool().getRecycledView(type);通过type拿到ViewHolder，接着holder.resetInternal();重置ViewHolder，让其变成一个全新的ViewHolder
+#+BEGIN_SRC java
+if (holder == null) {
+    long start = getNanoTime();
+    if (deadlineNs != FOREVER_NS
+        && !mRecyclerPool.willCreateInTime(type, start, deadlineNs)) {
+        // abort - we have a deadline we can't meet
+        return null;
+    }
+    holder = mAdapter.createViewHolder(RecyclerView.this, type);
+    if (ALLOW_THREAD_GAP_WORK) {
+        // only bother finding nested RV if prefetching
+        RecyclerView innerView = findNestedRecyclerView(holder.itemView);
+        if (innerView != null) {
+            holder.mNestedRecyclerView = new WeakReference<>(innerView);
+        }
+    }
+}
+#+END_SRC 
+- 到这里如果ViewHolder还为null的话，就会create view了，创建一个新的ViewHolder
+#+BEGIN_SRC java
+boolean bound = false;
+if (mState.isPreLayout() && holder.isBound()) {
+    // do not update unless we absolutely have to.
+    holder.mPreLayoutPosition = position;
+} else if (!holder.isBound() || holder.needsUpdate() || holder.isInvalid()) {
+    if (DEBUG && holder.isRemoved()) {
+        throw new IllegalStateException("Removed holder should be bound and it should"
+                                        + " come here only in pre-layout. Holder: " + holder
+                                        + exceptionLabel());
+    }
+    final int offsetPosition = mAdapterHelper.findPositionOffset(position);
+    bound = tryBindViewHolderByDeadline(holder, offsetPosition, position, deadlineNs);
+}  
+#+END_SRC 
+- 这里else if (!holder.isBound() || holder.needsUpdate() || holder.isInvalid())是判断这个ViewHolder是不是有效的，也就是可不可以复用，如果不可以复用就会进入tryBindViewHolderByDeadline(holder, offsetPosition, position, deadlineNs);这个方法，在这里面调用了bindViewHolder（）方法。
+- 点进去看一眼
+#+BEGIN_SRC java
+private boolean tryBindViewHolderByDeadline(@NonNull ViewHolder holder, int offsetPosition,
+                                            int position, long deadlineNs) {
+    mAdapter.bindViewHolder(holder, offsetPosition);
+    return true;
+}
+#+END_SRC 
+- 在点进去就到了我们熟悉的onBindViewHolder（）
+#+BEGIN_SRC java
+public final void bindViewHolder(@NonNull VH holder, int position) {
+    onBindViewHolder(holder, position, holder.getUnmodifiedPayloads());
+}
+#+END_SRC 
+- 至此，缓存机制的整体流程就全部分析完毕了。
 
 [[./pic/cache2.png]]
 
@@ -675,6 +769,7 @@ void onContentsChanged() {
   
   [[./pic/viewpool.jpg]]
 - 5.使用DiffUtil
+
 
 * 滑动刷新: 参考一下别人的知识点梳理
 - https://github.com/lelelongwang/WanJetpack

@@ -3,6 +3,7 @@
 #+author: deepwaterooo
 
 * Java 创建线程的三种方式总结
+- 关于线程、异步任务，多进程等等： _纸上得来终觉浅，绝知此事要躬行_
 - https://blog.csdn.net/u011578734/article/details/110523825
 ** 继承 Thread 类
    #+BEGIN_SRC java
@@ -66,6 +67,11 @@ public static void main(String[] args) throws ExecutionException, InterruptedExc
 
 
 * Handler的使用
+- Android提供了四种常用的操作多线程的方式，分别是：
+  - 1. Handler+Thread
+  - 2. AsyncTask
+  - 3. ThreadPoolExecutor
+  - 4. IntentService
 - Android中，不允许应用程序在子线程中更新UI，UI的处理必须在UI线程中进行，这样Android定制了一套完善的线程间通信机制——Handler通信机制。Handler作为Android线程通信方式，高频率的出现在我们的日常开发工作中，我们常用的场景包括：使用异步线程进行网络通信、后台任务处理等，Handler则负责异步线程与UI线程（主线程）之间的交互。
 - Android为了确保UI操作的线程安全，规定所有的UI操作都必须在主线程（UI线程）中执行，决定了UI线程中不能进行耗时任务，在开发过程中，需要将网络，IO等耗时任务放在工作线程中执行，工作线程中执行完成后需要在UI线程中进行刷新，因此就有了Handler进程内线程通信机制，当然Handler并不是只能用在UI线程与工作线程间的切换，Android中任何线程间通信都可以使用Handler机制。
 ** UI线程中使用Handler
@@ -518,6 +524,46 @@ public class WorkThread extends Thread {
   - Looper.loop 为什么不会卡死：为了app不挂掉，就要保证主线程一直运行存在，使用死循环代码阻塞在msgQueue.next()中的nativePollOnce()方法里 ，主线程就会挂起休眠释放cpu，线程就不会退出。Looper死循环之前，在ActivityThread.main()中就会创建一个 Binder 线程（ApplicationThread），接收系统服务AMS发送来的事件。当系统有消息产生（其实系统每 16ms 会发送一个刷新 UI 消息唤醒）会通过epoll机制 向pipe管道写端写入数据 就会发送消息给 looper 接收到消息后处理事件，保证主线程的一直存活。只有在主线程中处理超时才会让app崩溃 也就是ANR。
   - Messaage复用： 将使用完的Message清除附带的数据后, 添加到复用池中 ,当我们需要使用它时,直接在复用池中取出对象使用,而不需要重新new创建对象。复用池本质还是Message 为node 的单链表结构。所以推荐使用Message.obation获取 对象。
 
+** handler稍带总结
+- Android主线程包含一个消息队列(MessageQueue)，该消息队列里面可以存入一系列的Message或Runnable对象。通过一个Handler你可以往这个消息队列发送Message或者Runnable对象，并且处理这些对象。每次你新创建一个Handle对象，它会绑定于创建它的线程(也就是UI线程)以及该线程的消息队列，从这时起，这个handler就会开始把Message或Runnable对象传递到消息队列中，并在它们出队列的时候执行它们。
+
+[[./pic/handlerthread.png]]
+
+- Handler可以把一个Message对象或者Runnable对象压入到消息队列中，进而在UI线程中获取Message或者执行Runnable对象，Handler把压入消息队列有两类方式，Post和sendMessage：
+*** Post方式：
+- Post允许把一个Runnable对象入队到消息队列中。它的方法有：
+- post(Runnable)/postAtTime(Runnable,long)/postDelayed(Runnable,long)
+- 对于Handler的Post方式来说，它会传递一个Runnable对象到消息队列中，在这个Runnable对象中，重写run()方法。一般在这个run()方法中写入需要在UI线程上的操作。
+  
+[[./pic/post.png]]
+
+*** sendMessage：
+- sendMessage允许把一个包含消息数据的Message对象压入到消息队列中。它的方法有：sendEmptyMessage(int)/sendMessage(Message)/sendMessageAtTime(Message,long)/sendMessageDelayed(Message,long)
+- Handler如果使用sendMessage的方式把消息入队到消息队列中，需要传递一个Message对象，而在Handler中，需要重写handleMessage()方法，用于获取工作线程传递过来的消息，此方法运行在UI线程上。Message是一个final类，所以不可被继承。
+  
+[[./pic/handler2.png]]
+
+[[./pic/sendmsg.png]]
+
+- 优缺点
+  - 1. Handler用法简单明了，可以将多个异步任务更新UI的代码放在一起，清晰明了
+  - 2. 处理单个异步任务代码略显多
+- 适用范围
+  - 1. 多个异步任务的更新UI
+
+* HandlerThread
+- HandlerThread 是一个自带 Looper 消息循环的线程类。处理异步任务的方式和 Thread + Looper + Handler 方式相同。
+** 优点：
+- 简单，内部实现了普通线程的 Looper 消息循环。
+- 可以串行执行多个任务。
+- 内部拥有自己的消息队列，不会阻塞 UI 线程。
+** 缺点：
+- 没有结果返回接口，需要自行处理。
+- 消息过多时，容易造成阻塞。
+- 只有一个线程处理，效率较低。
+- 线程优先级默认优先级为 THREAD_PRIORITY_DEFAULT，容易和 UI 线程抢占资源。
+
+
 * AsyncTask
 - 较为轻量级的异步类，封装了 FutureTask 的线程池、ArrayDeque 和 Handler 进行调度。AsyncTask 主要用于 _后台与界面持续交互_
 - 我们来看看 AsyncTask 这个抽象类的定义，当我们定义一个类来继承 AsyncTask 这个类的时候，我们需要为其指定3个泛型参数：
@@ -563,28 +609,92 @@ new DownloadFilesTask().execute(url1, url2, url3);
 - 每个AsyncTask 只能被执行一次，多次执行会引发异常。
 - AsyncTask 的四个方法，只有 doInBackground 方法是运行在其他线程中,其他三个方法都运行在 UI 线程中，也就说其他三个方法都可以进行 UI 的更新操作。
 - AsyncTask 默认是串行执行，如果需要并行执行，使用接口 executeOnExecutor 方法。
+** 补充总结
+- AsyncTask是android提供的轻量级的异步类,可以直接继承AsyncTask，在类中实现异步操作，并提供接口反馈当前异步执行的程度(可以通过接口实现UI进度更新)，最后反馈执行的结果给UI主线程。
+- AsyncTask通过一个阻塞队列BlockingQuery<Runnable>存储待执行的任务，利用静态线程池THREAD_POOL_EXECUTOR提供一定数量的线程，默认128个。在Android 3.0以前，默认采取的是并行任务执行器，3.0以后改成了默认（by default,如果想要并行执行，需要设置配置）采用串行任务执行器，通过静态串行任务执行器SERIAL_EXECUTOR控制任务串行执行，循环取出任务交给THREAD_POOL_EXECUTOR中的线程执行，执行完一个，再执行下一个。( _这里写的内容需要再校对一下_ )
+- 用法举例：
+#+BEGIN_SRC java
+class DownloadTask extends AsyncTask<Integer, Integer, String>{  
+    // AsyncTask<Params, Progress, Result>
+    //后面尖括号内分别是参数（例子里是线程休息时间），进度(publishProgress用到)，返回值类型
+    @Override
+    protected void onPreExecute() {
+        //第一个执行方法
+        super.onPreExecute();
+    }
+    @Override
+    protected String doInBackground(Integer... params) {
+        //第二个执行方法,onPreExecute()执行完后执行
+        for(int i=0;i<=100;i++){
+            publishProgress(i);
+            try {
+                Thread.sleep(params[0]);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        return "执行完毕";
+    }
+    @Override
+    protected void onProgressUpdate(Integer... progress) {
+        //这个函数在doInBackground调用publishProgress时触发，虽然调用时只有一个参数
+        //但是这里取到的是一个数组,所以要用progesss[0]来取值
+        //第n个参数就用progress[n]来取值
+        tv.setText(progress[0]+"%");
+        super.onProgressUpdate(progress);
+    }
+    @Override
+    protected void onPostExecute(String result) {
+        //doInBackground返回时触发，换句话说，就是doInBackground执行完后触发
+        //这里的result就是上面doInBackground执行后的返回值，所以这里是"执行完毕"
+        setTitle(result);
+        super.onPostExecute(result);
+    }
+}
+#+END_SRC 
 ** 优点：
 - 结构清晰，使用简单，适合后台任务的交互。
 - 异步线程的优先级已经被默认设置成了：THREAD_PRIORITY_BACKGROUND，不会与 UI 线程抢占资源。
+  - 1. 处理单个异步任务简单，可以获取到异步任务的进度
+  - 2. 可以通过cancel方法取消还没执行完的AsyncTask
+  - 3. 处理多个异步任务代码显得较多
 ** 缺点：
 - 结构略复杂，代码较多。
 - 每个 AsyncTask 只能被执行一次，多次调用会发生异常。
 - AsyncTask 在整个 Android 系统中维护一个线程池，有可能被其他进程的任务抢占而降低效率。
+- 适用范围
+  - 1. 单个异步任务的处理
 
-* HandlerThread
-- HandlerThread 是一个自带 Looper 消息循环的线程类。处理异步任务的方式和 Thread + Looper + Handler 方式相同。
-** 优点：
-- 简单，内部实现了普通线程的 Looper 消息循环。
-- 可以串行执行多个任务。
-- 内部拥有自己的消息队列，不会阻塞 UI 线程。
-** 缺点：
-- 没有结果返回接口，需要自行处理。
-- 消息过多时，容易造成阻塞。
-- 只有一个线程处理，效率较低。
-- 线程优先级默认优先级为 THREAD_PRIORITY_DEFAULT，容易和 UI 线程抢占资源。
+* ThreadPoolExecutor
+- ThreadPoolExecutor提供了一组线程池，可以管理多个线程并行执行。这样一方面减少了每个并行任务独自建立线程的开销，另一方面可以管理多个并发线程的公共资源，从而提高了多线程的效率。所以ThreadPoolExecutor比较适合一组任务的执行。Executors利用工厂模式对ThreadPoolExecutor进行了封装，使用起来更加方便。
+- Executors提供了四种创建ExecutorService的方法，他们的使用场景如下：
+#+BEGIN_SRC kotlin
+- 1. Executors.newFixedThreadPool()
+  - 创建一个定长的线程池，每提交一个任务就创建一个线程，直到达到池的最大长度，这时线程池会保持长度不再变化
+- 2. Executors.newCachedThreadPool()
+  - 创建一个可缓存的线程池，如果当前线程池的长度超过了处理的需要时，它可以灵活的回收空闲的线程，当需要增加时，
+  - 它可以灵活的添加新的线程，而不会对池的长度作任何限制
+- 3. Executors.newScheduledThreadPool()
+  - 创建一个定长的线程池，而且支持定时的以及周期性的任务执行，类似于Timer
+- 4. Executors.newSingleThreadExecutor()
+  - 创建一个单线程化的executor，它只创建唯一的worker线程来执行任务
+#+END_SRC
+- 适用范围
+  - 批处理任务
+
 
 *  IntentService
 - IntentService 继承自 Service 类，用于启动一个异步服务任务，它的内部是通过 HandlerThread 来实现异步处理任务的。
+- 作用
+  - 处理异步请求 & 实现多线程
+- 使用场景: 线程任务 需 按顺序、在后台执行
+  - 最常见的场景：离线下载
+  - 不符合多个数据同时请求的场景：所有的任务都在同一个Thread looper里执行
+- 使用步骤
+  - 步骤1：定义 IntentService的子类，需复写onHandleIntent()方法
+  - 步骤2：在Manifest.xml中注册服务
+  - 步骤3：在Activity中开启Service服务
+
 - 我们来看下 IntentService 的主要方法：
 #+BEGIN_SRC java
 // mServiceLooper;
@@ -617,15 +727,139 @@ private final class ServiceHandler extends Handler {
     }
 }
 #+END_SRC
-** 优点：
+** 源码原理分析
+   
+   [[./pic/intentservice3.png]]
+   
+- 特别注意
+- 若启动IntentService 多次，那么 每个耗时操作 则 以队列的方式 在 IntentService的 onHandleIntent回调方法中依次执行，执行完自动结束
+- 接下来，我们将通过 源码分析 解决以下问题：
+  - IntentService 如何单独开启1个新的工作线程
+  - IntentService 如何通过onStartCommand() 将Intent 传递给服务 & 依次插入到工作队列中
+*** 源码分析
+**** 问题1：IntentService如何单独开启1个新的工作线程
+- 主要分析内容 = IntentService源码中的 onCreate()方法
+#+BEGIN_SRC java
+@Override public void onCreate() {
+    super.onCreate();
+    
+    // 1. 通过实例化 HandlerThread 新建线程 & 启动；故使用IntentService时，不需额外新建线程
+    // HandlerThread 继承自 Thread，内部封装了 Looper
+    HandlerThread thread = new HandlerThread("IntentService[" + mName + "]");
+    thread.start();
+  
+    // 2. 获得工作线程的 Looper & 维护自己的工作队列
+    mServiceLooper = thread.getLooper();
+    
+    // 3. 新建mServiceHandler & 绑定上述获得Looper
+    // 新建的Handler 属于工作线程  =====>>>>> 分析1
+    mServiceHandler = new ServiceHandler(mServiceLooper); 
+}
+/** 
+ * 分析1：ServiceHandler源码分析
+ **/ 
+private final class ServiceHandler extends Handler {
+    // 构造函数
+    public ServiceHandler(Looper looper) {
+        super(looper);
+    }
+    // IntentService 的 handleMessage() 把接收的消息交给 onHandleIntent() 处理
+    @Override
+        public void handleMessage(Message msg) {
+        // onHandleIntent 方法在 工作线程 中执行
+        // onHandleIntent() = 抽象方法，使用时需重写  =====>>>>> 分析2
+        onHandleIntent((Intent)msg.obj);
+        // 执行完调用 stopSelf() 结束服务
+        stopSelf(msg.arg1);
+    }
+}
+/** 
+ * 分析2： onHandleIntent()源码分析
+ * onHandleIntent() = 抽象方法，使用时需重写
+ **/ 
+@WorkerThread protected abstract void onHandleIntent(Intent intent);
+#+END_SRC 
+**** 问题2：IntentService 如何通过onStartCommand() 将Intent 传递给服务 & 依次插入到工作队列中
+    #+BEGIN_SRC java
+/** 
+ * onStartCommand（）源码分析
+ * onHandleIntent() = 抽象方法，使用时需重写
+ **/ 
+public int onStartCommand(Intent intent, int flags, int startId) {
+    // 调用 onStart() =====>>>>> 分析1
+    onStart(intent, startId);
+    return mRedelivery ? START_REDELIVER_INTENT : START_NOT_STICKY;
+}
+/** 
+ * 分析1：onStart(intent, startId)
+ **/ 
+public void onStart(Intent intent, int startId) {
+    // 1. 获得ServiceHandler消息的引用
+    Message msg = mServiceHandler.obtainMessage();
+    msg.arg1 = startId;
+
+    // 2. 把 Intent 参数包装到 message 的 obj 发送消息中，
+    //这里的 Intent = 启动服务时 startService(Intent) 里传入的 Intent
+    msg.obj = intent;
+
+    // 3. 发送消息，即 添加到消息队列里
+    mServiceHandler.sendMessage(msg);
+}
+    #+END_SRC 
+- 至此，关于IntentService的源码分析讲解完毕。
+*** 源码总结
+- 从上面源码可看出：IntentService本质 = Handler + HandlerThread：
+  - 通过HandlerThread 单独开启1个工作线程：IntentService
+  - 创建1个内部 Handler ：ServiceHandler
+  - 绑定 ServiceHandler 与 IntentService
+  - 通过 onStartCommand() 传递服务intent 到ServiceHandler 、依次插入Intent到工作队列中 & 逐个发送给 onHandleIntent()
+  - 通过onHandleIntent() 依次处理所有Intent对象所对应的任务
+- 因此我们通过复写onHandleIntent() & 在里面 根据Intent的不同进行不同线程操作 即可
+*** 注意事项
+- 此处，有两个注意事项需要关注的：
+  - 工作任务队列 = 顺序执行
+  - 不建议通过 bindService() 启动 IntentService
+- 注意事项1：工作任务队列 = 顺序执行
+  - 即 若一个任务正在IntentService中执行，此时你再发送1个新的任务请求，这个新的任务会一直等待直到前面一个任务执行完毕后才开始执行
+- 原因：
+  - 由于onCreate()只会调用一次 = 只会创建1个工作线程；
+  - 当多次调用 startService(Intent)时（即 onStartCommand（）也会调用多次），其实不会创建新的工作线程，只是把消息加入消息队列中 & 等待执行。
+  - 所以，多次启动 IntentService 会按顺序执行事件
+  - 若服务停止，则会清除消息队列中的消息，后续的事件不执行
+- 注意事项2：不建议通过 bindService() 启动 IntentService
+  - 原因：
+#+BEGIN_SRC java
+// 在IntentService中，onBind()`默认返回null
+@Override
+public IBinder onBind(Intent intent) {
+    return null;
+}
+#+END_SRC 
+- 采用 bindService()启动 IntentService的生命周期如下：
+#+BEGIN_SRC java
+onCreate() ->> onBind() ->> onunbind()->> onDestory()
+#+END_SRC 
+- 即，并不会调用onStart() 或 onStartcommand()，故不会将消息发送到消息队列，那么onHandleIntent()将不会回调，即无法实现多线程的操作
+  - 此时，你应该使用Service，而不是IntentService
+
+** 优缺点
+*** 优点：
 - 只需要继承 IntentService，就可以在 onHandlerIntent 方法中异步处理 Intent 类型任务了。
 - 任务结束后 IntentService 会自行停止，无需手动调用 stopService。
 - 可以执行处理多个 Intent 请求，顺序执行多任务。
 - IntentService 是继承自 Service，具有后台 Service 的优先级。
-** 缺点：
+*** 缺点：
 - 需要启动服务来执行异步任务，不适合简单任务处理。
 - 异步任务是由 HandlerThread 实现的，只能单线程、顺序处理任务。
 - 没有返回 UI 线程的接口。
+** 与Service的区别
+   
+   [[./pic/intentservice1.png]]
+   
+** 与其他线程的区别
+   
+   [[./pic/intentservice2.png]]
+
 
 * 使用线程池来处理异步任务
 - 利用 Executors 的静态方法 newCachedThreadPool()、newFixedThreadPool()、newSingleThreadExecutor() 及重载形式实例化 ExecutorService 接口即得到线程池对象。
@@ -643,7 +877,6 @@ private final class ServiceHandler extends Handler {
 - 当线程数过多时，线程之间的切换成本会有很大开销，从而使性能严重下降。
 - 每个线程都会耗费至少 1040KB 内存，线程池的线程数量需要控制在一定范围内。
 - 线程的优先级具有继承性，如果在 UI 线程中创建线程池，线程的默认优先级会和 UI 线程相同，从而对 UI 线程使用资源进行抢占。
-
 
 * Java基础之多线程(没那么复杂)
 ** 多线程的引入
