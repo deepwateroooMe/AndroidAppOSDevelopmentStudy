@@ -1,0 +1,768 @@
+#+latex_class: cn-article
+#+title: 安卓中的内存分析与优化
+#+author: deepwaterooo
+
+* 整理下Android内存优化常用的几种工具，top命令、adb shell dumpsys meminfo、Memory Profiler、LeakCanary、MAT
+- https://juejin.cn/post/6976164022278160392
+** top
+- top命令是Linux下常用的性能分析工具，能够实时显示系统中各个进程的资源占用状况。
+- 查看top命令的用法
+#+BEGIN_SRC kotlin
+$ adb shell top --help
+usage: top [-Hbq] [-k FIELD,] [-o FIELD,] [-s SORT] [-n NUMBER] [-m LINES] [-d SECONDS] [-p PID,] [-u USER,]
+Show process activity in real time.
+-H	Show threads
+-k	Fallback sort FIELDS (default -S,-%CPU,-ETIME,-PID)
+-o	Show FIELDS (def PID,USER,PR,NI,VIRT,RES,SHR,S,%CPU,%MEM,TIME+,CMDLINE)
+-O	Add FIELDS (replacing PR,NI,VIRT,RES,SHR,S from default)
+-s	Sort by field number (1-X, default 9)
+-b	Batch mode (no tty)
+-d	Delay SECONDS between each cycle (default 3)
+-m	Maximum number of tasks to show
+-n	Exit after NUMBER iterations
+-p	Show these PIDs
+-u	Show these USERs
+-q	Quiet (no header lines)
+Cursor LEFT/RIGHT to change sort, UP/DOWN move list, space to force
+update, R to reverse sort, Q to exit.
+#+END_SRC
+- 使用top命令显示一次进程信息，以便讲解进程信息中各字段的含义
+#+BEGIN_SRC kotlin
+[[41;173RTasks: 754 total,   1 running, 753 sleeping,   0 stopped,   0 zombie
+  Mem:      5.5G total,      5.4G used,      165M free,       76M buffers
+ Swap:      2.5G total,      789M used,      1.7G free,      2.4G cached
+800%cpu 100%user   3%nice  54%sys 641%idle   0%iow   3%irq   0%sirq   0%host
+  PID USER         PR  NI VIRT  RES  SHR S[%CPU] %MEM     TIME+ ARGS
+15962 u0_a894      10 -10 6.6G 187M  76M S 75.6   3.2   8:16.55 asia.bluepay.cl+
+  785 system       -2  -8 325M  13M 7.6M S 29.7   0.2  84:03.91 surfaceflinger
+25255 shell        20   0  35M 2.7M 1.6M R 21.6   0.0   0:00.16 top -n 1
+  739 system       -3  -8 177M 3.6M 2.2M S 10.8   0.0  16:00.36 android.hardwar+
+16154 u0_i9086     10 -10 1.3G  40M  19M S  5.4   0.6   0:46.18 com.google.andr+
+13912 u0_a87       20   0  17G 197M  86M S  5.4   3.4  23:56.88 com.tencent.mm
+24789 root         RT  -2    0    0    0 D  2.7   0.0   0:01.36 [mdss_fb0]
+24704 root         20   0    0    0    0 S  2.7   0.0   0:01.20 [kworker/u16:12]
+20096 u0_a94       30  10 6.1G 137M  53M S  2.7   2.3   0:31.45 com.xiaomi.mark+
+ 2272 system       18  -2 8.7G 407M 267M S  2.7   7.1 191:11.32 system_server
+  744 system       RT   0 1.3G 1.6M 1.4M S  2.7   0.0  72:22.41 android.hardwar+
+  442 root         RT   0    0    0    0 S  2.7   0.0   5:59.68 [cfinteractive]
+  291 root         -3   0    0    0    0 S  2.7   0.0   5:00.17 [kgsl_worker_th+
+   10 root         20   0    0    0    0 S  2.7   0.0   1:55.84 [rcuop/0]
+    7 root         20   0    0    0    0 S  2.7   0.0   2:46.82 [rcu_preempt]
+25186 shell        20   0  34M 1.9M 1.4M S  0.0   0.0   0:00.71 logcat -v long +
+25181 root         20   0    0    0    0 S  0.0   0.0   0:00.00 [kworker/2:3]
+25137 root         20   0    0    0    0 S  0.0   0.0   0:00.00 [kworker/1:3]
+25118 system       20   0 5.2G  83M  54M S  0.0   1.4   0:01.05 com.android.set+
+24946 u0_a57       20   0 5.1G  60M  37M S  0.0   1.0   0:00.82 com.xiaomi.acco+
+#+END_SRC
+- 第 1 行：进程信息
+  - 总共(total)：754个
+  - 运行中(running)状态：1个
+  - 休眠(sleeping)状态：753个
+  - 停止(stopped)状态：0个
+  - 僵尸(zombie)状态：0个
+- 第 2 行：内存信息
+  - 5.5G total：物理内存总量
+  - 5.4G used：使用中的内存量
+  - 165M free：空闲内存量
+  - 76M buffers： 缓存的内存量
+- 第 3 行：Swap分区信息
+  - 2.5G total：交换区总量
+  - 789M used：使用的交换区大小
+  - 1.7G free：空闲交换区大小
+  - 2.4G cached：缓冲的交换区大小
+  - 内存监控时，可以监控swap交换分区的used，如果这个数值在不断的变化，说明内核在不断进行内存和swap的数据交换，这是内存不够用了。
+- 第 4 行：CPU信息
+  - 800%cpu：8核cpu
+  - 100%user：用户进程使用CPU占比
+  - 3%nice：优先值为负的进程占比
+  - 54%sys：内核进程使用CPU占比
+  - 641%idle：除IO等待时间以外的其它等待时间占比
+  - 0%iow：IO等待时间占比
+  - 3%irq：硬中断时间占比
+  - 0%sirq：软中断时间占比
+- 第 5 行及以下：各进程的状态监控
+  - PID：进程id
+  - USER：进程所属用户
+  - PR：进程优先级
+  - NI：nice值，负值表示高优先级，正值表示低优先级
+  - VIRT：进程使用的虚拟内存总量，VIRT=SWAP+RES
+  - RES：进程使用的、未被换出的物理内存大小，RES=CODE+DATA
+  - SHR：共享内存大小
+  - S：进程状态
+  - %CPU：上次更新到现在的CPU占用时间比
+  - %MEM：使用物理内存占比
+  - TIME+：进程时间的CPU时间总计，单位1/100秒
+  - ARGS：进程名
+** dumpsys meminfo
+首先了解下Android中最重要的四大内存指标的概念
+|------+-----------------------+------------------+-----------------------------------------------------------------|
+| 指标 | 全称                  | 含义             | 等价                                                            |
+|------+-----------------------+------------------+-----------------------------------------------------------------|
+| USS  | Unique Set Size       | 独占物理内存     | 进程独占的内存                                                  |
+| PSS  | Proportional Set Size | 实际使用物理内存 | PSS = USS + 按比例包含共享库内存                                |
+| RSS  | Resident Set Size     | 实际使用物理内存 | RSS = USS + 包含共享库内存                                      |
+| VSS  | Virtual Set Size      | 虚拟耗用内存     | VSS = 进程占用内存（包括虚拟耗用） + 共享库（包括比例分配部分） |
+|------+-----------------------+------------------+-----------------------------------------------------------------|
+- 我们主要使用USS和PSS来衡量进程的内存使用情况
+- dumpsys meminfo命令展示的是系统整体内存情况，内存项按进程进行分类
+#+BEGIN_SRC kotlin
+$ adb shell dumpsys meminfo
+Applications Memory Usage (in Kilobytes):
+Uptime: 168829244 Realtime: 1465769995
+
+// 根据进程PSS占用值从大到小排序
+Total PSS by process:
+    272,029K: system (pid 2272)
+    234,043K: com.tencent.mm (pid 13912 / activities)
+    185,914K: com.android.systemui (pid 13606)
+    107,294K: com.tencent.mm:appbrand0 (pid 5563)
+    101,526K: com.tencent.mm:toolsmp (pid 9287)
+     96,645K: com.miui.home (pid 15116 / activities)
+    ...
+
+// 以oom来划分，会详细列举所有的类别的进程
+Total PSS by OOM adjustment:
+    411,619K: Native
+         62,553K: android.hardware.camera.provider@2.4-service (pid 730)
+         21,630K: logd (pid 579)
+         16,179K: surfaceflinger (pid 785)
+         ...
+    272,029K: System
+        272,029K: system (pid 2272)
+    361,942K: Persistent
+        185,914K: com.android.systemui (pid 13606)
+         37,917K: com.android.phone (pid 2836)
+         23,510K: com.miui.contentcatcher (pid 3717)
+         ...
+     36,142K: Persistent Service
+         36,142K: com.android.bluetooth (pid 26472)
+    101,198K: Foreground
+         72,743K: com.miui.securitycenter.remote (pid 4125)
+         28,455K: com.android.settings (pid 30919 / activities)
+    338,088K: Visible
+         96,645K: com.miui.home (pid 15116 / activities)
+         46,939K: com.miui.personalassistant (pid 31043)
+         36,491K: com.xiaomi.xmsf (pid 4197)
+         ...
+     47,703K: Perceptible
+         17,826K: com.xiaomi.metoknlp (pid 4477)
+         10,748K: com.lbe.security.miui (pid 5097)
+         10,528K: com.xiaomi.location.fused (pid 4563)
+          8,601K: com.miui.mishare.connectivity (pid 4227)
+     13,088K: Perceptible Low
+         13,088K: com.miui.analytics (pid 19306)
+    234,043K: Backup
+        234,043K: com.tencent.mm (pid 13912 / activities)
+     22,028K: A Services
+         22,028K: com.miui.powerkeeper (pid 29762)
+    198,787K: Previous
+         33,375K: com.android.quicksearchbox (pid 31023)
+         23,278K: com.google.android.webview:sandboxed_process0:org.chromium.content.app.SandboxedProcessService0:0 (pid 16154)
+    171,434K: B Services
+         45,962K: com.tencent.mm:push (pid 14095)
+         31,514K: com.tencent.mobileqq:MSF (pid 12051)
+         22,691K: com.xiaomi.mi_connect_service (pid 22821)
+         ...
+    538,062K: Cached
+        107,294K: com.tencent.mm:appbrand0 (pid 5563)
+        101,526K: com.tencent.mm:toolsmp (pid 9287)
+         72,112K: com.tencent.mm:tools (pid 9187)
+        ...
+
+// 按内存的类别来进行划分
+Total PSS by category:
+    692,040K: Native
+    328,722K: Dalvik
+    199,826K: .art mmap
+    129,981K: .oat mmap
+    126,624K: .dex mmap
+    124,509K: Unknown
+     92,666K: .so mmap
+     68,189K: Dalvik Other
+     53,491K: .apk mmap
+     44,104K: Gfx dev
+     28,099K: Other mmap
+     24,960K: .jar mmap
+      7,956K: Ashmem
+      3,700K: Stack
+      3,368K: Other dev
+        450K: .ttf mmap
+          4K: Cursor
+          0K: EGL mtrack
+          0K: GL mtrack
+          0K: Other mtrack
+
+// 手机整体内存使用情况
+Total RAM: 5,862,068K (status normal)
+ Free RAM: 3,794,646K (  538,062K cached pss + 3,189,244K cached kernel +         0K cached ion +    67,340K free)
+ Used RAM: 2,657,473K (2,208,101K used pss +   449,372K kernel)
+ Lost RAM:   487,987K
+     ZRAM:   219,996K physical used for   826,852K in swap (2,621,436K total swap)
+   Tuning: 256 (large 512), oom   322,560K, restore limit   107,520K (high-end-gfx)
+#+END_SRC
+- 查看单个进程的内存信息，命令如下
+#+BEGIN_SRC kotlin
+adb shell dumpsys meminfo [pid | packageName]
+#+END_SRC
+- 我们查看下微信的内存信息
+#+BEGIN_SRC kotlin
+$ adb shell dumpsys meminfo com.tencent.mm
+Applications Memory Usage (in Kilobytes):
+Uptime: 169473031 Realtime: 1466413783
+
+** MEMINFO in pid 13912 [com.tencent.mm] **
+                   Pss  Private  Private  SwapPss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------
+  Native Heap    51987    51924        0    61931   159044   139335    19708
+  Dalvik Heap    74302    74272        8     2633   209170   184594    24576
+ Dalvik Other    10136    10136        0      290
+        Stack       84       84        0        8
+       Ashmem        2        0        0        0
+      Gfx dev     8808     8808        0        0
+    Other dev      156        0      156        0
+     .so mmap     9984      984     7436     8493
+    .jar mmap     1428        0      560        0
+    .apk mmap     2942        0     1008        0
+    .ttf mmap     1221        0     1064        0
+    .dex mmap    31302       44    30004      528
+    .oat mmap     2688        0      232        0
+    .art mmap     2792     2352       40     3334
+   Other mmap     6932     2752      632        0
+      Unknown     4247     4232        4     7493
+        TOTAL   293721   155588    41144    84710   368214   323929    44284
+
+ App Summary
+                       Pss(KB)
+                        ------
+           Java Heap:    76664
+         Native Heap:    51924
+                Code:    41332
+               Stack:       84
+            Graphics:     8808
+       Private Other:    17920
+              System:    96989
+
+               TOTAL:   293721       TOTAL SWAP PSS:    84710
+
+ Objects
+               Views:      623         ViewRootImpl:        1
+         AppContexts:        9           Activities:        1
+              Assets:       12        AssetManagers:        0
+       Local Binders:      198        Proxy Binders:      183
+       Parcel memory:       46         Parcel count:      185
+    Death Recipients:      125      OpenSSL Sockets:        1
+            WebViews:        0
+
+ SQL
+         MEMORY_USED:      156
+  PAGECACHE_OVERFLOW:       13          MALLOC_SIZE:      117
+
+ DATABASES
+      pgsz     dbsz   Lookaside(b)          cache  Dbname
+         4       28             46       721/26/4  /data/user/0/com.tencent.mm/databases/Scheduler.db
+
+ Asset Allocations
+    : 409K
+    : 12K
+    : 1031K
+#+END_SRC
+- App Summary各项指标解读如下，通常我们需要重点关注Java Heap和Native Heap的大小，如果持续上升，有可能存在内存泄露。
+|-------------+---------------------------------------------------------------------------------------------------|
+| 属性        | 内存组成                                                                                          |
+|-------------+---------------------------------------------------------------------------------------------------|
+| Java Heap   | Dalvik Heap的Private Dirty + .art mmap的Private Dirty&Private Clean                               |
+| Native Heap | Native Heap的Private Dirty                                                                        |
+| Code        | .so mmap + .jar mmap + .apk mmap + .ttf.mmap + .dex.mmap + .oat mmap的Private Dirty&Private Clean |
+| Stack       | Stack的Private Dirty                                                                              |
+| Graphics    | Gfx dev + EGL mtrack + GL mtrack的Private Dirty&Private Clean                                     |
+|-------------+---------------------------------------------------------------------------------------------------|
+- Objects中Views、Activities、AppContexts的异常可以判断有内存泄露，比如刚退出应用，查看Activites是否为0，如果不为0，则有Activity没有销毁。
+** Memory Profiler
+- Memory Profiler是 Android Profiler 中的一个组件，实时图表展示应用内存使用量，识别内存泄露和抖动，提供捕获堆转储，强制GC以及跟踪内存分配的能力。
+** Leak Canary
+- 非常好用的内存泄露检测工具，对于Activity/Fragment的内存泄露检测非常方便。
+** MAT
+- MAT是Memory Analyzer tool的缩写，是一个非常全面的分析工具，使用相对复杂点。
+- 关于安装和配置有很多很好的文章结束，这里就不单独讲了，后面分析具体案例。
+
+** 内存问题高效分析方法
+- 接入LeakCanary，监控所有Activity和Fragment的释放，App所有功能跑一遍，观察是否有抓到内存泄露的地方，分析引用链找到并解决问题，如此反复，直到LeakCanary检查不到内存泄露。
+- adb shell dumpsys meminfo命令查看退出界面后Objects的Views和Activities数目，特别是退出App后数目为否为0。
+- 打开Android Studio Memory Profiler，反复打开关闭页面多次，点击GC，如果内存没有恢复到之前的数值，则可能发生了内存泄露。再点击Profiler的垃圾桶图标旁的heap dump按钮查看当面内存堆栈情况，按包名找到当前测试的Activity，如果存在多份实例，则很可能发生了内存泄露。
+- 对于可疑的页面dump出内存快照文件，转换后用MAT打开，针对性的分析。
+- 观察Memory Profiler每个页面打开时的内存波峰和抖动情况，针对性分析。
+- 开发者选项中打开“不保留后台活动”，App运行一段时间后退到后台，触发GC，dump内存快照。MAT分析静态内容是否有可以优化的地方，比如图片缓存、单例、内存缓存等。
+
+* 避免可控的内存泄漏
+- 内存泄漏就是指没有用的对象到GC Roots是可达的（对象被引用），导致GC无法回收该对象。此时，如果Obj4是一个没有用的对象，但它仍与GC Roots是可达的，那么Obj4就会内存泄漏。
+- 内存泄漏产生的原因，主要分为三大类：
+  - 1.由开发人员自己编码造成的泄漏。
+  - 2.第三方框架造成的泄漏。
+  - 3.由Android 系统或者第三方ROM造成的泄漏。
+- 其中第二种和第三种有时是不可控的，但是第一种是可控的，既然是可控的，我们就要尽量在编码时避免造成内存泄漏，下面就来列举出常见的内存泄漏的场景。
+** Android内存泄漏的八种可能（上）
+- Java是垃圾回收语言的一种，其优点是开发者无需特意管理内存分配，降低了应用由于局部故障(segmentation fault)导致崩溃，同时防止未释放的内存把堆栈(heap)挤爆的可能，所以写出来的代码更为安全。
+- 不幸的是，在Java中仍存在很多容易导致内存泄漏的逻辑可能(logical leak)。如果不小心，你的Android应用很容易浪费掉未释放的内存，最终导致内存用光的错误抛出(out-of-memory，OOM)。
+- 一般内存泄漏(traditional memory leak)的原因是：由忘记释放分配的内存导致的。（译者注：Cursor忘记关闭等）
+- 逻辑内存泄漏(logical memory leak)的原因是：当应用不再需要这个对象，当仍未释放该对象的所有引用。
+- _如果持有对象的强引用，垃圾回收器是无法在内存中回收这个对象。_
+- 在Android开发中，最容易引发的内存泄漏问题的是Context。比如Activity的Context，就包含大量的内存引用，例如View Hierarchies和其他资源。一旦泄漏了Context，也意味泄漏它指向的所有对象。Android机器内存有限，太多的内存泄漏容易导致OOM。
+- 检测逻辑内存泄漏需要主观判断，特别是对象的生命周期并不清晰。幸运的是，Activity有着明确的生命周期，很容易发现泄漏的原因。Activity.onDestroy()被视为Activity生命的结束，程序上来看，它应该被销毁了，或者Android系统需要回收这些内存（译者注：当内存不够时，Android会回收看不见的Activity）。
+- 如果这个方法执行完，在堆栈中仍存在持有该Activity的强引用，垃圾回收器就无法把它标记成已回收的内存，而我们本来目的就是要回收它！
+- 结果就是Activity存活在它的生命周期之外。
+- Activity是重量级对象，应该让Android系统来处理它。然而，逻辑内存泄漏总是在不经意间发生。（译者注：曾经试过一个Activity导致20M内存泄漏）。在Android中，导致潜在内存泄漏的陷阱不外乎两种：
+  - 全局进程(process-global)的static变量。这个无视应用的状态，持有Activity的强引用的怪物。 ( _涉进程间通信与多进程应用_ )
+  - 活在Activity生命周期之外的线程。没有清空对Activity的强引用。
+- 检查一下你有没有遇到下列的情况。
+  - 单例（主要原因还是因为一般情况下单例都是全局的，有时候会引用一些实际生命周期比较短的变量，导致其无法释放）
+  - 静态变量（同样也是因为生命周期比较长）
+  - Handler内存泄露[7]
+  - 匿名内部类（匿名内部类会引用外部类，导致无法释放，比如各种回调）
+  - 资源使用完未关闭（BraodcastReceiver，ContentObserver，File，Cursor，Stream，Bitmap）
+*** Static Activities
+- 在类中定义了静态Activity变量，把当前运行的Activity实例赋值于这个静态变量。
+- 如果这个静态变量在Activity生命周期结束后没有清空，就导致内存泄漏。因为static变量是贯穿这个应用的生命周期的，所以被泄漏的Activity就会一直存在于应用的进程中，不会被垃圾回收器回收。
+#+BEGIN_SRC java
+static Activity activity;
+
+void setStaticActivity() {
+    activity = this;
+}
+View saButton = findViewById(R.id.sa_button);
+saButton.setOnClickListener(new View.OnClickListener() {
+        @Override public void onClick(View v) {
+            setStaticActivity();
+            nextActivity();
+        }
+    });
+#+END_SRC 
+*** Static Views
+- 类似的情况会发生在单例模式中，如果Activity经常被用到，那么在内存中保存一个实例是很实用的。正如之前所述，强制延长Activity的生命周期是相当危险而且不必要的，无论如何都不能这样做。
+- 特殊情况：如果一个View初始化耗费大量资源，而且在一个Activity生命周期内保持不变，那可以把它变成static，加载到视图树上(View Hierachy)，像这样，当Activity被销毁时，应当释放资源。（译者注：示例代码中并没有释放内存，把这个static view置null即可，但是还是不建议用这个static view的方法）
+#+BEGIN_SRC java
+static view;
+    
+void setStaticView() {
+    view = findViewById(R.id.sv_button);
+}
+View svButton = findViewById(R.id.sv_button);
+svButton.setOnClickListener(new View.OnClickListener() {
+        @Override public void onClick(View v) {
+            setStaticView();
+            nextActivity();
+        }
+    });
+#+END_SRC 
+*** Inner Classes
+- 继续，假设Activity中有个内部类，这样做可以提高可读性和封装性。将如我们创建一个内部类，而且持有一个静态变量的引用，恭喜，内存泄漏就离你不远了（译者注：销毁的时候置空，嗯）。
+#+BEGIN_SRC java
+private static Object inner;
+       
+void createInnerClass() {
+    class InnerClass {
+    }
+    inner = new InnerClass();
+}
+View icButton = findViewById(R.id.ic_button);
+icButton.setOnClickListener(new View.OnClickListener() {
+        @Override public void onClick(View v) {
+            createInnerClass();
+            nextActivity();
+        }
+    });
+#+END_SRC 
+内部类的优势之一就是可以访问外部类，不幸的是，导致内存泄漏的原因，就是内部类持有外部类实例的强引用。
+*** Anonymous Classes
+- 相似地，匿名类也维护了外部类的引用。所以内存泄漏很容易发生，当你在Activity中定义了匿名的AsyncTsk。当异步任务在后台执行耗时任务期间，Activity不幸被销毁了（译者注：用户退出，系统回收），这个被AsyncTask持有的Activity实例就不会被垃圾回收器回收，直到异步任务结束。
+#+BEGIN_SRC java
+void startAsyncTask() {
+    new AsyncTask<Void, Void, Void>() {
+        @Override protected Void doInBackground(Void... params) {
+            while(true);
+        }
+    }.execute();
+}
+super.onCreate(savedInstanceState);
+setContentView(R.layout.activity_main);
+View aicButton = findViewById(R.id.at_button);
+aicButton.setOnClickListener(new View.OnClickListener() {
+        @Override public void onClick(View v) {
+            startAsyncTask();
+            nextActivity();
+        }
+    });
+#+END_SRC 
+*** Handler
+- 同样道理，定义匿名的Runnable，用匿名类Handler执行。Runnable内部类会持有外部类的隐式引用，被传递到Handler的消息队列MessageQueue中，在Message消息没有被处理之前，Activity实例不会被销毁了，于是导致内存泄漏。
+#+BEGIN_SRC java
+void createHandler() {
+    new Handler() {
+        @Override public void handleMessage(Message message) {
+            super.handleMessage(message);
+        }
+    }.postDelayed(new Runnable() {
+            @Override public void run() {
+                while(true);
+            }
+        }, Long.MAX_VALUE >> 1);
+}
+View hButton = findViewById(R.id.h_button);
+hButton.setOnClickListener(new View.OnClickListener() {
+        @Override public void onClick(View v) {
+            createHandler();
+            nextActivity();
+        }
+    });
+#+END_SRC 
+*** Threads
+- 我们再次通过Thread和TimerTask来展现内存泄漏。
+#+BEGIN_SRC java
+void spawnThread() {
+    new Thread() {
+        @Override public void run() {
+            while(true);
+        }
+    }.start();
+}
+View tButton = findViewById(R.id.t_button);
+tButton.setOnClickListener(new View.OnClickListener() {
+        @Override public void onClick(View v) {
+            spawnThread();
+            nextActivity();
+        }
+    });
+#+END_SRC 
+*** TimerTask
+- 只要是匿名类的实例，不管是不是在工作线程，都会持有Activity的引用，导致内存泄漏。
+#+BEGIN_SRC java
+void scheduleTimer() {
+    new Timer().schedule(new TimerTask() {
+        @Override
+        public void run() {
+            while(true);
+        }
+    }, Long.MAX_VALUE >> 1);
+}
+View ttButton = findViewById(R.id.tt_button);
+ttButton.setOnClickListener(new View.OnClickListener() {
+    @Override public void onClick(View v) {
+        scheduleTimer();
+        nextActivity();
+    }
+});
+#+END_SRC 
+*** Sensor Manager
+- 最后，通过Context.getSystemService(int name)可以获取系统服务。这些服务工作在各自的进程中，帮助应用处理后台任务，处理硬件交互。如果需要使用这些服务，可以注册监听器，这会导致服务持有了Context的引用，如果在Activity销毁的时候没有注销这些监听器，会导致内存泄漏。
+  - 也就是说，资源使用完未关闭（BraodcastReceiver，ContentObserver，File，Cursor，Stream，Bitmap）
+#+BEGIN_SRC java
+void registerListener() {
+    SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+    Sensor sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ALL);
+    sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST);
+}
+View smButton = findViewById(R.id.sm_button);
+smButton.setOnClickListener(new View.OnClickListener() {
+        @Override public void onClick(View v) {
+            registerListener();
+            nextActivity();
+        }
+    });
+#+END_SRC 
+*** 总结
+- 看过那么多会导致内存泄漏的例子，容易导致吃光手机的内存使垃圾回收处理更为频发，甚至最坏的情况会导致OOM。垃圾回收的操作是很昂贵的开销，会导致肉眼可见的卡顿。所以，实例化的时候注意持有的引用链，并经常进行内存泄漏检查。
+
+** Android防止内存泄漏的八种方法（下）: 对就上篇解决方案
+- 在上一篇Android内存泄漏的八种可能（上）中，我们讨论了八种容易发生内存泄漏的代码。其中，尤其严重的是泄漏Activity对象，因为它占用了大量系统内存。不管内存泄漏的代码表现形式如何，其核心问题在于：
+- 在Activity生命周期之外仍持有其引用。
+- 幸运的是，一旦泄漏发生且被定位到了，修复方法是相当简单的。
+*** Static Actitivities
+    #+BEGIN_SRC java
+private static MainActivity activity;
+void setStaticActivity() {
+    activity = this;
+}
+    #+END_SRC 
+- 构造静态变量持有Activity对象很容易造成内存泄漏，因为静态变量是全局存在的，所以当MainActivity生命周期结束时，引用仍被持有。这种写法开发者是有理由来使用的，所以我们需要正确的释放引用让垃圾回收机制在它被销毁的同时将其回收。
+- Android提供了特殊的Set集合https://developer.android.com/reference/java/lang/ref/package-summary.html#classes
+- 允许开发者控制引用的“强度”。Activity对象泄漏是由于需要被销毁时，仍然被强引用着，只要强引用存在就无法被回收。
+- 可以用弱引用代替强引用。
+- https://developer.android.com/reference/java/lang/ref/WeakReference.html.
+- 弱引用不会阻止对象的内存释放，所以即使有弱引用的存在，该对象也可以被回收。
+#+BEGIN_SRC java
+private static WeakReference<MainActivity> activityReference;
+void setStaticActivity() {
+    activityReference = new WeakReference<MainActivity>(this);
+}
+#+END_SRC 
+**** 未正确使用Context
+对于不是必须使用Activity Context的情况（Dialog的Context就必须是Activity Context），我们可以考虑使用Application Context来代替Activity的Context，这样可以避免Activity泄露，比如如下的单例模式：
+#+BEGIN_SRC java
+public class AppSettings { 
+    private Context mAppContext;
+    private static AppSettings mAppSettings = new AppSettings();
+    public static AppSettings getInstance() {
+        return mAppSettings;
+    }
+    public final void setup(Context context) {
+        mAppContext = context;
+    }
+}
+#+END_SRC 
+- mAppSettings作为静态对象，其生命周期会长于Activity。当进行屏幕旋转时，默认情况下，系统会销毁当前Activity，因为当前Activity调用了setup方法，并传入了Activity Context，使得Activity被一个单例持有，导致垃圾收集器无法回收，进而产生了内存泄露。
+- 解决方法就是使用Application的Context：
+#+BEGIN_SRC java
+public final void setup(Context context) {
+    mAppContext = context.getApplicationContext(); 
+}
+#+END_SRC 
+*** Static Views
+- 静态变量持有View
+#+BEGIN_SRC java
+private static View view;
+void setStaticView() {
+    view = findViewById(R.id.sv_button);
+}
+#+END_SRC 
+- 由于View持有其宿主Activity的引用，导致的问题与Activity一样严重。弱引用是个有效的解决方法，然而还有另一种方法是在生命周期结束时清除引用，Activity#onDestory()方法就很适合把引用置空。
+#+BEGIN_SRC java
+private static View view;
+@Override
+public void onDestroy() {
+    super.onDestroy();
+    if (view != null) // 清理view,注销其对activity的引用
+        unsetStaticView();
+}
+void unsetStaticView() {
+    view = null;
+}
+#+END_SRC 
+*** Inner Class
+    #+BEGIN_SRC java
+private static Object inner;
+void createInnerClass() {
+    class InnerClass {
+    }
+    inner = new InnerClass();
+}
+    #+END_SRC 
+- 与上述两种情况相似，开发者必须注意少用非静态内部类，因为非静态内部类持有外部类的隐式引用，容易导致意料之外的泄漏。然而内部类可以访问外部类的私有变量，只要我们注意引用的生命周期，就可以避免意外的发生。
+- 避免静态变量
+- 这样持有内部类的成员变量是可以的。
+#+BEGIN_SRC java
+private Object inner;
+void createInnerClass() {
+    class InnerClass {
+    }
+    inner = new InnerClass();
+}
+#+END_SRC 
+- 使用静态内部类
+#+BEGIN_SRC java
+public class AsyncTaskActivity extends AppCompatActivity {
+    private Button button;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_async_task);
+        button = (Button) findViewById(R.id.bt_next);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startAsyncTask();
+                finish();
+            }
+        });
+    }
+    void startAsyncTask() {
+        new MyAsyncTask().execute();
+    }
+    private static class MyAsyncTask extends AsyncTask<Void, Void, Void> { // <<<<==== static class
+        @Override
+        protected Void doInBackground(Void... params) {
+            while (true) ;
+        }
+    }
+}
+#+END_SRC 
+- 与AsyncTask类似的还有TimerTask，这里就不再举例
+*** Anonymous Classes
+- 前面我们看到的都是持有全局生命周期的静态成员变量引起的，直接或间接通过链式引用Activity导致的泄漏。这次我们用
+**** AsyncTask
+#+BEGIN_SRC java
+void startAsyncTask() {
+    new AsyncTask<Void, Void, Void>() {
+        @Override protected Void doInBackground(Void... params) {
+            while(true);
+        }
+    }.execute();
+}
+#+END_SRC 
+**** Handler
+     #+BEGIN_SRC java
+createHandler() {
+    new Handler() {
+        @Override public void handleMessage(Message message) {
+            super.handleMessage(message);
+        }
+    }.postDelayed(new Runnable() {
+        @Override public void run() {
+            while(true);
+        }
+    }, Long.MAX_VALUE >> 1);
+}
+     #+END_SRC 
+- Handler的Message被存储在MessageQueue中，有些Message并不能马上被处理，它们在MessageQueue中存在的时间会很长，这就会导致Handler无法被回收。如果Handler 是非静态的，则Handler也会导致引用它的Activity或者Service不能被回收。
+**** Thread
+     #+BEGIN_SRC java
+void scheduleTimer() {
+    new Timer().schedule(new TimerTask() {
+        @Override
+        public void run() {
+            while(true);
+        }
+    }, Long.MAX_VALUE >> 1);
+}
+     #+END_SRC 
+- 全部都是因为匿名类导致的。匿名类是特殊的内部类——写法更为简洁。当需要一次性特殊的子类时，Java提供的语法糖能让表达式最少化。这种很赞很偷懒的写法容易导致泄漏。正如使用内部类一样，只要不跨越生命周期，内部类是完全没问题的。但是，这些类是用于产生后台线程的，这些Java线程是全局的，而且持有创建者的引用（即匿名类的引用），而匿名类又持有外部类的引用。线程是可能长时间运行的，所以一直持有Activity的引用导致当销毁时无法回收。
+- 这次我们不能通过移除静态成员变量解决，因为线程是于应用生命周期相关的。为了避免泄漏，我们必须舍弃简洁偷懒的写法，把子类声明为静态内部类。
+- 静态内部类不持有外部类的引用，打破了链式引用。
+**** 所以对于AsyncTask
+     #+BEGIN_SRC java
+private static class NimbleTask extends AsyncTask<Void, Void, Void> {
+    @Override protected Void doInBackground(Void... params) {
+        while(true);
+    }
+}
+void startAsyncTask() {
+    new NimbleTask().execute();
+}
+     #+END_SRC 
+**** Handler
+     #+BEGIN_SRC java
+private static class NimbleHandler extends Handler {
+    @Override public void handleMessage(Message message) {
+        super.handleMessage(message);
+    }
+}
+private static class NimbleRunnable implements Runnable {
+    @Override public void run() {
+        while(true);
+    }
+}
+void createHandler() {
+    new NimbleHandler().postDelayed(new NimbleRunnable(), Long.MAX_VALUE >> 1);
+}
+     #+END_SRC 
+- Handler 是非静态的匿名内部类的实例，它会隐性引用外部类HandlerActivity 。上面的例子就是当我们点击Button时，HandlerActivity 会finish，但是Handler中的消息还没有被处理，因此HandlerActivity 无法被回收。
+- 解决方法就是要使用一个静态的Handler内部类，Handler持有的对象要使用弱引用，并且在Activity的Destroy方法中移除MessageQueue中的消息，如下所示。
+#+BEGIN_SRC java
+public class HandlerActivity extends AppCompatActivity {
+    private Button button;
+    private MyHandler myHandler = new MyHandler(this);
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_handler);
+        button = (Button) findViewById(R.id.bt_next);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                myHandler.sendMessageDelayed(Message.obtain(), 60000);
+                finish();
+            }
+        });
+    }
+    public void show() {
+    
+    }
+    private static class MyHandler extends Handler {
+        private final WeakReference<HandlerActivity> mActivity;
+
+        public MyHandler(HandlerActivity activity) {
+            mActivity = new WeakReference<HandlerActivity2>(activity);
+        }
+        @Override
+        public void handleMessage(Message msg) {
+            if (mActivity != null && mActivity.get() == null) {
+                mActivity.get().show();
+            }
+        }
+    }
+    @Override
+    public void onDestroy() {
+        if (myHandler != null) {
+            myHandler.removeCallbacksAndMessages(null);
+        }
+        super.onDestroy();
+    }
+}
+#+END_SRC 
+- MyHandler是一个静态的内部类，它持有的 HandlerActivity对象使用了弱引用，并且在onDestroy方法中将Callbacks和Messages全部清除掉。
+如果觉得麻烦，也可以使用避免内存泄漏的Handler开源库WeakHandler。
+**** TimerTask
+     #+BEGIN_SRC java
+private static class NimbleTimerTask extends TimerTask {
+    @Override public void run() {
+        while(true);
+    }
+}
+void scheduleTimer() {
+    new Timer().schedule(new NimbleTimerTask(), Long.MAX_VALUE >> 1);
+}
+     #+END_SRC 
+- 但是，如果你坚持使用匿名类，只要在生命周期结束时中断线程就可以。
+#+BEGIN_SRC java
+private Thread thread;
+@Override
+public void onDestroy() {
+    super.onDestroy();
+    if (thread != null) {
+        thread.interrupt();
+    }
+}
+void spawnThread() {
+    thread = new Thread() {
+        @Override public void run() {
+            while (!isInterrupted()) {
+            }
+        }
+    }
+    thread.start();
+}
+#+END_SRC 
+*** Sensor Manager：监听器未关闭
+    #+BEGIN_SRC java
+void registerListener() {
+    SensorManager sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+    Sensor sensor = sensorManager.getDefaultSensor(Sensor.TYPE_ALL);
+    sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST);
+}
+    #+END_SRC 
+- 使用Android系统服务不当容易导致泄漏，为了Activity与服务交互，我们把Activity作为监听器，引用链在传递事件和回调中形成了。只要Activity维持注册监听状态，引用就会一直持有，内存就不会被释放。
+- 在Activity结束时注销监听器
+#+BEGIN_SRC java
+private SensorManager sensorManager;
+private Sensor sensor;
+@Override
+public void onDestroy() {
+    super.onDestroy();
+    if (sensor != null) {
+        unregisterListener();
+    }
+}
+void unregisterListener() {
+    sensorManager.unregisterListener(this, sensor);
+}
+#+END_SRC 
+*** WebView (单开一个进程，多进程应用用与进程间通信)
+- 不同的Android版本的WebView会有差异，加上不同厂商的定制ROM的WebView的差异，这就导致WebView存在着很大的兼容性问题。WebView都会存在内存泄漏的问题，在应用中只要使用一次WebView，内存就不会被释放掉。通常的解决办法就是 _为WebView单开一个进程_ ，使用AIDL与应用的主进程进行通信。WebView进程可以根据业务需求，在合适的时机进行销毁。
+*** 资源对象未关闭
+- 资源对象比如Cursor、File等，往往都用了缓冲，不使用的时候应该关闭它们。把他们的引用置为null，而不关闭它们，往往会造成内存泄漏。因此，在资源对象不使用时，一定要确保它已经关闭，通常在finally语句中关闭，防止出现异常时，资源未被释放的问题。
+*** 集合中对象没清理
+- 通常把一些对象的引用加入到了集合中，当不需要该对象时，如果没有把它的引用从集合中清理掉，这样这个集合就会越来越大。如果这个集合是static的话，那情况就会更加严重。
+*** Bitmap对象
+- 临时创建的某个相对比较大的bitmap对象，在经过变换得到新的bitmap对象之后，应该尽快回收原始的bitmap，这样能够更快释放原始bitmap所占用的空间。
+- 避免静态变量持有比较大的bitmap对象或者其他大的数据对象，如果已经持有，要尽快置空该静态变量。
+*** 总结
+- Activity泄漏的案例我们已经都走过一遍了，其他都大同小异。建议日后遇到类似的情况时，就使用相应的解决方法。内存泄漏只要发生过一次，通过详细的检查，很容易解决并防范于未然。

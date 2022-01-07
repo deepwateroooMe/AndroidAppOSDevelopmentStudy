@@ -91,8 +91,99 @@ public static void main(String[] args) throws ExecutionException, InterruptedExc
     }
 #+END_SRC
 - 这种方式会导致 _内存泄露_ 。
-- Handler 内存泄漏的两个原因: 
-  - Java 中非静态内部类和匿名内部类会持有外部类的引用
+*** 泄露原因讲解
+- 储备知识
+  - 主线程的Looper对象的生命周期 = 该应用程序的生命周期
+  - 在Java中，非静态内部类 & 匿名内部类都默认持有 外部类的引用
+**** 泄露原因描述
+- 上述的Handler实例的消息队列有2个分别来自线程1、2的消息（分别延迟1s、6s）
+- 在Handler消息队列 还有未处理的消息 / 正在处理消息时，消息队列中的Message持有Handler实例的引用
+- 由于Handler = 非静态内部类 / 匿名内部类（2种使用方式），故又默认持有外部类的引用（即MainActivity实例），引用关系如下图：
+  
+[[./pic/leak1.png]]
+
+- 上述的引用关系会一直保持，直到Handler消息队列中的所有消息被处理完毕。在Handler消息队列 还有未处理的消息 / 正在处理消息时，此时若需销毁外部类MainActivity，但由于上述引用关系，垃圾回收器（GC）无法回收MainActivity，从而造成内存泄漏。如下图：
+  
+[[./pic/leak2.png]]
+
+**** 总结
+- 当Handler消息队列 还有未处理的消息 / 正在处理消息时，存在引用关系： “未被处理 / 正处理的消息 -> Handler实例 -> 外部类”
+- 若出现 Handler的生命周期 > 外部类的生命周期 时（即 Handler消息队列 还有未处理的消息 / 正在处理消息 而 外部类需销毁时），将使得外部类无法被垃圾回收器（GC）回收，从而造成 内存泄露
+*** 解决方案
+- 从上面可看出，造成内存泄露的原因有2个关键条件：
+  - 存在 “未被处理 / 正处理的消息 -> Handler实例 -> 外部类” 的引用关系
+  - Handler的生命周期 > 外部类的生命周期
+    - 即 Handler消息队列 还有未处理的消息 / 正在处理消息 而 外部类需销毁
+- 解决方案的思路 = 使得上述任1条件不成立 即可。
+**** 解决方案1：静态内部类
+- 原理：静态内部类不默认持有外部类的引用，从而使得 “未被处理 / 正处理的消息 -> Handler实例 -> 外部类” 的引用关系 不存在。
+- 具体方案：将Handler的子类设置成静态内部类。此外，还可使用WeakReference弱引用持有外部类，保证外部类能被回收。因为：弱引用的对象拥有短暂的生命周期，在垃圾回收器线程扫描时，一旦发现了具有弱引用的对象，不管当前内存空间足够与否，都会回收它的内存
+#+BEGIN_SRC java
+public class MainActivity extends AppCompatActivity {
+    public static final String TAG = "carson：";
+    private Handler showhandler;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        // 实例化自定义的Handler类对象->>分析1
+        // 注：
+            // a. 此处并无指定Looper，故自动绑定当前线程(主线程)的Looper、MessageQueue；
+            // b. 定义时需传入持有的Activity实例（弱引用）
+        showhandler = new FHandler(this);
+        new Thread() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                // a. 定义要发送的消息
+                Message msg = Message.obtain();
+                msg.what = 1;// 消息标识
+                msg.obj = "AA";// 消息存放
+                showhandler.sendMessage(msg);
+            }
+        }.start();
+    }
+    // 设置为：静态内部类
+    private static class FHandler extends Handler{
+        // 定义 弱引用实例
+        private WeakReference<Activity> reference;
+        // 在构造方法中传入需持有的Activity实例
+        public FHandler(Activity activity) {
+            // 使用WeakReference弱引用持有Activity实例
+            reference = new WeakReference<Activity>(activity); }
+        // 通过复写handlerMessage() 从而确定更新UI的操作
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case 1:
+                    Log.d(TAG, "收到线程1的消息");
+                    break;
+                case 2:
+                    Log.d(TAG, " 收到线程2的消息");
+                    break;
+
+            }
+        }
+    }
+}
+#+END_SRC 
+**** 解决方案2：当外部类结束生命周期时，清空Handler内消息队列
+- 原理：不仅使得 “未被处理 / 正处理的消息 -> Handler实例 -> 外部类” 的引用关系 不复存在，同时 使得 Handler的生命周期（即 消息存在的时期） 与 外部类的生命周期 同步
+- 具体方案：当 外部类（此处以Activity为例） 结束生命周期时（此时系统会调用onDestroy（）），清除 Handler消息队列里的所有消息（调用removeCallbacksAndMessages(null)）
+#+BEGIN_SRC java
+@Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mHandler.removeCallbacksAndMessages(null);
+        // 外部类Activity生命周期结束时，同时清空消息队列 & 结束Handler生命周期
+    }
+#+END_SRC 
+- 使用建议
+  - 为了保证Handler中消息队列中的所有消息都能被执行，此处推荐使用解决方案1解决内存泄露问题，即 静态内部类 + 弱引用的方式
 #+BEGIN_SRC java
 // 这是一个外部类 Handler 不会持有外部类引用
 // 显然 handleMessage 没地方写了
@@ -562,7 +653,6 @@ public class WorkThread extends Thread {
 - 消息过多时，容易造成阻塞。
 - 只有一个线程处理，效率较低。
 - 线程优先级默认优先级为 THREAD_PRIORITY_DEFAULT，容易和 UI 线程抢占资源。
-
 
 * AsyncTask
 - 较为轻量级的异步类，封装了 FutureTask 的线程池、ArrayDeque 和 Handler 进行调度。AsyncTask 主要用于 _后台与界面持续交互_
