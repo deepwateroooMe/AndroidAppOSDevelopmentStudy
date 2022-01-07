@@ -278,6 +278,8 @@ Uptime: 169473031 Realtime: 1466413783
 | Graphics    | Gfx dev + EGL mtrack + GL mtrack的Private Dirty&Private Clean                                     |
 |-------------+---------------------------------------------------------------------------------------------------|
 - Objects中Views、Activities、AppContexts的异常可以判断有内存泄露，比如刚退出应用，查看Activites是否为0，如果不为0，则有Activity没有销毁。
+- 吐血整理！究极深入Android内存优化（三）
+  - https://zhuanlan.zhihu.com/p/134041530
 ** Memory Profiler
 - Memory Profiler是 Android Profiler 中的一个组件，实时图表展示应用内存使用量，识别内存泄露和抖动，提供捕获堆转储，强制GC以及跟踪内存分配的能力。
 ** Leak Canary
@@ -766,3 +768,94 @@ void unregisterListener() {
 - 避免静态变量持有比较大的bitmap对象或者其他大的数据对象，如果已经持有，要尽快置空该静态变量。
 *** 总结
 - Activity泄漏的案例我们已经都走过一遍了，其他都大同小异。建议日后遇到类似的情况时，就使用相应的解决方法。内存泄漏只要发生过一次，通过详细的检查，很容易解决并防范于未然。
+
+** Android常见内存问题和对应检测，解决方式
+*** 内存泄露
+- 不止Android程序员，内存泄露应该是大部分程序员都遇到过的问题，可以说大部分的内存问题都是内存泄露导致的，Android里也有一些很常见的内存泄露问题[6]，这里简单罗列下：
+  - 单例（主要原因还是因为一般情况下单例都是全局的，有时候会引用一些实际生命周期比较短的变量，导致其无法释放）
+  - 静态变量（同样也是因为生命周期比较长）
+  - Handler内存泄露[7]
+  - 匿名内部类（匿名内部类会引用外部类，导致无法释放，比如各种回调）
+  - 资源使用完未关闭（BraodcastReceiver，ContentObserver，File，Cursor，Stream，Bitmap）
+- 对Android内存泄露业界已经有很多优秀的组件其中LeakCanary最为知名(Square出品，Square可谓Android开源界中的业界良心，开源的项目包括okhttp, retrofit，otto, picasso, Android开发大神Jake Wharton就在Square)，其原理是监控每个activity，在activity ondestory后，在后台线程检测引用，然后过一段时间进行gc，gc后如果引用还在，那么dump出内存堆栈，并解析进行可视化显示。使用LeakCanary可以快速地检测出Android中的内存泄露。
+- 正常情况下，解决大部分内存泄露问题后，App稳定性应该会有很大提升，但是有时候App本身就是有一些比较耗内存的功能，比如直播，视频播放，音乐播放，那么我们还有什么能做的可以降低内存使用，减少OOM呢？
+*** 图片分辨率相关
+- 分辨率适配问题。很多情况下图片所占的内存在整个App内存占用中会占大部分。我们知道可以通过将图片放到hdpi/xhdpi/xxhdpi等不同文件夹进行适配，通过xml android:background设置背景图片，或者通过BitmapFactory.decodeResource()方法，图片实际上默认情况下是会进行缩放的。在Java层实际调用的函数都是或者通过BitmapFactory里的decodeResourceStream函数
+#+BEGIN_SRC java
+ public static Bitmap decodeResourceStream(Resources res, TypedValue value,
+         InputStream is, Rect pad, Options opts) {
+     if (opts == null) {
+         opts = new Options();
+     }
+     if (opts.inDensity == 0 && value != null) {
+         final int density = value.density;
+         if (density == TypedValue.DENSITY_DEFAULT) {
+             opts.inDensity = DisplayMetrics.DENSITY_DEFAULT;
+         } else if (density != TypedValue.DENSITY_NONE) {
+             opts.inDensity = density;
+         }
+     }
+     if (opts.inTargetDensity == 0 && res != null) {
+         opts.inTargetDensity = res.getDisplayMetrics().densityDpi;
+     }
+     return decodeStream(is, pad, opts);
+ }
+#+END_SRC 
+- decodeResource在解析时会对Bitmap根据当前设备屏幕像素密度densityDpi的值进行缩放适配操作，使得解析出来的Bitmap与当前设备的分辨率匹配，达到一个最佳的显示效果，并且Bitmap的大小将比原始的大，可以参考下腾讯Bugly的详细分析Android 开发绕不过的坑：你的 Bitmap 究竟占多大内存？ - https://link.zhihu.com/?target=https%3A//mp.weixin.qq.com/s/GkPrmlNm8p3fkeh4vo3Htg
+- 关于Density、分辨率、-hdpi等res目录之间的关系：
+  
+[[./pic/dpi.png]]
+
+- 举个例子，对于一张1280×720的图片，如果放在xhdpi，那么xhdpi的设备拿到的大小还是1280×720而xxhpi的设备拿到的可能是1920×1080，这两种情况在内存里的大小分别为：3.68M和8.29M，相差4.61M，在移动设备来说这几M的差距还是很大的。
+- 尽管现在已经有比较先进的图片加载组件类似Glide，Facebook Freso, 或者老牌Universal-Image-Loader，但是有时就是需要手动拿到一个bitmap或者drawable，特别是在一些可能会频繁调用的场景(比如ListView的getView)，怎样尽可能对bitmap进行复用呢？这里首先需要明确的是对同样的图片，要 尽可能复用，我们可以简单自己用WeakReference做一个bitmap缓存池，也可以用类似图片加载库写一个通用的bitmap缓存池，可以参考GlideBitmapPool[8]的实现。
+- 我们也来看看系统是怎么做的，对于类似在xml里面直接通过android:background或者android:src设置的背景图片，以ImageView为例，最终会调用Resource.java里的loadDrawable:
+#+BEGIN_SRC java
+ Drawable loadDrawable(TypedValue value, int id, Theme theme) throws NotFoundException {
+     // Next, check preloaded drawables. These may contain unresolved theme
+     // attributes.
+     final ConstantState cs;
+     if (isColorDrawable) {
+         cs = sPreloadedColorDrawables.get(key);
+     } else {
+         cs = sPreloadedDrawables[mConfiguration.getLayoutDirection()].get(key);
+     }
+     Drawable dr;
+     if (cs != null) {
+         dr = cs.newDrawable(this);
+     } else if (isColorDrawable) {
+         dr = new ColorDrawable(value.data);
+     } else {
+         dr = loadDrawableForCookie(value, id, null);
+     }
+     ...
+     return dr;
+ }
+#+END_SRC 
+- 可以看到实际上系统也是有一份全局的缓存，sPreloadedDrawables, 对于不同的drawable，如果图片时一样的，那么最终只会有一份bitmap(享元模式)，存放于BitmapState中，获取drawable时，系统会从缓存中取出这个bitmap然后构造drawable。而通过BitmapFactory.decodeResource()则每次都会重新解码返回bitmap。所以其实我们可以通过context.getResources().getDrawable再从drawable里获取bitmap，从而复用bitmap，然而这里也有一些坑，比如我们获取到的这份bitmap，假如我们执行了recycle之类的操作，但是假如在其他地方再使用它是那么就会有”Canvas: trying to use a recycled bitmap android.graphics.Bitmap”异常。
+*** 图片压缩
+- BitmapFactory 在解码图片时，可以带一个Options，有一些比较有用的功能，比如：
+  - inTargetDensity 表示要被画出来时的目标像素密度
+  - inSampleSize 这个值是一个int，当它小于1的时候，将会被当做1处理，如果大于1，那么就会按照比例（1 / inSampleSize）缩小bitmap的宽和高、降低分辨率，大于1时这个值将会被处置为2的倍数。例如，width=100，height=100，inSampleSize=2，那么就会将bitmap处理为，width=50，height=50，宽高降为1 / 2，像素数降为1 / 4
+  - inJustDecodeBounds 字面意思就可以理解就是只解析图片的边界，有时如果只是为了获取图片的大小就可以用这个，而不必直接加载整张图片。
+  - inPreferredConfig 默认会使用ARGB_8888,在这个模式下一个像素点将会占用4个byte,而对一些没有透明度要求或者图片质量要求不高的图片，可以使用RGB_565，一个像素只会占用2个byte，一下可以省下50%内存。
+  - inPurgeable和inInputShareable 这两个需要一起使用，BitmapFactory.java的源码里面有注释，大致意思是表示在系统内存不足时是否可以回收这个bitmap，有点类似软引用，但是实际在5.0以后这两个属性已经被忽略，因为系统认为回收后再解码实际会反而可能导致性能问题
+  - inBitmap 官方推荐使用的参数，表示重复利用图片内存，减少内存分配，在4.4以前只有相同大小的图片内存区域可以复用，4.4以后只要原有的图片比将要解码的图片大既可以复用了。
+*** 缓存池大小
+- 现在很多图片加载组件都不仅仅是使用软引用或者弱引用了，实际上类似Glide 默认使用的事LruCache，因为软引用 弱引用都比较难以控制，使用LruCache可以实现比较精细的控制，而默认缓存池设置太大了会导致浪费内存，设置小了又会导致图片经常被回收，所以需要根据每个App的情况，以及设备的分辨率，内存计算出一个比较合理的初始值，可以参考Glide的做法。
+*** 内存抖动
+- 什么是内存抖动呢？Android里内存抖动是指内存频繁地分配和回收，而频繁的gc会导致卡顿，严重时还会导致OOM。
+- 一个很经典的案例是string拼接创建大量小的对象(比如在一些频繁调用的地方打字符串拼接的log的时候), 见Android优化之String篇[9]。
+- 而内存抖动为什么会引起OOM呢？
+- 主要原因还是有因为大量小的对象频繁创建，导致内存碎片，从而当需要分配内存时，虽然总体上还是有剩余内存可分配，而由于这些内存不连续，导致无法分配，系统直接就返回OOM了。
+  - 比如我们坐地铁的时候，假设你没带公交卡去坐地铁，地铁的售票机就只支持5元，10元，而哪怕你这个时候身上有1万张1块的都没用(是不是觉得很反人类..)。当然你可以去兑换5元，10元，而在Android系统里就没那么幸运了，系统会直接拒绝为你分配内存，并扔一个OOM给你(有人说Android系统并不会对Heap中空闲内存区域做碎片整理，待验证)。
+*** 其他
+- 常用数据结构优化，ArrayMap及SparseArray是android的系统API，是专门为移动设备而定制的。用于在一定情况下取代HashMap而达到节省内存的目的,具体性能见HashMap，ArrayMap，SparseArray源码分析及性能对比[10]，对于key为int的HashMap尽量使用SparceArray替代，大概可以省30%的内存，而对于其他类型，ArrayMap对内存的节省实际并不明显，10%左右，但是数据量在1000以上时，查找速度可能会变慢。
+- 枚举，Android平台上枚举是比较争议的，在较早的Android版本，使用枚举会导致包过大，在个例子里面，使用枚举甚至比直接使用int包的size大了10多倍 在stackoverflow上也有很多的讨论, 大致意思是随着虚拟机的优化，目前枚举变量在Android平台性能问题已经不大，而目前Android官方建议，使用枚举变量还是需要谨慎，因为枚举变量可能比直接用int多使用2倍的内存。
+- ListView复用，这个大家都知道，getView里尽量复用convertView,同时因为getView会频繁调用，要避免频繁地生成对象
+- 谨慎使用多进程，现在很多App都不是单进程，为了保活，或者提高稳定性都会进行一些进程拆分，而实际上即使是空进程也会占用内存(1M左右)，对于使用完的进程，服务都要及时进行回收。
+- 尽量使用系统资源，系统组件，图片甚至控件的id
+- 减少view的层级，对于可以 延迟初始化的页面，使用viewstub
+- 数据相关：序列化数据使用protobuf可以比xml省30%内存，慎用shareprefercnce，因为对于同一个sp，会将整个xml文件载入内存，有时候为了读一个配置，就会将几百k的数据读进内存，数据库字段尽量精简，只读取所需字段。
+- dex优化，代码优化，谨慎使用外部库， 有人觉得代码多少于内存没有关系，实际会有那么点关系，现在稍微大一点的项目动辄就是百万行代码以上，多dex也是常态，不仅占用rom空间，实际上运行的时候需要加载dex也是会占用内存的(几M)，有时候为了使用一些库里的某个功能函数就引入了整个庞大的库，此时可以考虑抽取必要部分，开启proguard优化代码，使用Facebook redex使用优化dex(好像有不少坑)。
+** 深入探索 Android 内存优化（炼狱级别-上） 
+- https://juejin.cn/post/6844904099998089230#heading-60
