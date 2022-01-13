@@ -3,6 +3,16 @@
 #+author: deepwaterooo
 
 * Weekly updates
+** configure new desktop environment
+- disk partitions are well done now. HDD partitions can be done later when needed. 
+- win 10 java 11 and ubuntu java 11 no problem, android studio default to java 11 too. 
+- main configuration to be done include: 
+  - win 10 wsl 2 or 1, potentially 2 for an entire kernal. wsl 1 configured yesterday, and java development environment, emacs, and zsh, that was the third time during my life installing wsl 1, 1st time know nothing, 2nd time relocated the system in a different locaiton. Yesterdasy into a separate SSD disk, and username matches windows', but did not expect this morning powershell was NOT able to find ubuntu wsl system......So today i will have to start over for wsl again......
+  - yesterday new win system left windows key and left alt key switch registration wasted some time, due to having not realized restarting system needed, which also resulted in the above wsl1 path cannot be found this morning. 
+  - ubuntu emacs, java enviroment, zsh powerline10k theme to be done, and potentially and linux ubuntu wsl 2 with android studio installed in ubuntu as well
+- win 10 texlive emacs org mode configuration to be done
+- will return back to android study once the environments gets readsy later this evening or tomorrow.
+- expect this desktop environment to be best ever, cause whenever I am configuring some new environmen or reinstall wsl, I can realize which parts I could do better on. 
 
 ** 调整作息
 - 经过的过去几个月（9月到12月几个整月）的6:00am-11pm作息后，我觉得自己白天的头脑思维和精力还是不够好（常常还是会脑袋有点儿昏），应该是到了需要再切换一下，晚上12:30-1am左右休息入睡，早上6am起床，中午12:00-1:30左右午休90分钟的作息
