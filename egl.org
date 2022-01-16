@@ -1,13 +1,266 @@
-#+latex_class: article
+#+latex_class: cn-article
 #+title: Android OpenGL ES 渲染相关
 #+author: deepwaterooo
 
-* NDK
+* 通过SurfaceView，TextureView，GlSurfaceView显示相机预览
+** SurfaceView，TextureView，GlSurfaceView的优缺点及区别
+*** SurfaceView
+- 继承自View,拥有View的大部分属性，但是由于holder的存在，不能设置透明度。
+  - 优点：可以在一个独立的线程中进行绘制，不会影响主线程，使用双缓冲机制，播放视频时画面更流畅
+  - 缺点：surface的显示不受View属性的控制，不能将其放在ViewGroup中，SurfaceView不能嵌套使用。
+- SurfaceView预览相机视图不支持透明度，可以设置缩放旋转属性。如果需要做动画特效的话不推荐使用SurfaceView显示视图。可以使用TextureView或者GlSurfaceView来显示。
+*** GlSurfaceView
+- GlSurfaceView继承自SurfaceView类，专门用来显示OpenGL渲染的，简单理解可以显示视频，图像及3D场景这些的。
+*** SurfaceTexture
+- 和SurfaceView功能类似，区别是，SurfaceTexure可以不显示在界面中。
+  - 使用OpenGl对图片流进行美化，添加水印，滤镜这些操作的时候我们都是通过SurfaceTexre去处理，处理完之后再通过GlSurfaceView显示。
+  - 缺点，可能会导致个别帧的延迟。本身管理着BufferQueue,所以内存消耗会多一点。
+*** TextureView
+- 同样继承自View，必须在开启硬件加速的设备中使用（保守估计目前百分之九十的Android设备都开启了），TextureView通过setSurfaceTextureListener的回调在子线程中进行更新UI.
+  - 优点：支持动画效果。
+  - 缺点：在5.0之前在主线程渲染，在5.0之后在单独线程渲染。
+|------------------+--------------------+------------------------|
+|                  | TextureView        | SurfaceView            |
+|------------------+--------------------+------------------------|
+| 绘制             | 稍微延时           | 及时                   |
+| 内存             | 高                 | 低                     |
+| 动画             | 支持               | 不支持                 |
+| 耗电             | 高                 | 低                     |
+| 适用场景（推荐） | 视频播放，相机应用 | 大量画布更新(游戏绘制) |
+|------------------+--------------------+------------------------|
+** 如何通过SurfaceView显示Camera预览。
+- 基本步骤
+  - 在xml文件中设置SurfaceView 。
+  - 实现SurfaceHolder.Callback的回调。
+  - 打开摄像头Camera.open(0);
+  - 设置摄像头相关参数；
+  - 将摄像头数据设置到SurfaceView中，并开启预览。
+#+BEGIN_SRC java
+@Override
+    public void surfaceCreated(SurfaceHolder holder) {
+    try {
+        mCamera = Camera.open(0); // Open the Camera in preview mode
+        mCamera.setDisplayOrientation(90);
+        mCamera.setPreviewDisplay(holder);
+        mCamera.startPreview();
+    } catch (IOException e) {
+    }
+}
+@Override
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+    mCamera.autoFocus(new Camera.AutoFocusCallback() {
+            @Override
+                public void onAutoFocus(boolean success, Camera camera) {
+                if (success) {
+                    mParameters = mCamera.getParameters();
+                    mParameters.setPictureFormat(PixelFormat.JPEG); //图片输出格式
+                    // mParameters.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);//预览持续发光
+                    mParameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);//持续对焦模式
+                    mCamera.setParameters(mParameters);
+                    mCamera.startPreview();
+                    mCamera.cancelAutoFocus();
+                }
+            }
+        });
+}
+@Override
+    public void surfaceDestroyed(SurfaceHolder holder) {
+    if (mCamera != null) {
+        mCamera.stopPreview();
+        mCamera.release();
+        mCamera = null;
+    }
+}
+#+END_SRC 
+** 如何通过TextureView显示Camera预览
+- TextureView和SurfaceView显示Camera数据其实差不多,差别就两点：
+  - SurfaceView显示需要实现SurfaceHolder.Callback的回调而TextureView通过实现 TextureView.SurfaceTextureListener接口。
+  - 当Camera使用SurfaceView预览时通过setPreviewDisplay(holder)方法来设置预览视图，而使用TextureView预览时使用setPreviewTexture(mCameraTextureView.getSurfaceTexture())方法来设置。
+#+BEGIN_SRC java
+public class CameraTextureViewShowActivity extends AppCompatActivity implements TextureView.SurfaceTextureListener {
+    @BindView(R.id.camera_texture_view)
+        TextureView mCameraTextureView;
+    public Camera mCamera;
+    @Override
+        protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_camera_surface_texture);
+        ButterKnife.bind(this);
+        mCameraTextureView.setSurfaceTextureListener(this);
+    }
+    @Override
+        public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+        try {
+            mCamera = Camera.open(0);
+            mCamera.setDisplayOrientation(90);
+            mCamera.setPreviewTexture(mCameraTextureView.getSurfaceTexture());
+            mCamera.startPreview();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    @Override
+        public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+    }
+    @Override
+        public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+        if (mCamera != null) {
+            mCamera.stopPreview();
+            mCamera.release();
+            mCamera = null;
+        }
+        return false;
+    }
+    @Override
+        public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+    }
+    @OnClick(R.id.btn_texture_anim)
+        public void onViewClicked() {
+        PropertyValuesHolder valuesHolder = PropertyValuesHolder.ofFloat("translationX", 0.0f, 0.0f);
+        PropertyValuesHolder valuesHolder1 = PropertyValuesHolder.ofFloat("scaleX", 1.0f, 0.3f,1.0f);
+        PropertyValuesHolder valuesHolder4 = PropertyValuesHolder.ofFloat("scaleY", 1.0f, 0.3f,1.0f);
+        PropertyValuesHolder valuesHolder2 = PropertyValuesHolder.ofFloat("rotationX", 0.0f, 2 * 360.0f, 0.0F);
+        PropertyValuesHolder valuesHolder5 = PropertyValuesHolder.ofFloat("rotationY", 0.0f, 2 * 360.0f, 0.0F);
+        PropertyValuesHolder valuesHolder3 = PropertyValuesHolder.ofFloat("alpha", 1.0f, 0.7f, 1.0F);
+        ObjectAnimator objectAnimator = ObjectAnimator.ofPropertyValuesHolder(mCameraTextureView, valuesHolder, valuesHolder1, valuesHolder2, valuesHolder3,valuesHolder4,valuesHolder5);
+        objectAnimator.setDuration(5000).start();
+    }
+}
+#+END_SRC 
+** 如何通过GlSurfaceView处理Camera预览。
+- 如果你在学习自定义相机，而且你的相机想要实现美颜，滤镜，人脸识别AR场景 and so on。这时候你就必须要学习如何使用GlsurfaView罗。如果你没有openGl的基本配置的知识或者你之前完全没有学习过openGl的开发，再次强烈建议你看一下这篇文章 Android openGl开发详解(一)——绘制简单图形，否则，下面内容可能会引起你的严重不适。
+- 基本步骤
+  - 在xml中添加GlSurfaceView
+  - 创建渲染器类实现GlSurfaceView.Renderer
+  - 清除画布，并创建一个纹理并绑定到。
+  - 创建一个用来最后显示的SurfaceTexture来显示处理后的数据。
+  - 创建Opengl ES程序并添加着色器到该程序中，创建openGl程序的可执行文件，并释放shader资源。
+  - 打开摄像头，并配置相关属性。设置预览视图，并开启预览。
+  - 添加程序到ES环境中，并设置及启用各类句柄。
+  - 在onDrawFrame中进行画布的清理及绘制最新的数据到纹理图形中。
+  - 设置一个SurfaceTexture.OnFrameAvailableListener的回调来通知GlSurfaceview渲染新的帧数据。
+- 建议：GlSurfaceView作用简单的理解OpenGl对相机数据进行处理完之后的显示。我们需要明白的是渲染器的渲染周期及渲染方法的调用时机。
+  - onSurfaceCreated()当surface创建(第一次进入当前页面)或者重新创建(切换后台再进入)的时候调用。
+  - onSurfaceChanged()当surface大小发生改变的时候会被调用。
+  - onDrawFrame()绘制当前帧数据的时候被调用。
+- 大多数情况下渲染顶点着色器及片段着色器的代码会编写一个glsl的文件放到assets目录下进行访问。
+- 下面是另外一个操作方式：
+  - vertex_texture.glsl文件
+#+BEGIN_SRC java
+uniform mat4 textureTransform;
+attribute vec2 inputTextureCoordinate;
+attribute vec4 position;            //NDK坐标点
+varying   vec2 textureCoordinate; //纹理坐标点变换后输出
+void main() {
+    gl_Position = position;
+    textureCoordinate = inputTextureCoordinate;
+}
+#+END_SRC 
+  - fragment_texture.glsl文件：
+  #+BEGIN_SRC java
+// extension GL_OES_EGL_image_external : require // comment ?
+precision mediump float;
+uniform samplerExternalOES videoTex;
+varying vec2 textureCoordinate;
+void main() {
+    vec4 tc = texture2D(videoTex, textureCoordinate);
+    float color = tc.r * 0.3 + tc.g * 0.59 + tc.b * 0.11;//这里进行的颜色变换处理，传说中的黑白滤镜。
+    gl_FragColor = vec4(color,color,color,1.0);
+}
+  #+END_SRC 
+  - 读取文件内容方式：
+  #+BEGIN_SRC java
+public static String read(Context context, String fileName) {
+    String result = null;
+    try {
+        InputStream is = context.getResources().getAssets().open("Shader/" + fileName);
+        int length = is.available();
+        byte[] buffer = new byte[length];
+        is.read(buffer);
+        result = new String(buffer, "utf-8");
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+    return result;
+}
+  #+END_SRC 
+- 具体实现在上面代码creatProgram()下注释掉通常做法的那部分。
+- GLSurfaceView上的实现：
+#+BEGIN_SRC java
+@Override
+    public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+    GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    mSurfaceTexture = new SurfaceTexture(createOESTextureObject());
+    creatProgram();
+    // mProgram = ShaderUtils.createProgram(CameraGlSurfaceShowActivity.this, "vertex_texture.glsl", "fragment_texture.glsl");
+    camera = Camera.open(camera_status);
+    try {
+        camera.setPreviewTexture(mSurfaceTexture);
+        camera.startPreview();
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+    activeProgram();
+
+}
+@Override
+    public void onSurfaceChanged(GL10 gl, int width, int height) {
+    GLES20.glViewport(0, 0, width, height);
+    Matrix.scaleM(mMVPMatrix,0,1,-1,1);
+    float ratio = (float) width / height;
+    Matrix.orthoM(mProjectMatrix, 0, -1, 1, -ratio, ratio, 1, 7);// 3和7代表远近视点与眼睛的距离，非坐标点
+    Matrix.setLookAtM(mCameraMatrix, 0, 0, 0, 3, 0f, 0f, 0f, 0f, 1.0f, 0.0f);// 3代表眼睛的坐标点
+    Matrix.multiplyMM(mMVPMatrix, 0, mProjectMatrix, 0, mCameraMatrix, 0);
+}
+@Override
+    public void onDrawFrame(GL10 gl) {
+    if (mBoolean){
+        activeProgram();
+        mBoolean = false;
+    }
+    if (mSurfaceTexture != null) { // <<<<<=====
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
+        mSurfaceTexture.updateTexImage();
+        GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, mPosCoordinate.length / 2);
+    }
+}
+#+END_SRC 
+- 关于前后摄像头的切换的问题，我上面的做法是在点击切换摄像头操作的时候只针对摄像头进行了释放重启操作，直接在onDrawFrame方法中对渲染矩阵进行了修改，没有对SurfaceTexture进行数据清除（具体看上面代码）。然而也看了一些主流的第三方Demo，这里不列出名字了。他们的做法是摄像头和surfaceTexture一块释放。当然，两种方式都可以，我上面的那种方式暂时没找到什么问题，而且我通过实测比第二种方式看到相机数据的时间要快一点。
+- 做相机项目，最好能将每个步骤都弄清楚，逻辑理清楚了会节省很大一部分时间
+** 视频录制
+- 请求相机功能
+  - 如果您的应用程序的基本功能涉及到 拍照，请将其在Google Play上的可见性限制为具有相机的设备。 以声明您的应用程序依赖于摄像头，请在清单文件中放置<uses-feature>标记。
+#+BEGIN_SRC xml
+<manifest ... >
+    <uses-feature android:name="android.hardware.camera"
+                  android:required="true" />
+</manifest>
+#+END_SRC
+- 使用相机应用录制视频
+#+BEGIN_SRC java
+const val REQUEST_VIDEO_CAPTURE = 1
+private fun dispatchTakeVideoIntent() {
+    Intent(MediaStore.ACTION_VIDEO_CAPTURE).also { takeVideoIntent ->
+        takeVideoIntent.resolveActivity(packageManager)?.also {
+            startActivityForResult(takeVideoIntent, REQUEST_VIDEO_CAPTURE)
+        }
+    }
+}
+#+END_SRC 
+- 观看视频
+#+BEGIN_SRC java
+override fun onActivityResult(requestCode: Int, resultCode: Int, intent: Intent) {
+    if (requestCode == REQUEST_VIDEO_CAPTURE && resultCode == RESULT_OK) {
+        val videoUri: Uri = intent.data
+        mVideoView.setVideoURI(videoUri)
+    }
+#+END_SRC 
 
 * 渲染步骤
 - 初始化 EGL 环境大概分了 6 个步骤，在代码中都标记出来了。我们一个个来看。
   - 获得 EGLDisplay 对象，官网解释说是一个 display connection。可能其内部封装了连接设备显示器，获取显示器信息的方法。
-  -初始化 1 中获得的 display connection。这一步传入了 version 数组，作用是用来存放调用 eglInitialize 方法后获取的 EGL 的主版本和次版本。因为在 c 语言中一般是通过入参来传递返回值的，所以这里也是类似。
+  - 初始化 1 中获得的 display connection。这一步传入了 version 数组，作用是用来存放调用 eglInitialize 方法后获取的 EGL 的主版本和次版本。因为在 c 语言中一般是通过入参来传递返回值的，所以这里也是类似。
   - 获得显示器支持的图像缓冲配置，这里主要指定了各个颜色的深度和 alpha 通道的深度。然后调用 eglChooseConfig 方法后会返回多个支持我们指定配置的配置。这些配置会按匹配程度排序，数组第一个是最接近我们需要的配置。
   - 拿到配置后就可以创建 EGLContext，它为后续 OpenGL ES 渲染提供了上下文。
   - 创建 EGLSurface，已经有了 SurfaceView 了，这里为什么又来了一个 EGLSurface？其实 EGL 并不认识 SurfaceView，他只认识 EGLSurface，所以就用 EGLSurface 对 SurfaceView 中的 Surface 做了一层代理，实际上绘制还是绘制在 SurfaceView 中的 BufferQueue 中然后给屏幕进行显示的。
