@@ -14,18 +14,18 @@
 *** android studio与学习工具
 - 随着android studio的功能越来越强大，自从装了最新版本后，我最好的笔记本电脑已经不够用，运行ide期间会明显卡顿，cpu不够用，时常100%，键盘卡顿，是到了必须得为自己的学习配制必要的工具的时候了。这两天装了三个plugins, emacsIDEs keybinds, butterknife view binding, zelezny plugins自动生成butterknife view id bindings之后，今天再试一下momoery profier，这个破电脑已经实在无法正常运转android studio了，新配的电脑一个周之后才到。。。。。。
 - 小的细节感觉只要遇到的时候，搜索一下就可以搞定，所以以后我会尽量着手解决自己感觉陌生的大的版块和知识面，小的点会在具体项目开发或build/run应用需要的时候一一再去捡回来
-- 目前比较感兴趣的版块包换： *android SDK, android module builds, NDK/jni, openGL es的原理与应用* 希望一一捡回来（借助今天的一个相机小项目，以后就不会再对相机的原生开发感觉陌生了！！！）
+- 目前比较感兴趣的版块包换： *android SDK, android module builds, NDK/jni, openGL es的原理与应用, content provider及其相关的多线程多进程知识面* 希望一一捡回来（借助今天的一个相机小项目，以后就不会再对相机的原生开发感觉陌生了！！！）
 - 希望这个周作息再稍作调整，并把自己算法题再做一做，等新电脑到了，也该全力投入安卓学习了
 - leetcode算法练习： 希望这个周下午和傍晚时间能够回过头去把自己认为还有必要提升的部分、相关难题部分做完，接下来也都会参加自1月8日开始起的每个周六的周赛，半月赛练习
 - 必要的时候还是会再零星准备一些相关内容的小知识点知识面总结
 
 ** configure new desktop environment
 - todo: 主要剩下的问题还包括：
-  - texworks的中文配置，以及mint包，现在还没有着手做，但从今天往后要着手解决这个问题了（发了几天疯(被我从.emacs.d recompiled whole directory......)的emacs这两天、今天终于算是正常一点儿了）
-  - emacs中字体出不来像板砖的问题，其实只要换一下字体就解决了，现在的中英文字体都很好看，只有一个小问题：还没有办法设置默认字体Incolada-dz for powerline,必须每次手动设置，以后会解决；
-  - 被我因先前的电脑看不清楚把org-mode org-level弄混了，现在的显示好一点儿，需要把之前弄坏的org-level校正过来
+  - texworks的中文配置，以及mint包,现在配置好，但是还存在一些小问题，需要解决（我记得自己经前配置字体latex从来都是最头痛的事，不知道从什么时候起，latex的运行环境、语言配置已经制作得像使用傻瓜相机一样，是个人都能很快上手，很是方便！）
+  - emacs中字体出不来像板砖的问题，其实只要换一下字体就解决了，现在的中英文字体都很好看，只有一个小问题：还没有办法设置默认字体Incolada-dz for powerline（个人更喜欢Incolada-dz但它在我显示器上有些不清晰，只好设置背景深色，并换一个细一些儿的字体）,必须每次手动设置，以后会尝试解决；
+  - window 10 window termiman好需要好好配置利用一下，会方便不少
     
-[[./pic/tmp.png]]
+[[./pic/ttmp.png]]
 
 - disk partitions are well done now. HDD partitions can be done later when needed. 
 - win 10 java 11 and ubuntu java 11 no problem, android studio default to java 11 too. 
