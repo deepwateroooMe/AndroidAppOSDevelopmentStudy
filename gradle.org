@@ -3,6 +3,623 @@
 #+author: deepwaterooo
 
 * 【Android 修炼手册】Gradle 篇 -- Gradle 的基本使用
+- 感觉这两篇都还算是相对比较高一点儿的要求，我常见得将来工作中用到的时候，我临时捡起来，能够先理解和解决工作中遇到的问题就可以了
 - https://zhuanlan.zhihu.com/p/65249493
 - https://newtonker.github.io/2019/12/23/%E8%AF%A6%E8%A7%A3Android-Gradle%E7%94%9F%E6%88%90%E5%AD%97%E8%8A%82%E7%A0%81%E6%B5%81%E7%A8%8B/
+** gradle 项目分析
+*** settings.gradle
+- settings.gradle 是负责配置项目的脚本
+- 对应 Settings 类，gradle 构建过程中，会根据 settings.gradle 生成 Settings 的对象
+- 对应的可调用的方法在文档里可以查找
+- 其中几个主要的方法有:
+#+BEGIN_SRC groovy
+include(projectPaths)
+includeFlat(projectNames)
+project(projectDir)
+#+END_SRC
+- 一般在项目里见到的引用子模块的方法，就是使用 include，这样引用，子模块位于根项目的下一级
+#+BEGIN_SRC groovy
+include ':app'
+#+END_SRC
+- 如果想指定子模块的位置，可以使用 project 方法获取 Project 对象，设置其 projectDir 参数
+#+BEGIN_SRC groovy
+include ':app'
+project(':app').projectDir = new File('./app')
+#+END_SRC
+*** rootproject/build.gradle
+- build.gradle 负责整体项目的一些配置，对应的是 Project 类
+- gradle 构建的时候，会根据 build.gradle 生成 Project 对象，所以在 build.gradle 里写的 dsl，其实都是 Project 接口的一些方法，Project 其实是一个接口，真正的实现类是 DefaultProject
+- build.gradle 里可以调用的方法在 Project 可以查到
+- 其中几个主要方法有：
+#+BEGIN_SRC groovy
+buildscript   // 配置脚本的 classpath
+allprojects   // 配置项目及其子项目
+respositories // 配置仓库地址，后面的依赖都会去这里配置的地址查找
+dependencies  // 配置项目的依赖
+#+END_SRC
+- 以 EasyGradle 项目来看
+#+BEGIN_SRC groovy
+buildscript { // 配置项目的 classpath
+    repositories {  // 项目的仓库地址，会按顺序依次查找
+        google()
+        jcenter()
+        mavenLocal()
+    }
+    dependencies { // 项目的依赖
+        classpath 'com.android.tools.build:gradle:3.0.1' // gradle 的版本信息
+        classpath 'com.zy.plugin:myplugin:0.0.1'
+    }
+}
+allprojects { // 子项目的配置
+    repositories {
+        google()
+        jcenter()
+        mavenLocal()
+    }
+}
+#+END_SRC
+*** module/build.gradle
+- build.gradle 是子项目的配置，对应的也是 Project 类
+- 子项目和根项目的配置是差不多的，不过在子项目里可以看到有一个明显的区别，就是引用了一个插件 apply plugin "com.android.application"，后面的 android dsl 就是 application 插件的 extension，关于 android plugin dsl 可以看 android-gradle-dsl
+- 其中几个主要方法有：
+#+BEGIN_SRC groovy
+compileSdkVersion // 指定编译需要的 sdk 版本
+defaultConfig // 指定默认的属性，会运用到所有的 variants 上
+buildTypes    // 一些编译属性可以在这里配置，可配置的所有属性在 这里
+productFlavor // 配置项目的 flavor
+#+END_SRC
+- 以 app 模块的 build.gradle 来看
+#+BEGIN_SRC groovy
+apply plugin: 'com.android.application' // 引入 android gradle 插件
+android { // 配置 android gradle plugin 需要的内容
+    compileSdkVersion 28
+    defaultConfig { // 版本，applicationId 等配置
+        applicationId "com.zy.easygradle"
+        minSdkVersion 17
+        targetSdkVersion 28
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes { 
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions { // 指定 java 版本
+        sourceCompatibility 1.8
+        targetCompatibility 1.8
+    }
+    // flavor 相关配置
+    flavorDimensions "size", "color"
+    productFlavors {
+        big {
+            dimension "size"
+        }
+        small {
+            dimension "size"
+        }
+        blue {
+            dimension "color"
+        }
+        red {
+            dimension "color"
+        }
+    }
+}
+dependencies { // 项目需要的依赖
+    implementation fileTree(dir: 'libs', include: ['*.jar']) // jar 包依赖
+    implementation 'com.android.support:appcompat-v7:28.0.0' // 远程仓库依赖
+    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+    implementation project(':module1') // 项目依赖
+}
+#+END_SRC
+*** 依赖
+在 gradle 3.4 里引入了新的依赖配置，如下：
 
+[[./pic/depends.jpg]]
+
+- 还是以 EasyGradle 为例，看一下各个依赖的不同： 项目里有三个模块：app，module1， module2
+  - 模块 app 中有一个类 ModuleApi
+  - 模块 module1 中有一个类 Module1Api
+  - 模块 module2 中有一个类 Module2Api
+- 其依赖关系如下：参见图片中的一二三四
+  - app depends on Module1Api, Module1Api depends on Module2Api
+**** implementation 依赖
+- 当 module1 使用 implementation 依赖 module2 时，在 app 模块中无法引用到 Module2Api 类
+**** api 依赖
+- 当 module1 使用 api 依赖 module2 时，在 app 模块中可以正常引用到 Module2Api 类，如下图
+**** compileOnly 依赖
+- 当 module1 使用 compileOnly 依赖 module2 时，在编译阶段 app 模块无法引用到 Module2Api 类，module1 中正常引用，但是在运行时会报错
+- 反编译打包好的 apk，可以看到 Module2Api 是没有被打包到 apk 里的
+**** runtimeOnly 依赖
+- 当 module1 使用 runtimeOnly 依赖 module2 时，在编译阶段，module1 也无法引用到 Module2Api
+*** flavor
+- 在介绍下面的流程之前，先明确几个概念，flavor，dimension，variant
+- 在 android gradle plugin 3.x 之后，每个 flavor 必须对应一个 dimension，可以理解为 flavor 的分组，然后不同 dimension 里的 flavor 两两组合形成一个 variant
+- 举个例子 如下配置:
+#+BEGIN_SRC groovy
+flavorDimensions "size", "color"
+productFlavors {
+    big {
+        dimension "size"
+    }
+    small {
+        dimension "size"
+    }
+    blue {
+        dimension "color"
+    }
+    red {
+        dimension "color"
+    }
+}
+#+END_SRC
+- 那么生成的 variant 对应的就是 bigBlue，bigRed，smallBlue，smallRed
+- 每个 variant 可以对应的使用 variantImplementation 来引入特定的依赖，比如：bigBlueImplementation，只有在 编译 bigBlue variant的时候才会引入
+** gradle wrapper
+- gradlew / gradlew.bat 这个文件用来下载特定版本的 gradle 然后执行的，就不需要开发者在本地再安装 gradle 了。这样做有什么好处呢？开发者在本地安装 gradle，会碰到的问题是不同项目使用不同版本的 gradle 怎么处理，用 wrapper 就很好的解决了这个问题，可以在不同项目里使用不同的 gradle 版本。gradle wrapper 一般下载在 GRADLE|CACHE/wrapper/dists 目录下
+- gradle/wrapper/gradle-wrapper.properties 是一些 gradlewrapper 的配置，其中用的比较多的就是 distributionUrl，可以执行 gradle 的下载地址和版本
+- gradle/wrapper/gradle-wrapper.jar 是 gradlewrapper 运行需要的依赖包
+** gradle init.gradle
+- 在 gradle 里，有一种 init.gradle 比较特殊，这种脚本会在每个项目 build 之前先被调用，可以在其中做一些整体的初始化操作，比如配置 log 输出等等
+- 使用 init.gradle 的方法：
+  - 通过 --init-script 指定 init.gradle 位置 eg: gradlew --init-script initdir/init.gradle
+  - init.gradle 文件放在 USER_HOME/.gradle/ 目录下
+  - .gradle 脚本放在 USER_HOME/.gradle/init.d/ 目录下
+  - .gradle 脚本放在 GRDALE_HOME/init.d/ 目录下
+** gradle 生命周期及回调
+- gradle 构建分为三个阶段
+- 初始化阶段
+  - 初始化阶段主要做的事情是有哪些项目需要被构建，然后为对应的项目创建 Project 对象
+- 配置阶段
+  - 配置阶段主要做的事情是对上一步创建的项目进行配置，这时候会执行 build.gradle 脚本，并且会生成要执行的 task
+- 执行阶段
+  - 执行阶段主要做的事情就是执行 task，进行主要的构建工作
+- gradle 在构建过程中，会提供一些列回调接口，方便在不同的阶段做一些事情，主要的接口有下面几个
+#+BEGIN_SRC java
+gradle.addBuildListener(new BuildListener() {
+    @Override
+    void buildStarted(Gradle gradle) {
+        println('构建开始')
+        // 这个回调一般不会调用，因为我们注册的时机太晚，注册的时候构建已经开始了，是 gradle 内部使用的
+    }
+    @Override
+    void settingsEvaluated(Settings settings) {
+        println('settings 文件解析完成')
+    }
+    @Override
+    void projectsLoaded(Gradle gradle) {
+        println('项目加载完成')
+        gradle.rootProject.subprojects.each { pro ->
+            pro.beforeEvaluate {
+                println("${pro.name} 项目配置之前调用")
+            }
+            pro.afterEvaluate{
+                println("${pro.name} 项目配置之后调用")
+            }
+        }
+    }
+    @Override
+    void projectsEvaluated(Gradle gradle) {
+        println('项目解析完成')
+    }
+    @Override
+    void buildFinished(BuildResult result) {
+        println('构建完成')
+    }
+})
+gradle.taskGraph.whenReady {
+    println("task 图构建完成")
+}
+gradle.taskGraph.beforeTask {
+    println("每个 task 执行前会调这个接口")
+}
+gradle.taskGraph.afterTask {
+    println("每个 task 执行完成会调这个接口")
+}
+#+END_SRC 
+** 自定义 task
+- 默认创建的 task 继承自 DefaultTask 如何声明一个 task
+#+BEGIN_SRC groovy
+task myTask {
+    println 'myTask in configuration'
+    doLast {
+        println 'myTask in run'
+    }
+}
+class MyTask extends DefaultTask {
+    @Input Boolean myInputs
+    @Output 
+    @TaskAction
+    void start() {
+    }
+}
+tasks.create("mytask").doLast {
+}
+#+END_SRC
+- Task 的一些重要方法分类如下：
+- Task 行为
+  - Task.doFirst
+  - Task.doLast
+- Task 依赖顺序
+  - Task.dependsOn
+  - Task.mustRunAfter
+  - Task.shouldRunAfter
+  - Task.finalizedBy
+- Task 的分组描述
+  - Task.group
+  - Task.description
+- Task 是否可用
+  - Task.enabled
+- Task 输入输出
+  - gradle 会比较 task 的 inputs 和 outputs 来决定 task 是否是最新的，如果 inputs 和 outputs 没有变化，则认为 task 是最新的，task 就会跳过不执行
+  - Task.inputs
+  - Task.outputs
+- Task 是否执行
+  - 可以通过指定 Task.upToDateWhen = false 来强制 task 执行 Task.upToDateWhen
+- 比如要指定 Task 之间的依赖顺序，写法如下：
+#+BEGIN_SRC groovy
+task task1 {
+    doLast {
+        println('task2')
+    }
+}
+task task2 {
+    doLast {
+        println('task2')
+    }
+}
+task1.finalizedBy(task2)
+task1.dependsOn(task2)
+task1.mustRunAfter(task2)
+task1.shouldRunAfter(task2)
+task1.finalizedBy(task2)
+#+END_SRC
+** Android transform
+- android gradle plugin 提供了 transform api 用来在 .class to dex 过程中对 class 进行处理，可以理解为一种特殊的 Task，因为 transform 最终也会转化为 Task 去执行
+- 要实现 transform 需要继承 com.android.build.api.transform.Transform 并实现其方法，实现了 Transform 以后，要想应用，就调用 project.android.registerTransform()
+#+BEGIN_SRC java
+public class MyTransform extends Transform {
+    @Override
+    public String getName() {
+        // 返回 transform 的名称，最终的名称会是 transformClassesWithMyTransformForDebug 这种形式   
+        return "MyTransform";
+    }
+    @Override
+    public Set<QualifiedContent.ContentType> getInputTypes() {
+        /**
+        返回需要处理的数据类型 有 下面几种类型可选
+        public static final Set<ContentType> CONTENT_CLASS = ImmutableSet.of(CLASSES);
+        public static final Set<ContentType> CONTENT_JARS = ImmutableSet.of(CLASSES, RESOURCES);
+        public static final Set<ContentType> CONTENT_RESOURCES = ImmutableSet.of(RESOURCES);
+        public static final Set<ContentType> CONTENT_NATIVE_LIBS = ImmutableSet.of(NATIVE_LIBS);
+        public static final Set<ContentType> CONTENT_DEX = ImmutableSet.of(ExtendedContentType.DEX);
+        public static final Set<ContentType> DATA_BINDING_ARTIFACT = ImmutableSet.of(ExtendedContentType.DATA_BINDING);
+        */
+        return TransformManager.CONTENT_CLASS;
+    }
+    @Override
+    public Set<? super QualifiedContent.Scope> getScopes() {
+        /**
+        返回需要处理内容的范围，有下面几种类型
+        PROJECT(1), 只处理项目的内容
+        SUB_PROJECTS(4), 只处理子项目
+        EXTERNAL_LIBRARIES(16), 只处理外部库
+        TESTED_CODE(32), 只处理当前 variant 对应的测试代码
+        PROVIDED_ONLY(64), 处理依赖
+        @Deprecated
+        PROJECT_LOCAL_DEPS(2),
+        @Deprecated
+        SUB_PROJECTS_LOCAL_DEPS(8);
+        */
+        return Sets.immutableEnumSet(QualifiedContent.Scope.PROJECT);
+    }
+    @Override
+    public boolean isIncremental() {
+        // 是否增量，如果返回 true，TransformInput 会包括一份修改的文件列表，返回 false，会进行全量编译，删除上一次的输出内容
+        return false;
+    }
+    @Override
+    void transform(TransformInvocation transformInvocation) throws TransformException, InterruptedException, IOException {
+        // 在这里处理 class
+        super.transform(transformInvocation)
+        // 在 transform 里，如果没有任何修改，也要把 input 的内容输出到 output，否则会报错
+        for (TransformInput input : transformInvocation.inputs) {
+            input.directoryInputs.each { dir ->
+                // 获取对应的输出目录
+                File output = transformInvocation.outputProvider.getContentLocation(dir.name, dir.contentTypes, dir.scopes, Format.DIRECTORY)
+                dir.changedFiles // 增量模式下修改的文件
+                dir.file // 获取输入的目录
+                FileUtils.copyDirectory(dir.file, output) // input 内容输出到 output
+            }
+            input.jarInputs.each { jar ->
+                // 获取对应的输出 jar
+                File output = transformInvocation.outputProvider.getContentLocation(jar.name, jar.contentTypes, jar.scopes, Format.JAR)
+                jar.file // 获取输入的 jar 文件
+                FileUtils.copyFile(jar.file, output) // input 内容输出到 output
+            }
+        }
+    }
+}
+// 注册 transform
+android.registerTransform(new MyTransform())
+#+END_SRC 
+- 在 transform 中的处理，一般会涉及到 class 文件的修改，操纵字节码的工具一般是 javasist 和 asm 居多，这两个工具在这里先不介绍了。后面有机会会展开说一下
+** 自己写 plugin
+- 我觉得这个要求对于目前的自己来说太高了，可以暂不用管它
+
+* 详解android gradle生成字节码流程
+- Gradle基础
+- 学习Gradle基础，可以参考深入理解Android之Gradle和【Android 修炼手册】Gradle 篇 – Gradle 的基本使用这两篇文章，重点掌握以下几点：
+  - Task是Gradle构建中最核心的概念，Android工程的构建过程也是被分成了无数个Task按照一定的顺序执行，最后输出apk产物；
+  - Gradle构建生命周期分三个阶段：初始化阶段，配置阶段和执行阶段，每个阶段都有不同的作用；
+  - Gradle构建过程中有三个非常重要的类：Gradle，Project，Setting，每个类都有不同的作用。
+** Java类文件字节码编译流程
+*** 任务名
+- compile(Flavor)JavaWithJavac
+*** 实现类
+- AndroidJavaCompile
+*** 整体实现图
+- java类文件编译流程
+  
+[[./pic/javac.png]]
+
+- 如上图所示：当编译Java类文件时，AndroidJavaCompile和JavaCompile首先做一些预处理操作，如校验注解类型，判断编译配置是否允许增量编译等。如果配置为增量编译，则使用SelectiveCompiler对输入做全量/增量的判断（注意并不是所有的修改都会进行增量编译，有些修改可能会触发全量编译），这些判断是在JavaRecompilationSpecProvider的processClasspathChanges和processOtherChanges方法中完成。如果判断结果为全量编译，则直接走接下来的编译流程；如果判断结果为增量编译，还会进一步确定修改的影响范围，并把所有受到影响的类都作为编译的输入，再走接下来的编译流程。最后的编译流程是使用JdkJavaCompiler执行编译任务，用javac将类文件编译为字节码。
+*** 调用链路
+- 这里给出了Java类文件生成字节码的核心调用链路（实现类和具体方法），读者可参考该调用链路自行翻阅源码。
+#+BEGIN_SRC java
+/* ------ 编译java文件准备阶段 ------ */
+ AndroidJavaCompile.compile
+ JavaCompile.compile
+/* ------ 两种编译方式可选，本例选择跟踪：增量编译 ------ */
+ JavaCompile.performCompilation
+ CompileJavaBuildOperationReportingCompiler.execute
+ IncrementalResultStoringCompiler.execute
+ SelectiveCompiler.execute
+/* ------ 搜索增量编译范围 ------ */
+ JavaRecompilationSpecProvider.provideRecompilationSpec
+ JavaRecompilationSpecProvider.processOtherChanges
+ InputChangeAction.execute
+ SourceFileChangeProcessor.processChange
+ PreviousCompilation.getDependents
+ ClassSetAnalysis.getRelevantDependents
+/* ------ 编译任务执行 ------ */
+ CleaningJavaCompilerSupport.execute
+ AnnotationProcessorDiscoveringCompiler.execute
+ NormalizingJavaCompiler.execute
+ JdkJavaCompiler.execute
+ JavacTaskImpl.call
+ JavacTaskImpl.doCall
+/* ------ javac执行阶段 ------ */
+ Main.compile
+ JavaCompiler.compile
+ JavaCompiler.compile2
+#+END_SRC 
+*** 主要代码分析
+- compile(Flavor)JavaWithJavac任务的入口类是AndroidJavaCompile。运行时该类首先做了注解的校验工作，然后再将类文件编译字节码。本节将从注解处理，编译方式，字节码生成，JdkJavaCompiler的拓展设计四个方面进行介绍，其他环节请读者自行查阅源码。
+**** 注解处理
+- 为了高效开发，我们往往会自定义一些注解来生成模板代码。在编译过程中，处理注解有两种方式：一种是直接在compile(Flavor)JavaWithJavac的Task中处理，一种是创建独立的Task处理。独立的Task又分为ProcessAnnotationsTask和KaptTask两种。
+- 创建ProcessAnnotationsTask处理注解要求满足如下三点：
+  - 设置了增量编译（无论是用户主动设置还是DSL默认设置）；
+  - build.gradle中没有使用kapt依赖注解处理器；
+  - 使能了BooleanOption.ENABLE_SEPARATE_ANNOTATION_PROCESSING标志位；
+- 如果build.gradle中使用kapt依赖注解处理器（常见于纯Kotlin工程或者Kotlin、Java混合工程），则：
+  - 不会创建ProcessAnnotationsTask；
+  - 创建KaptTask且该Task只处理注解，不处理编译；
+  - AndroidJavaCompile和KotlinCompile只编译，不处理注解；
+- 如果build.gradle中没有使用kapt依赖注解处理器（常见于纯Java工程），则：
+  - 如果创建了ProcessAnnotationsTask，那么ProcessAnnotationsTask将负责处理注解，AndroidJavaCompile只负责进行编译，不处理注解。
+  - 如果没有创建ProcessAnnotationsTask，那么AndroidJavaCompile将会处理注解和编译；
+#+BEGIN_SRC java
+AndroidJavaCompile中处理注解的源码如下，当var3不为空时，在编译字节码前会先处理注解。
+// com.sun.tool.javac.main.JavaCompiler.java
+public void compile(List<JavaFileObject> var1, List<String> var2, Iterable<? extends Processor> var3) {
+    ...
+    this.initProcessAnnotations(var3);
+    this.delegateCompiler = this.processAnnotations(this.enterTrees(this.stopIfError(CompileState.PARSE, this.parseFiles(var1))), var2);
+    ...
+}
+#+END_SRC 
+**** 编译方式
+- 一般而言，我们首次打开工程或者执行了clean project操作之后，编译器会把工程中的全部文件编译一次，把编译过程中的一些中间产物进行缓存，即为全量编译。如果后面又触发了一次编译，编译器首先会把变化内容和之前缓存的内容做对比，找出所有需要重新编译的文件，然后只对这些文件进行重新编译，其他的仍然复用之前的缓存，即为增量编译。通常来讲，增量编译的速度肯定快于全量编译，平时开发过程中，我们用到更多的应该也是增量编译。
+- 将Java类文件编译为字节码支持全量编译和增量编译两种方式。当编译配置支持增量编译时，AGP会在JavaRecompilationSpecProvider类的processClasspathChanges方法和processOtherChanges方法中拿当前输入的修改内容和之前缓存的编译内容做对比。下面给出了processOtherChanges方法的源码，可以看出AGP主要从源文件、注解处理器，资源等方面进行了对比。
+#+BEGIN_SRC java
+// JavaRecompilationSpecProvider.java
+private void processOtherChanges(CurrentCompilation current, PreviousCompilation previous, RecompilationSpec spec) {
+	SourceFileChangeProcessor javaChangeProcessor = new SourceFileChangeProcessor(previous);
+	AnnotationProcessorChangeProcessor annotationProcessorChangeProcessor = new AnnotationProcessorChangeProcessor(current, previous);
+	ResourceChangeProcessor resourceChangeProcessor = new ResourceChangeProcessor(current.getAnnotationProcessorPath());
+	InputChangeAction action = new InputChangeAction(spec, javaChangeProcessor, annotationProcessorChangeProcessor, resourceChangeProcessor, this.sourceFileClassNameConverter);
+	this.inputs.outOfDate(action);
+	this.inputs.removed(action);
+}
+#+END_SRC 
+- 如果输入的修改内容满足了全量编译的条件，则会触发全量编译；否则会执行增量编译。全量/增量判断的示意图如下：
+  
+[[./pic/javacinc.png]]
+
+- 上图中的判断条件是通过调试源码提炼出来的，从这些判断条件可以看出，开发过程中一些不经意的书写习惯可能会触发全量编译，所以我们应该有意识地改变这些书写习惯。另外Gradle官网也对一些判断条件作了解释，详情参阅Incremental Java compilation。
+- 除了上述情况外，编译过程还有一个非常重要的概念：类的依赖链。举个例子：定义了一个类A，然后类B引用了类A，然后类C有使用类B的一个方法，然后类D又引用了类C，这样A-B-C-D就构成一条类的依赖链。假如类A被修改了，AGP会用递归的方式找出所有这个类A相关的类依赖链，本例中即为A-B-C-D。在得到整个类依赖链之后，AGP会把这个依赖链作为输入进行编译，如此一来，看似只是修改了一个类，实际被编译的可能是多个类文件。如果依赖链复杂，只修改一个类却编译上千的类也不是不可能，这样就出现了compile(Flavor)JavaWithJavac非常耗时的情况。AGP中递归搜寻类的依赖链源码如下：
+#+BEGIN_SRC java
+// ClassSetAnalysis.java
+private void recurseDependentClasses(Set<String> visitedClasses, Set<String> resultClasses, Set<GeneratedResource> resultResources, Iterable<String> dependentClasses) {
+	Iterator var5 = dependentClasses.iterator();
+	while(var5.hasNext()) {
+		String d = (String)var5.next();
+		if (visitedClasses.add(d)) {
+			if (!this.isNestedClass(d)) {
+				resultClasses.add(d);
+			}
+			DependentsSet currentDependents = this.getDependents(d);
+			if (!currentDependents.isDependencyToAll()) {
+				resultResources.addAll(currentDependents.getDependentResources());
+				this.recurseDependentClasses(visitedClasses, resultClasses, resultResources, currentDependents.getDependentClasses());
+			}
+		}
+	}
+}
+#+END_SRC 
+- AGP为什么不只编译当前修改的类，而是要编译整个类依赖链呢？笔者认为这其实涉及到自动化编译中一个非常重要的问题：在通用场景下，自动化编译的自动化边界如何确定？比如本例中：AGP如何知道被修改的文件是否会影响其下游？这个问题很难回答，通常需要结合具体的场景来分析。AGP作为一个通用的编译工具，首要考虑的应该是准确性，在保证准确性的基础上再考虑速度问题。所以AGP增量编译的方案编译了整个类的依赖链。在开发过程中，我们可以从实际场景出发，在速度和准确性方面做出一定的取舍，如：release包要发到线上必须要正确性，而debug阶段为了加快编译速度，尽快看到效果，不追求绝对正确性，这样就可以针对性的做出优化了。
+**** 字节码生成
+- 在增量编译确定了最终的输入类文件后，接下来的任务就是将类文件编译为字节码，即javac执行过程。AGP的javac过程最终是通过调用JDK 的Java Compiler API来实现的。javac将Java类编译成字节码文件需要经过语法解析、词法解析、语义解析、字节码生成四个步骤。如下图：javc字节码生成javac过程是深入理解JVM的一部分，我们在此就不做深入介绍了，读者可以自行查阅。javac最终通过Gen类将语义解析后的语法树转换成字节码，并将字节码写入*.class文件。
+**** JdkJavaCompiler的拓展设计
+- javac最终执行前需要提前做一些准备工作，如编译参数的校验，收集注解处理器；执行后也需要做一些处理工作，如对返回结果的封装，日志记录等；AGP使用了装饰模式来实现这一流程，下面是其中一层装饰的源码：
+#+BEGIN_SRC java
+// DefaultJavaCompilerFactory.java
+public Compiler<JavaCompileSpec> create(Class<? extends CompileSpec> type) {
+    Compiler<JavaCompileSpec> result = this.createTargetCompiler(type, false);
+    return new AnnotationProcessorDiscoveringCompiler(new NormalizingJavaCompiler(result), this.processorDetector);
+}
+// AnnotationProcessorDiscoveringCompiler.java
+public class AnnotationProcessorDiscoveringCompiler<T extends JavaCompileSpec> implements Compiler<T> {
+    private final Compiler<T> delegate;
+    private final AnnotationProcessorDetector annotationProcessorDetector;
+    public AnnotationProcessorDiscoveringCompiler(Compiler<T> delegate, AnnotationProcessorDetector annotationProcessorDetector) {
+        this.delegate = delegate;
+        this.annotationProcessorDetector = annotationProcessorDetector;
+    }
+    public WorkResult execute(T spec) {
+        Set<AnnotationProcessorDeclaration> annotationProcessors = this.getEffectiveAnnotationProcessors(spec);
+        spec.setEffectiveAnnotationProcessors(annotationProcessors);
+        return this.delegate.execute(spec);
+    }
+    ...
+}
+#+END_SRC 
+- 我们先分析DefaultJavaCompilerFactory类中的create方法，这个方法首先通过createTargetCompiler()方法创建了一个目标Compiler（debug可以发现是JdkJavaCompiler），然后将该目标Compiler作为构造参数创建了NormalizingJavaCompiler，最后将NormalizingJavaCompiler实例作为构造参数创建了AnnotationProcessorDiscoveringCompiler，并将该实例返回。这些Compiler类都继承了Compiler接口，最终负责执行的是接口中的execute方法。从AnnotationProcessorDiscoveringCompiler的execute方法中，我们可以看到先执行了getEffectiveAnnotationProcessors方法去搜寻有效的注解处理器，最后调用了delegate的execute方法，也就是继续执行NormalizingJavaCompiler的execute方法，以此类推，最后再执行JdkJavaCompiler的execute方法。
+- 由此可见，AGP在生成字节码的过程中，创建了多层装饰来将核心的字节码生成功能和其他一些装饰功能区分开，这样设计可以简化核心Compiler类，也有了更好的拓展性，这种设计思路是我们需要学习的一点。整个字节码生成过程中Compiler装饰关系如下图所示：java文件编译装饰关系
+** Kotlin类文件字节码编译流程
+*** 任务名
+- compile(Flavor)Kotlin
+*** 实现类
+- KotlinCompile, CompileServiceImpl
+*** 整体实现图
+    
+    [[./pic/ktc.png]]
+
+- 如上图所示：编译Kotlin类文件时，先由KotlinCompile做一些准备工作，如创建临时输出文件等。然后启动编译服务CompileService，并在该服务的实现类CompileServiceImpl中完成全量编译和增量编译的判断工作，最后由K2JVMCompiler执行编译，用kotlinc将Kotlin类文件编译为字节码。
+*** 调用链路
+- 这里给出了Kotlin类文件生成字节码的核心调用链路（实现类和具体方法），读者可参考该调用链路自行翻阅源码。
+#+BEGIN_SRC kotlin
+/* ------ 编译kotlin文件准备阶段，配置环境及参数 ------ */
+ KotlinCompile.callCompilerAsync
+ GradleCompilerRunner.runJvmCompilerAsync
+ GradleCompilerRunner.runCompilerAsync
+ GradleKotlinCompilerWork.run
+ GradleKotlinCompilerWork.compileWithDaemonOrFallbackImpl
+/* ------ 三种编译策略可选，本例选择跟踪：daemon策略 ------ */
+ GradleKotlinCompilerWork.compileWithDaemon
+/* ------ 两种编译方式可选，本例选择跟踪：增量编译 ------ */
+ GradleKotlinCompilerWork.incrementalCompilationWithDaemon
+/* ------ 启动编译服务 ------ */
+ CompileServiceImpl.compile
+ CompileServiceImplBase.compileImpl
+ CompileServiceImplBase.doCompile
+/* ------ 执行增量编译 ------ */
+ CompileServiceImplBase.execIncrementalCompiler
+ IncrementalCompilerRunner.compile
+ IncrementalCompilerRunner.compileIncrementally
+ IncrementalJvmCompilerRunner.runCompiler
+/* ------ kotlinc执行阶段 ------ */
+ CLITool.exec
+ CLICompiler.execImpl
+ K2JVMCompiler.doExecute
+ KotlinToJVMBytecodeCompiler.compileModules
+#+END_SRC
+*** 主要代码分析
+- 在AbstractAndroidProjectHandler类中有这样一段代码：
+#+BEGIN_SRC kotlin
+// AbstractAndroidProjectHandler.kt
+internal fun configureJavaTask(kotlinTask: KotlinCompile, javaTask: AbstractCompile, logger: Logger) {
+	...
+	javaTask.dependsOn(kotlinTask)
+	...
+}
+#+END_SRC
+- 我们可以看到Kotlin文件字节码编译是在Java文件字节码编译之前完成的。为什么要把Kotlin编译放到Java编译之前呢？官方并没有给出解释，所以这里的理解就仁者见仁智者见智了，一种比较合理的解释是：一般来讲，语言的发展都是向前兼容的，即后来的语言会兼容之前语言的特性。我们开发过程中很多情况下都是Kotlin和Java代码相互之间混合调用的，所以理论上来讲，如果Kotlin工程依赖了Java的Library工程应该是可以兼容并编译成功的，反过来如果Java工程依赖了Kotlin的Library工程可能就会出现不兼容的情况，所以应该先编译Kotlin的文件。
+- compile(Flavor)Kotlin任务的入口类是KotlinCompile，运行时该类首先做一些编译准备工作，如参数校验工作，然后再将类文件编译字节码。本节将重点介绍编译策略，编译方式，字节码生成三个部分的实现，其他部分请读者自行查阅源码。
+**** 编译策略
+- 从GradleKotlinCompilerWork类的compileWithDaemonOrFallbackImpl方法中，我们可以看到在Kotlin文件编译过程中，根据编译参数设置的不同，有三种可选的编译策略：daemon, in-process, out-of-process。三种编译策略的差异主要体现在编译任务的运行方式上：
+  - daemon策略：在daemon进程中启动编译服务，后续将Kotlin文件编译为字节码都由该服务完成，支持增量编译，默认采用此策略；
+  - in-process策略：直接在当前线程中将Kotlin编译为字节码，该策略不支持增量编译，一般调试编译过程可以尝试此策略；
+  - out-of-process策略：新起一个进程来将Kotlin编译为字节码，进程起失败则编译失败，该策略不支持增量编译。
+- 按笔者理解：daemon策略应该是编译最快的策略，out-of-process策略应该是编译最慢的策略，in-process策略应该介于这两个策略之间。因为通常来讲，在Gradle开启编译流程前就已经启动了daemon进程，daemon策略下可以直接启动编译服务并执行编译过程，这样原进程也可以去并行执行其他任务，并且还支持增量编译；而out-of-process策略需要启动一个全新的进程，并且不支持增量编译，所以编译耗时应该最久；有时为了方便调试，可以考虑使用in-process策略。
+- 那应该怎么配置编译策略呢？有两种配置方式：
+- 在全局的gradle.property（注意：全局的gradle目录一般是/User/.gradle/gradle.property，gradle.property不存在时需新建，而非当前工程的gradle.property）下使用如下配置：
+#+BEGIN_SRC kotlin
+  kotlin.compiler.execution.strategy=???(可选项：daemon/in-process/out-of-process)
+  org.gradle.daemon=???(可选项：true/false)
+#+END_SRC
+- 在调试命令后增加调试参数，指定编译策略。示例如下：
+#+BEGIN_SRC groovy
+  > ./gradlew <task> -Dorg.gradle.debug=true -Dkotlin.compiler.execution.strategy=in-process -Dorg.gradle.daemon=false
+#+END_SRC
+**** 编译方式
+- 和AGP一样，KGP同样支持增量编译和全量编译两种方式。编译过程是否采用增量编译主要取决于KotlinCompile类的incremental属性，该属性初始化时被设置为true，并且后续的编译过程并没有修改该属性，所以KGP默认支持增量编译。增量编译的核心判断源码如下：
+#+BEGIN_SRC kotlin
+// KotlinCompile.kt
+init {
+	incremental = true
+}
+// GradleKotlinCompilerWork.kt
+private fun compileWithDaemon(messageCollector: MessageCollector): ExitCode? {
+	...
+	val res = if (isIncremental) {
+		incrementalCompilationWithDaemon(daemon, sessionId, targetPlatform, bufferingMessageCollector)
+	} else {
+		nonIncrementalCompilationWithDaemon(daemon, sessionId, targetPlatform, bufferingMessageCollector)
+	}
+	...
+}
+#+END_SRC
+- 同AGP一样，KGP会在IncrementalJvmCompilerRunner类的calculateSourcesToCompile方法中进行全量/增量编译的判断，满足全量编译的条件则会触发全量编译，否则会执行增量编译。全量/增量判断的示意图如下：kotlin增量编译校验执行增量编译前，KGP也会通过递归的方式搜寻出类的编译链，搜寻结果将作为增量编译的输入。在增量编译完成后，KGP会将增量编译的中间产物和原有缓存的中间产物合并，并更新缓存。KGP最终是通过IncrementalCompilerRunner类的compileIncrementally方法来执行增量编译的。上述过程的源码如下：
+#+BEGIN_SRC kotlin
+// IncrementalCompilerRunner.kt
+private fun compileIncrementally(args: Args, caches: CacheManager, allKotlinSources: List<File>, compilationMode: CompilationMode, messageCollector: MessageCollector): ExitCode {
+	...
+	val complementaryFiles = caches.platformCache.getComplementaryFilesRecursive(dirtySources)
+	...
+	exitCode = runCompiler(sourcesToCompile.toSet(), args, caches, services, messageCollectorAdapter)
+	...
+	caches.platformCache.updateComplementaryFiles(dirtySources, expectActualTracker)
+	...
+}
+#+END_SRC
+**** 字节码生成
+- 确定了最终输入后，接下来便是生成字节码，即kotlinc执行过程。执行kotlinc的入口是K2JVMCompiler的doExecute方法。这个方法首先会配置编译的参数，并做一些编译准备工作（比如创建临时文件夹和临时输出文件），准备工作结束后调用KotlinToJVMBytecodeCompiler的repeatAnalysisIfNeeded做词法分析、语法分析和语义分析，最后调用DefaultCodegenFactory的generateMultifileClass方法来生成字节码。Kotlin类文件生成字节码的流程图如下：kotlin字节码生成如上图所示：kotlic在词法分析、语法分析、语义分析这些流程上和javac基本一致，但是目标代码生成阶段与javac有较大的区别。这里的区别主要有两点：一是双方生成字节码的方式不一样，javac通过自带的Gen类生成字节码，kotlinc通过ASM生成字节码；二是kotlinc在这个阶段通过各种Codegen做了很多自身语法糖的解析工作。比如属性自动生成Getter/Setter代码、reified修饰的方法中解析过程等。由此可见：我们在夸kotlin语言简洁的时候，实际上编译器在编译过程中帮我们做了很多的转换工作。Kotlin语法糖解析源码示例：
+  
+[[./pic/kbyteg.png]]
+#+BEGIN_SRC java
+// PropertyCodegen.java
+private void gen(@NotNull KtProperty declaration, @NotNull PropertyDescriptor descriptor, @Nullable KtPropertyAccessor getter, @Nullable KtPropertyAccessor setter) {
+	...
+	if (isAccessorNeeded(declaration, descriptor, getter, isDefaultGetterAndSetter)) {
+	    generateGetter(descriptor, getter);
+	}
+	if (isAccessorNeeded(declaration, descriptor, setter, isDefaultGetterAndSetter)) {
+	    generateSetter(descriptor, setter);
+	}
+}
+#+END_SRC 
+** 最佳实践
+- 通过上述分析，相信读者已经对Android工程中Java类文件和Kotlin类文件生成字节码的过程了然于胸了。下面我们来总结一些最佳实践来避免本应增量编译却触发全量编译的情况发生，从而加快编译的速度。
+*** 修复增量编译失效
+- 增量编译失效，意味着本次修改将会进行全量编译，那么编译时间必然会增加，所以我们应该从以下几个方面来改善我们的代码：
+  - BuildConfig中的itemValue如果存在动态变化的值，建议区分场景，如release包变，开发调试包不变；
+  - 将注解处理器修改为支持增量的注解处理器，修改方法请参考官网Incremental annotation processing；
+  - 如果类中有定义一些公有静态常量需要被外部引用，尝试改为静态方法去获取，而不是直接引用，例如：
+#+BEGIN_SRC java
+  public class Constants {
+      private static String TAG = "Constans";
+		
+      // 暴露静态方法给外部引用
+      public static String getTag() {
+          return TAG;
+      }
+  }
+#+END_SRC 
+*** 类编译链过长
+- 为了避免类的依赖链过长，我们应该尽可能拆分解耦业务，如推进组件化，并将模块之间的依赖关系改为二进制依赖而非源码依赖。只有这样，才有可能减少类依赖链的长度，进而减少Task的执行时间。
+** 总结
+- 至此，Java类和Kotlin类生成字节码的流程就介绍完了，最后我们来总结一下：编译Java类时，AGP通过AndroidJavaCompile先做一些预处理操作，然后进行全量/增量编译的判断，最终通过javac生成字节码。编译Kotlin类时，KGP通过KotlinCompile先做一些准备工作，然后进行全量/增量编译的判断，最终通过kotlinc生成字节码。最后，为了加快编译速度，本文给出了最佳实践。
