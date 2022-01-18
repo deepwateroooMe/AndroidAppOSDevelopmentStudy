@@ -426,3 +426,163 @@ class ClearRenderer implements GLSurfaceView.Renderer {
 }
 #+END_SRC 
 - 这个应用每帧都在清楚屏幕。当你点击屏幕时，它清除颜色基于你触屏时间的X、Y坐标。注意在 ClearGLSurfaceView.onTouchEvent()中使用queueEvent()。queueEvent()方法被安全地用于在UI线程和渲染线程之间进行交流。如果你愿意，你还可以使用一些其他的java线程间交流技术，例如Renderer 类本身的同步方法。然而，queueing 事件经常是一种用于处理线程间信息交流的更简单方式。
+
+
+* 顶点属性、顶点数组和缓冲区对象
+** 顶点属性和顶点数组
+- 顶点数组中包含了每一个顶点的属性，是保存在用户内核的缓冲区。(语文不好的跟我念：顶点数组是缓冲区，这个缓冲区在用户内核，里面存放的是每一个顶点的属性)。
+*** 单个顶点属性
+- 如果我们有单个的顶点需要处理的话，可以使用下列方法将一个顶点对象映射为一个索引，这样我们就可以在需要的地方使用索引而不是顶点对象去操作数据。OpenGL提供了下列方法去创建单个顶点对象。
+#+BEGIN_SRC cpp
+  void glVertexAttrib1f (GLuint index, GLfloat x);
+  void glVertexAttrib1fv (GLuint index, const GLfloat *v);
+  void glVertexAttrib2f (GLuint index, GLfloat x, GLfloat y);
+  void glVertexAttrib2fv (GLuint index, const GLfloat *v);
+  void glVertexAttrib3f (GLuint index, GLfloat x, GLfloat y, GLfloat z);
+  void glVertexAttrib3fv (GLuint index, const GLfloat *v);
+  void glVertexAttrib4f (GLuint index, GLfloat x, GLfloat y, GLfloat z, GLfloat w);
+  void glVertexAttrib4fv (GLuint index, const GLfloat *v);
+#+END_SRC 
+*** 顶点数组
+    #+BEGIN_SRC cpp
+void glVertexAttribPointer (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+void glVertexAttribIPointer (GLuint index, GLint size, GLenum type, GLsizei stride, const void *pointer);
+    #+END_SRC 
+- 前一个方法允许任何数字类型数组，后一个方法只允许整型数组。
+  - index：顶点索引，可由用户自行指定。
+  - size：对于坐标来说不应该使用size(尺度)最贴切的是dimension(维度)，取值范围1~4，代表当前顶点使用的坐标系，是线性坐标系(只有x)，或是4维空间坐标系(x,y,z,w)。
+  - type：数据格式，包括常用的数据类型，比如GL_FLOAT等。
+  - normalized：是否规范化，对于使用glVertexAttribPointer方法的非GL_FLOAT数组，将次标记设置为真后，有符号数将被按比例映射到GL_FLOAT[-1.0，1.0]区间，无符号数将被按比例映射到[0，1.0]区间。
+  - stride：偏移量，如果该数组不仅仅用于存放坐标的话，需要说明偏移量，否则设置为0即可。
+  - ptr：用作缓冲区的数组
+*** 启用和关闭顶点数组
+- 如果我们使用index指定了一个顶点数组，那么我们可以使用以下两种方式选择开启或者关闭使用此顶点数组。
+  - void glEnableVertexAttribArray (GLuint index);
+  - void glDisableVertexAttribArray (GLuint index);
+*** 布局限定符
+- 一旦我们将一个索引与顶点数组绑定起来，我们就可以在着色器中自由的使用数组中的数据。这种方式使用起来最为方便，但是在某些情况下，我们可能还需要另外的方式(值得注意的是，这种绑定在下一次程序链接时生效)
+  - void glBindAttribLocation (GLuint program, GLuint index, const GLchar *name);
+  - program：程序对象索引。
+  - index：定点数组索引。
+  - name：着色器中使用此数据的变量的名称。
+- 例如：我们可以使用此方法修改7.4.1中的着色器
+  - glBindAttribLocation(program,0,"pos");//用户程序添加绑定
+  - in vec2 pos;//不需要布局限定符
+** 顶点数组对象
+- 使用顶点数组操作可能需要多次调用8.1中的方法来切换状态。实际上在OpenGL ES 3.0 中，同一时刻总是只有一个活动的顶点数组对象。那么我们可以通过更简单的方法去指定当前正在使用的顶点数组。使用方式就是记录一段你需要对该数组进行的操作，并保存到一个操作对象当中，然后再每次需要时调用此操作记录对象即可。
+*** 创建顶点数组对象
+    #+BEGIN_SRC cpp
+void glGenVertexArrays (GLsizei n, GLuint *arrays);
+    #+END_SRC 
+- n：需要的顶点数组对象个数
+- arrays：保存对象索引的数组
+*** 绑定顶点数组对象
+- 顶点数组对象的目的是简化操作，我们需要将一个数组对象和一系列关于顶点数组和缓存的操作绑定起来。当我们调用完毕下列方法的时候，其后所有关于顶点数组和缓存的操作都将被记录到顶点数组对象的状态当中。
+#+BEGIN_SRC cpp
+void glBindVertexArray (GLuint array);
+#+END_SRC 
+- array：需要使用或修改状态的顶点数组对象的索引。
+*** 删除顶点数组对象
+- 同理，当我们不再需要对一段顶点数组进行操作的时候，需要通知OpenGL删除关于此数组的操作记录。我们可以使用如下方法：
+#+BEGIN_SRC cpp
+void glDeleteVertexArrays (GLsizei n, const GLuint *arrays);
+#+END_SRC 
+- n：需要删除的对象个数。
+- arrays：包含数组对象索引的数组。
+** 顶点缓冲区对象
+- 假如我们将数据存储到用户内存，那么每当我们调用绘图方法时，都需要将数据从用户内存复制到图形内存中。但是我们没有必要再每次绘图时都去复制数据。为了节省内存和电力开销，OpenGL ES 提供了顶点缓存技术。OpenGL ES 3.0支持两类缓存区对象：
+  - GL_ARRAY_BUFFER：标志指定缓冲区用于保存顶点数据
+  - GL_ELEMENT_ARRAY_BUFFER：标志指定缓冲区用于保存图元索引数据
+*** 获取缓冲区索引
+- 由于这个缓冲区需要在两个内核空间中共享，所以OpenGL不建议像创建顶点数组那样让用户自己去指定索引。OpenGL提供了一个函数用来获取当前空闲的缓冲区索引。
+#+BEGIN_SRC cpp
+void glGenBuffers (GLsizei n, GLuint *buffers);
+#+END_SRC 
+- n：需要得到的索引数量。
+- buffers：保存索引的数组。
+*** 绑定缓冲区
+- 我们通过8.3.1获取到了可用的缓冲区索引，接下来我们需要将索引与缓冲区类型进行绑定。
+#+BEGIN_SRC cpp
+void glBindBuffer (GLenum target, GLuint buffer);
+#+END_SRC 
+- target：缓冲区存放的数据类型。
+- buffer：已获取的缓冲区索引。
+*** 绑定数据
+- 如果我们通过8.3.2绑定了缓冲区索引，接下来就可以将数据绑定到缓冲区了。
+#+BEGIN_SRC cpp
+void glBufferData (GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+#+END_SRC 
+- target：缓冲区存放的数据结构。
+- size：缓冲区大小，单位：字节。
+- data：数据源，其内容将会被复制到缓冲区中。
+- usage：缓冲区的使用方法。
+- 使用方式主要分为以下三类：
+- 只读型(一次修改多次访问)：
+  - GL_STATIC_DRAW
+  - GL_STATIC_READ
+  - GL_STATIC_COPY
+- 读写型(多次修改多次访问)：
+  - GL_DYNAMIC_DRAW
+  - GL_DYNAMIC_READ
+  - GL_DYNAMIC_COPY
+- 数据流型(一次修改一次访问)：
+  - GL_STREAM_DREW
+  - GL_STREAM_READ
+  - GL_STREAM_COPY
+- 这三种类型的后缀DRAW表示数据将被送往GPU渲染、READ表述数据会回传给用户程序、COPY表示其同时具有前两种性质。
+- 该方法中的data可以为NULL，如果传入NULL则表示延迟初始化。那么我们应该使用什么方法去再次加载数据呢？接下来介绍一个可以初始化和更新数据的函数：
+#+BEGIN_SRC cpp
+void glBufferSubData (GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
+#+END_SRC 
+- offset：缓冲区待修改数据偏移量。
+- size：被修改的数据存储字节数。
+- data：数据源。
+*** 删除缓冲区
+- 当我们使用完缓冲区后，应当命令OpenGL销毁这个区域：
+#+BEGIN_SRC cpp
+void glDeleteBuffers (GLsizei n, const GLuint *buffers);
+#+END_SRC 
+- n：要删除的缓冲区个数。
+- buffers：包含缓冲区索引的数组。
+** 映射缓冲区对象
+- 当我们需要操作保存在缓冲区的数据时会发现，仅通过8.4节的方式是不能高效的满足需求的。因为我们需要在程序中保存一个引用并不断的调用glBufferSubData方法去更新缓冲区，此时缓冲区的存在完全没有意义。为了你补这个缺陷，OpenGL ES 3.0 中提供了映射缓冲区对象的概念，通过映射缓冲区对象，我们可以直接获得缓冲区中的数据引用——在某些共享内存的架构上，映射缓冲区甚至可以直接得到GPU存储缓冲区地址的直接指针——从而提高性能。
+*** 获取缓冲区对象指针
+- 我们可以通过以下指令获取指向所有或部分缓存的指针，如果出现错误，该函数将返回NULL。
+#+BEGIN_SRC cpp
+void* glMapBufferRange (GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
+#+END_SRC 
+  - target：缓冲区存放的数据结构。
+  - offset：缓冲区数据存储的偏移量，单位：字节。
+  - length：需要的缓冲区字节数。
+  - access：访问方式，是如下方式的一种或组合。
+- 缓冲区对象的访问方式：
+- 必须包含的选项：
+  - GL_MAP_READ_BIT：只读
+  - GL_MAP_WRITE_BIT：读写
+- 可选的选项：
+  - GL_MAP_INVALIDATE_RANGE：告诉OpenGL之前该范围内的数据可能被丢弃。这个标志不得与GL_MAP_READ_BIT结合使用。
+  - GL_MAP_INVALIDATE_BUFFER_BIT：告诉OpenGL之前所有的数据都可能被丢弃。这个标志不得与GL_MAP_READ_BIT结合使用。
+  - GL_MAP_FLUSH_EXPLICIT_BIT：这个标志只能与GL_MAP_WRITE_BIT一起使用。当使用了此标志之后，需要应用程序明确的使用glFlushMappedBufferRange函数刷新操作。在没有使用此标识位的情况下，glUnmapBuffer函数被调用时会自动刷新。
+  - GL_MAP_UNSYNCHRONIZED_BIT：告诉OpenGL不要同步等待glMapBufferRange之前的操作，也就是说指定了该标识之后，会立即从缓冲区中获取引用，无论前面是否还有其他对缓冲区的操作。
+*** 取消缓冲区映射
+- 当我们不再使用缓冲区映射时，需要使用如下函数解除当前正在使用的映射关系
+  - GLboolean glUnmapBuffer (GLenum target);
+  - target：缓冲区存放的数据结构。
+*** 刷新缓冲区
+- 如果我们希望对映射的修改能够立即同步到缓冲区，可以使用glUnmapBuffer解除映射，然后映射中的数据就会被自动刷新到缓冲区中。但是这种方式缺点明显，比如对于连续刷新来说操作繁琐，而且，假如只修改一小部分数据，这种方式却刷新了整个缓冲区。OpenGL ES 3.0提供了部分刷新的方法
+#+BEGIN_SRC cpp
+void glFlushMappedBufferRange (GLenum target, GLintptr offset, GLsizeiptr length);
+#+END_SRC 
+- target：缓冲区存放的数据结构。
+- offset：缓冲区数据存储的偏移量，单位：字节。
+- length：从偏移点开始刷新的长度。
+*** 复制缓冲区对象
+- OpenGL提供了如下所示的函数来在两个缓冲区之间复制数据
+#+BEGIN_SRC cpp
+void glCopyBufferSubData (GLenum readTarget, GLenum writeTarget, GLintptr readOffset, GLintptr writeOffset, GLsizeiptr size);
+#+END_SRC 
+- readTarget：源缓冲区存放的数据结构。
+- writeTarget：目标缓冲区存放的数据结构。
+- readOffset：源缓冲区偏移量。
+- writeOffset：目标缓冲区偏移量。
+- size：需要复制的字节长度。
