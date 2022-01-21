@@ -457,17 +457,23 @@ void glVertexAttribIPointer (GLuint index, GLint size, GLenum type, GLsizei stri
   - ptr：用作缓冲区的数组
 *** 启用和关闭顶点数组
 - 如果我们使用index指定了一个顶点数组，那么我们可以使用以下两种方式选择开启或者关闭使用此顶点数组。
-  - void glEnableVertexAttribArray (GLuint index);
-  - void glDisableVertexAttribArray (GLuint index);
+#+BEGIN_SRC cpp
+  void glEnableVertexAttribArray (GLuint index);
+  void glDisableVertexAttribArray (GLuint index);
+#+END_SRC 
 *** 布局限定符
 - 一旦我们将一个索引与顶点数组绑定起来，我们就可以在着色器中自由的使用数组中的数据。这种方式使用起来最为方便，但是在某些情况下，我们可能还需要另外的方式(值得注意的是，这种绑定在下一次程序链接时生效)
-  - void glBindAttribLocation (GLuint program, GLuint index, const GLchar *name);
+#+BEGIN_SRC cpp
+  void glBindAttribLocation (GLuint program, GLuint index, const GLchar *name);
+#+END_SRC 
   - program：程序对象索引。
   - index：定点数组索引。
   - name：着色器中使用此数据的变量的名称。
 - 例如：我们可以使用此方法修改7.4.1中的着色器
-  - glBindAttribLocation(program,0,"pos");//用户程序添加绑定
-  - in vec2 pos;//不需要布局限定符
+  #+BEGIN_SRC cpp
+  glBindAttribLocation(program,0,"pos");//用户程序添加绑定
+  in vec2 pos; //不需要布局限定符
+  #+END_SRC 
 ** 顶点数组对象
 - 使用顶点数组操作可能需要多次调用8.1中的方法来切换状态。实际上在OpenGL ES 3.0 中，同一时刻总是只有一个活动的顶点数组对象。那么我们可以通过更简单的方法去指定当前正在使用的顶点数组。使用方式就是记录一段你需要对该数组进行的操作，并保存到一个操作对象当中，然后再每次需要时调用此操作记录对象即可。
 *** 创建顶点数组对象
@@ -586,3 +592,333 @@ void glCopyBufferSubData (GLenum readTarget, GLenum writeTarget, GLintptr readOf
 - readOffset：源缓冲区偏移量。
 - writeOffset：目标缓冲区偏移量。
 - size：需要复制的字节长度。
+
+
+* JSON语法
+** （1）JSON简介
+-  JSON指的是JavaScript对象表示法（JavaScript Object Notation）
+-  JSON是轻量级的文本交换格式，类似于XML，是纯文本
+-  JSON独立于语言，具有层级结构（值中存在值）
+-  JSON具有自我描述性，更易理解（人类可读）
+- JSON使用JavaScript语法来描述数据对象，但是JSON仍然独立于语言和平台。
+** （2）相比于XML的不同之处
+- JSON比XML更小、更快、更易解析
+- 没有结束标签
+- 更短，读写速度更快
+- 使用数组
+- 不使用保留字
+** （3）JSON语法规则
+- JSON语法是JavaScript对象表示语法的子集
+- 数据在 名称/值 对中
+- 数据由逗号隔开
+- 花括号保存对象
+- 方括号保存数组
+** （4）JSON 名称/值 对
+- JSON 数据的书写格式是：名称/值对。
+- 名称/值对包括：字段名称（在双引号中），后面写一个冒号，然后是值：
+- “firstName” : “John”
+** （5）JSON值
+- JSON 值可以是：
+  - 数字（整数或浮点数）
+  - 字符串（在双引号中）
+  - 逻辑值（true 或 false）
+  - 数组（在方括号中）
+  - 对象（在花括号中）
+  - Null
+** （6）JSON对象
+JSON 对象在花括号中书写：对象可以包含多个名称/值对：
+#+BEGIN_SRC json
+{ “firstName”:”John” , “lastName”:”Doe” }
+#+END_SRC
+** （7）JSON 数组
+- JSON 数组在方括号中书写：数组可包含多个对象：
+#+BEGIN_SRC text
+{
+“employees”: [
+{ “firstName”:”John” , “lastName”:”Doe” },
+{ “firstName”:”Anna” , “lastName”:”Smith” },
+{ “firstName”:”Peter” , “lastName”:”Jones” }
+]
+}
+#+END_SRC
+
+
+* GLSL基础语法
+** 基本数据类型
+- GLSL中的数据类型主要分为标量、向量、矩阵、采样器、结构体、数组、空类型七种类型：
+*** 标量
+- 标量表示的是只有大小没有方向的量，在GLSL中标量只有bool、int和float三种。对于int，和C一样，可以写为十进制、八进制或者十六进制。对于标量的运算，我们最需要注意的是精度，防止溢出问题。
+*** 向量
+- 向量我们可以看做是数组，在GLSL通常用于储存颜色、坐标等数据，针对维数，可分为二维、三维和四位向量。针对存储的标量类型，可以分为bool、int和float。共有vec2、vec3、vec4，ivec2、ivec3、ivec4、bvec2、bvec3和bvec4九种类型，数组代表维数、i表示int类型、b表示bool类型。需要注意的是，GLSL中的向量表示竖向量，所以与矩阵相乘进行变换时，矩阵在前，向量在后（与DirectX正好相反）。
+- 作为颜色向量时，用rgba表示分量，就如同取数组的中具体数据的索引值。三维颜色向量就用rgb表示分量。比如对于颜色向量vec4 color，color[0]和color.r都表示color向量的第一个值，也就是红色的分量。
+- 作为位置向量时，用xyzw表示分量，xyz分别表示xyz坐标，w表示向量的模。三维坐标向量为xyz表示分量，二维向量为xy表示分量。
+- 作为纹理向量时，用stpq表示分量，三维用stp表示分量，二维用st表示分量。
+*** 矩阵
+- 在GLSL中矩阵拥有22、33、4*4三种类型的矩阵，分别用mat2、mat3、mat4表示。我们可以把矩阵看做是一个二维数组，也可以用二维数组下表的方式取里面具体位置的值。
+*** 采样器
+- 采样器是专门用来对纹理进行采样工作的，在GLSL中一般来说，一个采样器变量表示一副或者一套纹理贴图。所谓的纹理贴图可以理解为我们看到的物体上的皮肤。纹理查找需要指定哪个纹理或者纹理单元将指定查找。
+#+BEGIN_SRC cpp
+sampler1D // 访问一个一维纹理
+sampler2D // 访问一个二维纹理
+sampler3D // 访问一个三维纹理
+samplerCube // 访问一个立方贴图纹理
+sampler1DShadow // 访问一个带对比的一维深度纹理
+sampler2DShadow // 访问一个带对比的二维深度纹理
+uniform sampler2D grass;
+vcc2 coord = vec2(100, 100);
+vec4 color = texture2D(grass, coord);
+#+END_SRC 
+*** 结构体
+- 和C语言中的结构体相同，用struct来定义结构体，这是唯一的用户定义类型。
+#+BEGIN_SRC cpp
+struct light {
+    vec3 position;
+    vec3 color;
+};
+light ceiling_light;
+#+END_SRC 
+*** 数组
+- 数组知识也和C中相同，不同的是数组声明时可以不指定大小，但是建议在不必要的情况下，还是指定大小的好。
+#+BEGIN_SRC cpp
+// 创建一个10个元素的数组
+vec4 points[10];
+// 创建一个不指定大小的数组
+vec4 points[];
+points[2] = vec4(1.0); // points现在大小为3
+points[7] = vec4(2.0); // points现在大小为8
+#+END_SRC 
+*** 空类型
+- 空类型用void表示，仅用来声明不返回任何值得函数。
+- 数据声明示例：
+#+BEGIN_SRC cpp
+float a = 1.5;
+int b = 2;
+bool c = true;
+vec2 d = vec2(1.1,2.2);
+vec3 e = vec3(1.1,2.2,3.3)
+vec4 f = vec4(vec3,1.1);
+vec4 g = vec4(1.0); //相当于vec(1.0,1.0,1.0,1.0)
+vec4 h = vec4(a,a,1.5,a);
+mat2 i = mat2(1.1,1.5,2.2,4.4);
+mat2 j = mat2(1.8); //相当于mat2(1.8,1.8,1.8,1.8)
+mat3 k = mat3(e,e,1.2,1.4,1.6);
+#+END_SRC 
+** 运算符
+- GLSL中的运算符包括（越靠前，运算优先级越高）：
+#+BEGIN_SRC text
+  - 索引：[ ]
+  - 前缀自加和自减：++，–-
+  - 一元非和逻辑非：~，！
+  - 加法和减法：+，-
+  - 等于和不等于：==，！=
+  - 逻辑异或：^^
+  - 三元运算符号，选择：？ :
+  - 成员选择与混合：.
+  - 后缀自加和自减：++，–-
+  - 乘法和除法：*，/
+  - 关系运算符：>，<，=，>=，<=，<>
+  - 逻辑与：&&
+  - 逻辑或：||
+  - 赋值预算：=，+=，-=，*=，/=
+#+END_SRC 
+*** 类型转换
+- GLSL的类型转换与C不同。在GLSL中类型不可以自动提升，比如float a=1;就是一种错误的写法，必须严格的写成float a=1.0，也不可以强制转换，即float a=(float)1; 也是错误的写法，但是可以用内置函数来进行转换，如float a=float(1);还有float a=float(true);（true为1.0，false为0.0）等，值得注意的是，低精度的int不能转换为高精度的float。
+*** 限定符
+- 观察文首的两段着色器，可以看到对于变量使用了不同的修饰符，以下是GLSL修饰符的主要类型：
+#+BEGIN_SRC text
+attritude：一般用于各个顶点各不相同的量。如顶点颜色、坐标等。
+uniform：一般用于对于3D物体中所有顶点都相同的量。比如光源位置，统一变换矩阵等。
+varying：表示易变量，一般用于顶点着色器传递到片元着色器的量。
+const：常量。 限定符与java限定符类似，放在变量类型之前，并且只能用于全局变量。在GLSL中，没有默认限定符一说。
+#+END_SRC 
+*** 流程控制
+- GLSL中的流程控制与C中基本相同，主要有条件判断和各种循环：
+#+BEGIN_SRC text
+if( )、if( )else、if( )else if( )else
+while()和dowhile( )
+for( ; ; )
+break和continue
+#+END_SRC 
+*** 函数修饰符
+- GLSL中也可以定义函数，定义函数的方式也与C语言基本相同。函数的返回值可以是GLSL中的除了采样器的任意类型。对于GLSL中函数的参数，可以用参数用途修饰符来进行修饰，常用函数修饰符如下：
+#+BEGIN_SRC text
+in：输入参数，无修饰符时默认为此修饰符。
+out：输出参数。
+inout：既可以作为输入参数，又可以作为输出参数。
+#+END_SRC 
+*** 浮点精度
+- 与顶点着色器不同的是，在片元着色器中使用浮点型时，必须指定浮点类型的精度，否则编译会报错。精度有三种，分别为：
+#+BEGIN_SRC text
+lowp：低精度。8位。
+mediump：中精度。10位。
+highp：高精度。16位。
+#+END_SRC 
+- 当然，也可以在片元着色器中设置默认精度，只需要在片元着色器最上面加上precision <精度> <类型>即可制定某种类型的默认精度。其他情况相同的话，精度越高，画质越好，使用的资源也越多。
+*** 着色器代码结构
+- GLSL程序的结构和C语言差不多，main()方法表示入口函数，可以在其上定义函数和变量，在main中可以引用这些变量和函数。定义在函数体以外的叫做全局变量，定义在函数体内的叫做局部变量。与高级语言不同的是，变量和函数在使用前必须声明，不能在使用的后面声明变量或者函数。
+** GLSL内建变量和内置函数
+- 在上面，我们了解了GLSL的基础语法：数据类型、运算符、控制流，接下来，我们要了解另外一些关键的内容：GLSL为方便调用，内置了一些变量和函数，在着色器构造中，少不了这些知识的运用。在上面glsl提供了非常丰富的函数库,供我们使用,这些功能都是非常有用且会经常用到的. 这些函数按功能区分大改可以分成7类:
+*** 顶点着色器的内建变量
+    #+BEGIN_SRC text
+gl_Position：顶点坐标
+gl_PointSize：点的大小，没有赋值则为默认值1，通常设置绘图为点绘制才有意义。
+    #+END_SRC 
+*** 片元着色器的内建变量
+#+BEGIN_SRC text
+    #+BEGIN_SRC text
+gl_FragCoord：当前片元相对窗口位置所处的坐标。
+gl_FragFacing：bool型，表示是否为属于光栅化生成此片元的对应图元的正面。 输出变量:
+gl_FragColor：当前片元颜色
+gl_FragData：vec4类型的数组。向其写入的信息，供渲染管线的后继过程使用。
+    #+END_SRC 
+- GLSL提供了非常丰富的函数库，供我们使用，这些功能都是非常有用而且经常会使用到的，这些函数按照功能区分大致可以分为7类：
+#+BEGIN_SRC text
+  - （1）通用函数库
+  - （2）三角函数&角度
+  - （3）指数函数
+  - （4）几何函数
+  - （5）矩阵函数
+  - （6）向量函数
+  - （7）纹理查询函数
+#+END_SRC 
+  - 纹理采样函数中，3D在OpenGLES2.0并不是绝对支持。我们再次暂时不管3D纹理采样函数。重点只对texture2D函数进行说明。texture2D拥有三个参数，第一个参数表示纹理采样器。第二个参数表示纹理坐标，可以是二维、三维、或者四维。第三个参数加入后只能在片元着色器中调用，且只对采样器为mipmap类型纹理时有效。
+
+* 安卓Camera2 ImageReader
+  #+BEGIN_SRC java
+ /**
+ * 初始化图片读取器
+ */
+private void initImageReader() {
+    // 创建图片读取器,参数为分辨率宽度和高度/图片格式/需要缓存几张图片,我这里写的2意思是获取2张照片
+    mImageReader = ImageReader.newInstance(1080, 1920, ImageFormat.YUV_420_888, 2);
+    mImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader reader) {
+//        image.acquireLatestImage();//从ImageReader的队列中获取最新的image,删除旧的
+//        image.acquireNextImage();//从ImageReader的队列中获取下一个图像,如果返回null没有新图像可用
+            Image image = reader.acquireNextImage();
+            try {
+                File path = new File(Camera2Activity.this.getExternalCacheDir().getPath());
+                if (!path.exists()) {
+                    Log.e(TAG, "onImageAvailable: 路径不存在");
+                    path.mkdirs();
+                } else {
+                    Log.e(TAG, "onImageAvailable: 路径存在");
+                }
+                File file = new File(path, "demo.jpg");
+                FileOutputStream fileOutputStream = new FileOutputStream(file);
+//        这里的image.getPlanes()[0]其实是图层的意思,因为我的图片格式是JPEG只有一层所以是geiPlanes()[0],如果你是其他格式(例如png)的图片会有多个图层,就可以获取指定图层的图像数据　　　　　　　
+                ByteBuffer byteBuffer = image.getPlanes()[0].getBuffer();
+                byte[] bytes = new byte[byteBuffer.remaining()];
+                byteBuffer.get(bytes);
+                fileOutputStream.write(bytes);
+                fileOutputStream.flush();
+                fileOutputStream.close();
+                image.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }, mChildHandler);
+}
+  #+END_SRC 
+- ImageReader类允许应用程序直接访问呈现表面的图像数据
+- 创建ImageReader对像
+- ImageReader ir = ImageReader.newInstance(int width, int height, int format, int maxImages);
+- 参数：
+  - 默认图像的宽度像素
+  - 默认图像的高度像素
+  - 图像的格式
+  - 用户想要读图像的最大数量
+- ImageReader类的主要操作:
+#+BEGIN_SRC java
+getSurface() // 得到一个表面,可用于生产这个ImageReader图像
+acquireLatestImage() // 从ImageReader的队列获得最新的图像,放弃旧的图像。
+acquireNextImage() // 从ImageReader的队列获取下一个图像
+getMaxImages() // 最大数量的图像
+getWidth() // 每个图像的宽度,以像素为单位。
+getHeight() // 每个图像的高度,以像素为单位。
+getImageFormat() // 图像格式。
+close() // 释放与此ImageReader相关的所有资源。用完记得关
+#+END_SRC 
+- ImageReader是一个可以让我们对绘制到surface的图像进行直接操作的类。在这里我们从摄像设备中传入了连续的预览图片，也就是我们在屏幕上看到的画面，它们的格式都是未经压缩的YUV_420_888类型的（同样的如果要操作拍摄后的图片，就要设置成jpeg格式）。我们调用imageReader.acquireLatestImage或者acquireNextImage来获取图像队列中的图片。并进行操作。在这里我利用一个函数将图像压缩后转化成byte[]格式，并调用uploadImg函数上传至服务器。这样，整个摄像头的调用到预览图像的处理也就完成了。想要实现拍照功能也是大同小异，在这里我就不一一贴出了。(这段话来自别处，并不自动对应上面的代码)
+
+** CameraCaptureSession
+- CameraCaptureSession 是一个事务，用来向相机设备发送获取图像的请求。
+- 主要有 setRepeatingRequest() 和 capture() 方法。setRepeatingRequest() 是重复请求获取图像数据，常用于预览或连拍，capture() 是获取一次，常用于单张拍照。
+- CameraCaptureSession 类是一个抽象类，其直接的实现类为 CameraConstrainedHighSpeedCaptureSession。
+** 获取 CameraCaptureSession 实例
+- 通过 CameraDevice 类的 createCaptureSession() 方法创建，并在回调的 onConfigured(CameraCaptureSession session) 方法中获取实例。
+#+BEGIN_SRC java
+try {
+    mCameraDevice.createCaptureSession(Arrays.asList(mPreviewSurface, mImageReader.getSurface()),
+            new CameraCaptureSession.StateCallback() {
+
+        @Override
+        public void onConfigured(@NonNull CameraCaptureSession session) {
+            mCaptureSession = session;
+            // ...（省略）
+        }
+
+        @Override
+        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+            Log.e(TAG, "ConfigureFailed. session: mCaptureSession");
+        }
+    }, mBackgroundHandler); // handle 传入 null 表示使用当前线程的 Looper
+} catch (CameraAccessException e) {
+    e.printStackTrace();
+}
+#+END_SRC 
+- 函数原型：
+#+BEGIN_SRC java
+createCaptureSession(List outputs, CameraCaptureSession.StateCallback callback, Handler handler)
+#+END_SRC 
+- 参数说明：
+#+BEGIN_SRC text
+outputs ： 输出的 Surface 集合，每个 CaptureRequest 的输出 Surface 都应该是 outputs 的一个子元素。例如上例中使用了一个 mPreviewSurface 用于预览的输出，一个 mImageReader.getSurface() 用于拍照的输出。
+callback ： 创建会话的回调。成功时将调用 onConfigured(CameraCaptureSession session) 方法。
+handler ： 指定回调执行的线程，传 null 时默认使用当前线程的 Looper。
+#+END_SRC 
+** 内部类
+*** CameraCaptureSession.StateCallback 表格，把它们弄好
+- 当相机捕捉事务的状态发生变化时，会回调这个类中的相应方法。其中只有 onConfigured 和 onConfigureFailed 两个方法是抽象的（必须重写），其余均有空实现。
+|---------------------------------------------------+----------------------------------------------------------|
+| 方法名                                            | 描述                                                     |
+|---------------------------------------------------+----------------------------------------------------------|
+| onConfigureFailed(CameraCaptureSession session)   | 该会话无法按照相应的配置发起请求时回调                   |
+| onConfigured(CameraCaptureSession session)        | 相机设备完成配置，并开始处理捕捉请求时回调               |
+| onActive(CameraCaptureSession session)            | 在 onConfigured 后执行，即开始真的处理捕捉请求了         |
+| onCaptureQueueEmpty(CameraCaptureSession session) | 当相机设备的输入捕捉队列为空时回调                       |
+| onClosed(CameraCaptureSession session)            | 当事务关闭时回调                                         |
+| onReady(CameraCaptureSession session)             | 每当没有捕捉请求处理时都会回调该方法，即该方法会回调多次 |
+|---------------------------------------------------+----------------------------------------------------------|
+*** CameraCaptureSession.CaptureCallback
+- 当一个捕捉请求发送给相机设备时，可以使用这个类来跟踪各进度。
+- 所有方法均有默认的空实现，根据需求重写相应的方法即可。
+#+BEGIN_SRC java
+// 当相机设备开始为请求捕捉输出图时
+onCaptureStarted(CameraCaptureSession session, CaptureRequest request, long timestamp, long frameNumber)	
+
+// 当图像捕获部分进行时就会回调该方法，此时一些(但不是全部)结果是可用的
+onCaptureProgressed(CameraCaptureSession session, CaptureRequest request, CaptureResult partialResult)	
+
+// 当图像捕捉完全完成时，并且结果已经可用时回调该方法
+onCaptureCompleted(CameraCaptureSession session, CaptureRequest request, TotalCaptureResult result)	
+
+// 对应 onCaptureCompleted 方法，当相机设备产生 TotalCaptureResult 失败时就回调该方法
+onCaptureFailed(CameraCaptureSession session, CaptureRequest request, CaptureFailure failure)	
+
+// 当一个捕捉段完成时并且所有 CaptureResult 或者 captureFailure 都通过该监听器返回时被回调，这个方法独立于 CaptureCallback 的其他方法
+onCaptureSequenceCompleted(CameraCaptureSession session, int sequenceId, long frameNumber)	
+
+// 当 CaptureResult 或者 captureFailure 没有通过该监听器被返回而被中断时被回调，这个方法同样独立于 CaptureCallback 的其他方法
+onCaptureSequenceAborted(CameraCaptureSession session, int sequenceId)	
+
+// 当捕捉的缓冲没有被送到目标 surface 时被回调
+onCaptureBufferLost(CameraCaptureSession session, CaptureRequest request, Surface target, long frameNumber)	
+#+END_SRC 
+
+* SurfaceView GLSurfaceView TextureView比较与原理： todo 整理一下
+- https://www.jb51.net/article/222595.htm
