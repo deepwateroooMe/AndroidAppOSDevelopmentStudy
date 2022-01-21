@@ -1117,4 +1117,43 @@ public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int hei
 - updateSurfaceTexture()实际通过JNI调用到android_view_HardwareLayer_updateSurfaceTexture()函数。在其中会设置相应DeferredLayerUpdater的标志位mUpdateTexImage，它表示在渲染线程中需要更新该层的纹理。
 - 前面提到，Android 5.0引入了渲染线程，它是一个更大的topic，超出本文范围，这里只说相关的部分。作为背景知识，下面只画出了相关的类。可以看到，ThreadedRenderer作为新的HardwareRenderer替代了Android 4.4中的Gl20Renderer。其中比较关键的是RenderProxy类，需要让渲染线程干活时就通过这个类往渲染线程发任务。RenderProxy中指向的RenderThread就是渲染线程的主体了，其中的threadLoop()函数是主循环，大多数时间它会poll在线程的Looper上等待，当有同步请求（或者VSync信号）过来，它会被唤醒，然后处理TaskQueue中的任务。TaskQueue是RenderTask的队列，RenderTask代表一个渲染线程中的任务。如DrawFrameTask就是RenderTask的继承类之一，它主要用于渲染当前帧。而DrawFrameTask中的DeferredLayerUpdater集合就存放着之前对硬件加速层的更新操作申请。
 - 当主线程准备好渲染数据后，会以同步方式让渲染线程完成渲染工作。其中会先调用processLayerUpdate()更新所有硬件加速层中的属性，继而调用到DeferredLayerUpdater的apply()函数，其中检测到标志位mUpdateTexImage被置位，于是会调用doUpdateTexImage()真正更新GL纹理和转换坐标。
-- 最后，总结下这几者的区别和联系。简单地说，SurfaceView是一个有自己Surface的View。它的渲染可以放在单独线程而不是主线程中。其缺点是不能做变形和动画。SurfaceTexture可以用作非直接输出的内容流，这样就提供二次处理的机会。与SurfaceView直接输出相比，这样会有若干帧的延迟。同时，由于它本身管理BufferQueue，因此内存消耗也会稍微大一些。TextureView是一个可以把内容流作为外部纹理输出在上面的View。它本身需要是一个硬件加速层。事实上TextureView本身也包含了SurfaceTexture。它与SurfaceView+SurfaceTexture组合相比可以完成类似的功能（即把内容流上的图像转成纹理，然后输出）。区别在于TextureView是在View hierachy中做绘制，因此一般它是在主线程上做的（在Android 5.0引入渲染线程后，它是在渲染线程中做的）。而SurfaceView+SurfaceTexture在单独的Surface上做绘制，可以是用户提供的线程，而不是系统的主线程或是渲染线程。另外，与TextureView相比，它还有个好处是可以用Hardware overlay进行显示。
+- 最后，总结下这几者的区别和联系。简单地说，SurfaceView是一个有自己
+  Surface的View。它的渲染可以放在单独线程而不是主线程中。其缺点是不能
+  做变形和动画。SurfaceTexture可以用作非直接输出的内容流，这样就提供二
+  次处理的机会。与SurfaceView直接输出相比，这样会有若干帧的延迟。同时，
+  由于它本身管理BufferQueue，因此内存消耗也会稍微大一些。TextureView是
+  一个可以把内容流作为外部纹理输出在上面的View。它本身需要是一个硬件加
+  速层。事实上TextureView本身也包含了SurfaceTexture。它与
+  SurfaceView+SurfaceTexture组合相比可以完成类似的功能（即把内容流上的
+  图像转成纹理，然后输出）。区别在于TextureView是在View hierachy中做绘
+  制，因此一般它是在主线程上做的（在Android 5.0引入渲染线程后，它是在
+  渲染线程中做的）。而SurfaceView+SurfaceTexture在单独的Surface上做绘
+  制，可以是用户提供的线程，而不是系统的主线程或是渲染线程。另外，与
+  TextureView相比，它还有个好处是可以用Hardware overlay进行显示。
+** 再简单地比较一下
+*** GlSurfaceView
+- GlSurfaceView作为SurfaceView的补充。它可以看作是SurfaceView的一种典型使用模式。在SurfaceView的基础上，它加入了EGL的管理，并自带了渲染线程。另外它定义了用户需要实现的Render接口，可以使用户调用OpenGl自定义渲染的过程。
+*** SurfaceTexture
+- SurfaceTexture对图像流的处理并不直接显示，而是转为GL外部纹理，因此可用于图像流数据的二次处理（如Camera滤镜，桌面特效等）。
+- SurfaceTexture从图像流（来自Camera预览，视频解码，GL绘制场景等）中获得帧数据，当调用updateTexImage()时，根据内容流中最近的图像更新SurfaceTexture对应的GL纹理对象，接下来，就可以像操作普通GL纹理一样操作它了。
+- SurfaceTexture.OnFrameAvailableListener用于让SurfaceTexture的使用者知道有新数据到来。
+- SurfaceTexture中的attachToGLContext()和detachToGLContext()可以让多个GL context共享同一个内容源。
+- SurfaceTexture对象可以在任何线程上创建。 updateTexImage（）只能在包含纹理对象的OpenGL ES上下文的线程上调用。 在任意线程上调用frame-available回调函数，不与updateTexImage（）在同一线程上出现。
+*** TextureView
+- SurfaceView由于使用的是独立的绘图层，并且使用独立的线程去进行绘制。所以SurfaceView不能进行Transition，Rotation，Scale等变换，这就导致一个问题SurfaceView在滑动的时候，SurfaceView的刷新由于不受主线程控制导致SurfaceView在滑动的时候会出现黑边的情况。
+- 为了应对这种情况，所以Android 4.0 google推出了TextureView进行视频播放或者游戏渲染。
+- 和SurfaceView不同，它不会在WMS中单独创建窗口，而是作为View hierachy中的一个普通View，因此可以和其它普通View一样进行移动，旋转，缩放，动画等变化。值得注意的是TextureView必须在硬件加速的窗口中。
+
+** 相机滤镜的添加原理
+- Camera的setPreview设置Preview输出的时候可以是SurfaceHolder也可以是SurfaceTexture，必须使用SurfaceTexture，只有通过SurfaceTexture获取到Camera输出数据然后一方面通过OpenGl对输出的图像进行加工然后渲染，这一部分的实现可以参考Grafika的MoviePlayer的实现。
+  - 当你需要录制添加滤镜的视频的时候，你必须在同一个Opengl环境下也就是EGl对象下面将SurfaceTexture中的texture通过opengl渲染然后送给MediaCodec（Encoder）进行编码然后送入MediaMuxer重新生成MP4视频文件。
+- 为什么不用SurfaceHolder作为输出？
+  - SurfaceHolder是关联SurfaceView，Camera的数据会直接送给SurfaceView的Surface进行渲染，无法取得图像数据进行再处理。
+- 为什么不在Camera的onPreviewFrame(byte[] data, Camera camera)取得图像数据，然后进行处理图像添加滤镜再送去渲染？
+  - 原因是效率问题，onPreviewFrame回调中取得的是Yuv格式的图像，而送入渲染的无论是SurfaceView还是Canvas绘制等方法需要的是RGB的颜色格式，这也就意味着要实现这些必须先将Yuv颜色格式转化为RGB，然后将RGB进行添加滤镜处理然后渲染，无论这部分转化处理操作是Java实现还是利用Jni，C来实现（事实上快一点）都会比较慢，同时这些处理是跑在Cpu上面的，内存里面的，也就意味着更大的资源消耗。而利用Opengl对SurfaceTexture中的图像数据进行处理采用GLSL语言，这一切都是在gpu中完成的，所以这无疑是效率最高的方式。
+- 为什么使用MediaCodec以及MediaMuxer？
+  - 因为MediaCodec是属于硬件编解码，效率最高！但是需要Android 4.3+支持，当然你也可以使用ffmpeg等软编码方案来替代后半部分的录制功能！
+- SurfaceView，GlSurfaceView还是TextureView作为Camera Preview的渲染显
+  示？
+  - 首先由于需要支持Opengl所以GlSurfaceView无疑是最优先的选择，但是TextureView拥有View的平移旋转等特性，更关键的是在ScrollView，ViewPager等控件中只有TextureView才不会出现滑动黑边等问题，所以TextureView才是视频渲染最好的载体。为了使TextureView支持OpenGl，就必须仿照GlSurfaceView自己进行创建EGL，创建GlThread进行渲染，具体的实现可以参考GlTextureViewgles或者开源项目android-openGL-canvas
+
