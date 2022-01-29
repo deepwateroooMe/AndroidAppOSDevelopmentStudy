@@ -273,3 +273,5 @@ Android 调试桥；启用logcat日志调试；模拟器上安装删除软件；
 支持ARM11的Linux-2.6.28内核新特性简介；移植LCD double buffer驱动；移植触摸屏驱动；移植Android键盘驱动；移植Wifi驱动支持Android上网功能；移植电源管理驱动，支持Android电池管理；部署Android系统到实际ARM11平台。
 * 阶段项目实战与测试
 通过对ITelephony接口和ISms接口以及AIDL在Android程序中的开发应用，开发一个打电话和发短信的程序。
+
+

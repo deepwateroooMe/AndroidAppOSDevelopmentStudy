@@ -1,0 +1,42 @@
+#+latex_class: cn-article
+#+title: Android SDK封装与注意事项
+#+author: deepwaterooo
+
+* SDK打包，包冲突问题： 开发SDK中三方库咋处理？
+- 首先建议开发sdk尽量少使用第三方库，使用时问题很多！但是特定情况下需要必须使用咋办？例如用到网络请求等等第三方库，例如现在的okhttp已经非常成熟，我们一般选择他来作为网络请求！首先我们抛出问题
+  - 假如我们在sdk中的build.gradle中加入依赖，开发完毕后直接打包，这里会出现一个问题就是打出来的包里面并不包含第三方库，会出现类找不到的情况，这个时候需要第三方开发者自己来导入我们sdk中所需要的依赖，假如我们不提供文档，开发者们都不知道要导入哪些？
+  - 我们使用arr打包方式，将我们用到的第三方库下载下来放进libs里面然后打包，这样可以打出来的包可以把第三方库打包进去使用！但是这样又会出现一个问题就是第三方开发者经常会遇到包冲突现象！
+- 针对上面的问题提供以下几种思路：
+#+BEGIN_SRC text
+- 提供开发文档在文档注明需要哪些第三方，把android常用的第三方库让开发者自己导入，例如okhttp，因为这些常用，所以开发者觉得这些都不是事，不用这个sdk我都会导入这些三方库
+- 把不常用的库自己封装到sdk中，因为不常用很少有开发者会用产生版本冲突现象，例如dagger2等等！
+- 使用maven仓库，用bintray进行版本管理
+#+END_SRC 
+
+* Android Studio多个module导入AAR库
+- https://blog.csdn.net/yutao52shi/article/details/48015125
+- 想要自己在项目里面直接导入本地的AAR库。
+#+BEGIN_SRC groovy
+repositories {  
+    flatDir {  
+        dirs 'libs'  
+    }  
+}  
+
+dependencies {
+    compile name: 'libname', ext: 'aar' 
+}
+#+END_SRC
+- 如果我们只有一个APP的情况下，这个方法就足以了，但是如果项目比较复杂，有多个Module都需要这个相同的aar库，问题就来了。下面的项目中，我们有一个Application:app，两个module:framework,custwidgets。并且两个module都需要依赖Fresco的aar库。我们把aar放到framework里面，app和custwidgets都依赖于framework。现在编译会报错：
+- 原因是编译两个module依赖了framework，但是在另外两个目录使用无法找到libs这个目录（由于写的相对路径，对于app，搜索的目录就是app/libs/），把AAR引进来。目前Gradle引入AAR还比较弱，无法像jar一样直接就依赖进去了。
+- 最终方案
+  - 由于不想每一个module都放一份aar。所以，我们只能在flatDir下功夫。方案1是使用绝对路径，这样很不灵活，无法根本性的解决问题，后来突然灵机一动，我目录使用”../framework/libs”不就可以找到这个路径了么:)。试了一下，果真work了
+- 基本上是把用到sdk的代码屏蔽了，一切从头开始，很仔细的修改每个模块的build.gradle，遇到问题逐个解决，到处查资料，发现了这篇文章，里面介绍多个module相互依赖如何在gradle中设置依赖aar，比如我这个工程，因为moduleA和moduleC都是要用到sdk的，需要按照正常流程导入aar；而moduleB中没有用到sdk只是依赖moduleC，不需要引入aar，但是要在gradle中配置aar在其它模块的路径：
+#+BEGIN_SRC groovy
+    repositories {
+        flatDir {
+            dirs '../moduleC/libs'
+        }
+    }
+#+END_SRC
+- 这样就可以了，其它有依赖关系的module做相同配置就行了。还有一点，当提示找不到sdk路径时尝试关闭android studio重新打开，如果没有其它问题是可以发现sdk的，自动导入的类、方法也没有问题，这也是一个坑，多次clean、rebuild都没用，关了重开才能刷新IDE旧的配置。

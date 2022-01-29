@@ -2276,4 +2276,87 @@ FOREGROUND_APP_ADJ = 0
   - C. 启动前台Service，播放音乐。
   - D. 在新的进程中，启动后台Service，播放音乐。
   - E. 在新的进程中，启动前台Service，播放音乐。
-- E也是使用了多进程，并且在新进程中，使用了前台service.这个进程的值是2，像C方案，非常小，非常稳定，而且我们还可以在系统进入后台后，手动杀掉主进程，使整个应用的内存消耗降到最低。内存低，优先级又高，E获得了今天的“最稳定方案奖”。
+- E也是使用了多进程，并且在新进程中，使用了前台service.这个进程的值是2，
+  像C方案，非常小，非常稳定，而且我们还可以在系统进入后台后，手动杀掉
+  主进程，使整个应用的内存消耗降到最低。内存低，优先级又高，E获得了今
+  天的“最稳定方案奖”。
+* 多进程应用的使用场景
+- 可以让Android应用中的不同组件运行在不同的进程。有时这种做法是必要的，可以改进应用性能。但你必须意识到，官方网站上并没有太多关于Android多进程应用的文档，而且多进程应用也不容易理解。我们看看何时它会很有用，有何挑战以及如何解决。
+- 缺省时所有Android应用组件都运行在相同的Linux进程中。但也可以让不同组件运行在不同的进程。许多场景下多进程很有用。我们来看看。
+  - Android会不时杀死进程回收内存，以提供给更重要的进程。Android使用重要性等级来决定该杀死和保留哪个进程。占用内存高的后台进程更可能被Android杀死。如果你将后台组件(service, content provider)和前台组件(activity)放在同一个进程，该进程会使用更多的内存。当应用进入后台，它更可能被杀死。Android杀死进程时后杀死其中所有的组件。为了将后台组件跟UI的生命周期解耦，最好将其独立到一个独立的进程。
+  - 比如，如果应用需要在客户端和服务器端之间同步数据时，它可以在独立进程中的service中进行同步。这可以让后台进程更少重启，让其独立于UI进程的生命周期。另外，UI进程中的崩溃和异常对后台进程没有任何影响。反之亦然。
+  - 使用多进程的另一个原因是多个特性完全不同且独立。比如，如果应用支持
+    Email, Calendar, Contacts, Notes以及Tasks，其中每个特性可以在独立进
+    程中运行以保持各自的生命周期独立。
+* 如何运行多进程
+- <activity>, <service>, <receiver>以及<provider>都支持<android:process>属性，该属性可以指定组件运行的进程。多个组件也可以共享同一个进程，指定多少进程就能启动多少进程。
+** 挑战
+- 当Android应用使用多进程时，需要处理进程间的数据一致性。甚至你的代码结构良好，在运行时也不太容易知道哪段代码在哪个进程运行。
+** 共享数据
+- 尽管可以在多个独立进程中运行不同独立逻辑，某些时候它们仍然需要共享数据。如果你使用文件，数据库或者shared preferences，你可能遇到跨进程数据不一致问题。如果使用文件，你需要监听其他进程对文件进行的修改。如果从多个进程访问数据库，你可能会遇到非常难以调试的数据库冲突或死锁问题。如果使用shared preferences，必须使用多进程模式打开它，并且使用OnSharedPreferenceChangeListener监听其他进程导致的变化。
+** 单例
+- 单例是在Android应用中跨组件共享状态信息和数据的简单办法。可以使用synchronized关键字保证单例的方法是线程安全的。但如果在多进程应用中使用单例，可能生成的单例对象数量跟进程数量一样多。因为进程并不共享地址空间，所以一个进程中的单例对象对其他进程并不可见。如果使用shared preferences，数据库或文件中的数据初始化单例，要让(不同进程中的)每个单例对象保持一致的数据非常困难，而且很可能它们在运行时有不同的数据状态。另外，synchronized对这种情况不起作用。看看代码中单例的通常用法。
+- 假设我们有一个单例类，不妨称之为SubscriptionManager，它会跟踪用户订阅。在这个类中更新订阅内容。同时你将数据保存到文件以供离线访问。如果数据文件存在的话，由这些文件初始化单例。有两个进程：主进程和后台进程。在一个工具类中检查用户是否订阅了某个内容，该类会被主进程和后台进程调用。用户调用SubscriptionManager.getInstance(context).updateSubscription(feature, subscription);从主进程订阅。这个调用更新了订阅内容，发送到后台并且更新了文件。
+- 在这种情况下，后台进程中的SubscriptionManager并不知道主进程中发生的这次订阅，除非你在数据文件中设置了FileObserver，监听数据变化更进行相应更新。或者，你也可以使用广播机制来通知这次订阅。所以说，使用这些方式在进程间共享数据非常复杂，并不是最佳方案。
+** 解决办法
+- Android通过Binder接口提供进程间通信(IPC)。Content providers和Bound services使用binder接口来跨进程通信。所以本方案使用这种方式来维护多进程间数据和状态的一致性。
+*** Content Provider
+- ContentProvider用于管理对结构化数据的访问。它们封装数据并且提供数据安全机制。ContentProvider是在当前进程的数据跟其他进程的代码之间建立联系的标准接口。(Content providers are the standard interface that connects data in one process with code running in another process)
+- 尽管ContentProvider本是用于应用间共享数据，它也可以用于在多进程之间共享数据。Android保证跨进程时ContentProvider的单一性。ContentResolver提供易用的接口，所以应用代码不必担心IPC细节。
+- 注意：如果不想在应用外共享数据， 不要 在manifest中对外暴露ContentProvider(android:export="false")
+- 尽管ContentProvider和ContentResolver的”CURD” API主要被设计为共享SQL数据库中的数据，也可以扩展更通用的call(android.net.Uri, java.lang.String, java.lang.String, android.os.Bundle) API以实现应用特定的目的。
+- 比如：在上述例子的SubscriptionManager，你可以提供如下API来检查和更新订阅：
+#+BEGIN_SRC csharp
+ContentResolver resolver = getContentResolver(); 
+Bundle result = resolver.call(“SubcriptionCheck”, arg, extras);
+#+END_SRC 
+*** Bound Service
+- Bound service是客户端-服务器接口中的服务器端。Bound service允许组件(比如activity)绑定到service，发送请求，接收响应，甚至执行IPC
+- 有两种方式实现IPC：Messengers和AIDL。Messenger方式更简单一些。两种方式中Android框架都做好了IPC底层工作(marshalling, unmarshalling, RPC)，IPC对调用方是透明的。跟service通信的步骤如下：
+- bindService
+- 连接到service时收到回调
+- 使用binder接口发送请求，或调用service API
+- 从service接收响应
+- Service
+- 可以使用intent在另一个进程中启动service，或者从代码中的任何地方发送广播，并且在另外的进程中接收该广播并启动一个service来处理它。
+- 比如你有一个测量系统用于捕获应用中的某些事件，可以将每次测量发送到service，让service将其写入数据库或发送到后台，而不是让代码中到处都是数据库或网络操作。
+- Application类的坑
+- 你可以实现Application的子类，并且在AndroidManifest.xml的<application>标签的<android:name>属性中指定这个类的全名。当应用进程启动时，你实现的Application子类会最先初始化。
+- 要注意的是，应用中启动的每一个进程都会执行上述初始化。不幸的是，并不能为不同的进程指定不同的Application类。
+- 如果你使用Application类，很可能你会在它的onCreate()方法中做一些初始化工作。 请确保这些初始化工作对进程是恰当且必要的 也在Application.onCreate()中使用下面的代码确定进程上下文：
+#+BEGIN_SRC csharp
+int pid = android.os.Process.myPid(); 
+ActivityManager manager = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE); 
+for (ActivityManager.RunningAppProcessInfo processInfo : manager.getRunningAppProcesses()) { 
+    if (processInfo.pid == pid) { 
+        String currentProcName = processInfo.processName; 
+        if (!TextUtils.isEmpty(currentProcName) && currentProcName.equals(":background")) {
+           //Rest of the initializations are not needed for the background
+           //process
+           return; 
+        } 
+    } 
+}
+/* Initializations for the UI process */
+#+END_SRC 
+- 通过这种方式你可以降低内存占用，避免某些大块内存分配，甚至有可能加快
+  应用启动速度。这里提到初始化包括：加载专有字体，初始化Google Maps，
+  及以初始化第三方SDK。通常只需要在主进程中做这些初始化。
+* Serializable 和 Parcelable 两种序列化
+- 什么时候用的到序列化？
+  - 1、永久性保存对象，保存对象的字节序列到本地文件中
+  - 2、通过序列化对象在网络中传递对象
+  - 3、通过序列化在进程之间传递对象
+- 在安卓中，可以用作在Activity中传递复杂类型，主要是将自己的类转换为基础的字节数组，Android中Activity传递主要靠Intent这个类，Intent类内部传递数据的效率仍然需要拷贝，如果数据太大，其实可以考虑用单例模式，定义一个全局的静态类，活用设计模式。
+- Parcelable
+#+BEGIN_SRC csharp
+putExtra(String name, Parcelable value)   // 传递一个parcelable对象 
+putExtra(String name, Parcelable[] value) //  传递一个Parcelable数组
+putExtra(String name, Bundle value)       // 传递一个Bundle对象
+putParcelableArrayListExtra(String name, ArrayList<? extends Parcelable> value) // 传递一个实现Parcelable接口的对象数组
+putStringArrayListExtra(String name, ArrayList<String> value)   // 传递一个字符串数组
+putIntegerArrayListExtra(String name, ArrayList<Integer> value) // 传递一个整形数组。
+#+END_SRC 
+- Integer这些装箱类型，Intent还实现了 putExtra(String name, int[] value) 这样的基础类型数组，同时Parcelable效率比标准的Java序列化更高，同时还被用作在AIDL中交换数据，所以掌握Parcelable这样的显示序列化技术，可以大幅提高数据交换性能。
+- Serializable
+- 　 传统的Java，串行化技术，实现Serializable接口，原理和Parceble差不多，均将自己的类转换为基本的类型比如说字节数组，在Android中不是很实用，比Parcelable效率低，在Intent中使用Intent putExtra(String name, Serializable value) 这个方法即可。

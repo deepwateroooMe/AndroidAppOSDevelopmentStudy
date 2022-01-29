@@ -1157,3 +1157,178 @@ public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int hei
   示？
   - 首先由于需要支持Opengl所以GlSurfaceView无疑是最优先的选择，但是TextureView拥有View的平移旋转等特性，更关键的是在ScrollView，ViewPager等控件中只有TextureView才不会出现滑动黑边等问题，所以TextureView才是视频渲染最好的载体。为了使TextureView支持OpenGl，就必须仿照GlSurfaceView自己进行创建EGL，创建GlThread进行渲染，具体的实现可以参考GlTextureViewgles或者开源项目android-openGL-canvas
 
+
+* Opengl FrameBuffer步骤详解
+** 作用
+- FrameBuffer Object,也称FBO，离屏渲染，可以摆脱屏幕的束缚，在后台做图像处理。
+** 理解
+- FrameBuffer和Texture绑定，FrameBuffer犹如画板，而Texture犹如画纸，我们在上面画东西，画完后，我们可以拿Texture去绘制到其他地方上面。
+** 代码
+- 本章案例效果是在屏幕外绘制一张图片，并保存到本地。
+- 由于GL运行需要EGL环境，而GLSurfaceView已经帮我们构建了这样的一个环境，所以我们此次也是在GLSurfaceView上运行，但是不绘制到屏幕上。
+- 案例为试验效果，只绘制一帧，所以就放到onDrawFrame上运行，读者之后可以根据自己的需求，处理好相关的生命周期。
+#+BEGIN_SRC csharp
+public void onDrawFrame(GL10 glUnused) {
+    GLES20.glClear(GL10.GL_COLOR_BUFFER_BIT | GL10.GL_DEPTH_BUFFER_BIT);
+ 
+    // 1. 创建FrameBuffer、纹理对象
+    createEnv();
+    // 2. 配置FrameBuffer相关的绘制存储信息，并且绑定到当前的绘制环境上
+    bindFrameBufferInfo();
+    // 3. 更新视图区域
+    GLES20.glViewport(0, 0, mTextureBean.getWidth(), mTextureBean.getHeight());
+    // 4. 绘制图片
+    drawTexture();
+    // 5. 读取当前画面上的像素信息
+    readPixels(0, 0, mTextureBean.getWidth(), mTextureBean.getHeight());
+    // 6. 解绑FrameBuffer
+    unbindFrameBufferInfo();
+    // 7. 删除FrameBuffer、纹理对象
+    deleteEnv();
+}
+#+END_SRC 
+- 以上就是关键代码，相比之前其他章节，这里多出了1、2、6、7这几个关键步骤。
+** 步骤1. 创建FrameBuffer、纹理对象
+   #+BEGIN_SRC csharp
+private int[] mFrameBuffer = new int[1];
+private int[] mTexture = new int[1];
+private void createEnv() {
+    // 1. 创建FrameBuffer
+    GLES20.glGenFramebuffers(1, mFrameBuffer, 0);
+ 
+    // 2.1 生成纹理对象
+    GLES20.glGenTextures(1, mTexture, 0);
+    // 2.2 绑定纹理对象
+    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTexture[0]);
+    // 2.3 设置纹理对象的相关信息：颜色模式、大小
+    GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
+            mTextureBean.getWidth(), mTextureBean.getHeight(),
+            0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+    // 2.4 纹理过滤参数设置
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+    // 2.5 解绑当前纹理，避免后续无关的操作影响了纹理内容
+    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+}
+   #+END_SRC 
+- 创建纹理和之前的没有差别，而创建Framebuffer也很简单。
+** 步骤2. 配置FrameBuffer相关的绘制存储信息，并且绑定到当前的绘制环境上
+   #+BEGIN_SRC csharp
+private void bindFrameBufferInfo() {
+    // 1. 绑定FrameBuffer到当前的绘制环境上
+    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, mFrameBuffer[0]);
+    // 2. 将纹理对象挂载到FrameBuffer上，存储颜色信息
+    GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+            GLES20.GL_TEXTURE_2D, mTexture[0], 0);
+}
+   #+END_SRC 
+- *这里先将FrameBuffer绑定到当前的绘制环境上，所以，在没解绑之前，所有的GL图形绘制操作，都不是直接绘制到屏幕上，而是绘制到这个FrameBuffer上！*
+- 若想要解绑，想直接绘制到屏幕上，则可以通过
+#+BEGIN_SRC csharp
+  GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0); // <<<<<===== 0
+// 来实现(感觉这里好像写错了吧，可能自己记得不对: 函数仍然是调用GLES20.glBindFramebuffer(..., 0)但参数设置为0
+#+END_SRC 
+- 第二步是将FrameBuffer和纹理对象相关联，纹理存储绘制到FrameBuffer上的颜色信息，代码也很简单。
+** 步骤6. 解绑FrameBuffer
+   #+BEGIN_SRC csharp
+private void unbindFrameBufferInfo() {
+    // 解绑FrameBuffer
+    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+}
+   #+END_SRC 
+- 解绑，之后的绘制操作都是直接绘制到屏幕上。
+** 步骤7. 删除FrameBuffer、纹理对象
+   #+BEGIN_SRC csharp
+private void deleteEnv() {
+    GLES20.glDeleteFramebuffers(1, mFrameBuffer, 0);
+    GLES20.glDeleteTextures(1, mTexture, 0);
+}
+   #+END_SRC 
+** 注意
+- FrameBuffer每次绘制都会得到一个水平镜像翻转的视图，要处理这个问题，可以在绘制的时候添加一个翻转矩阵，或者，用FrameBuffer绘制2次。
+** 总结
+- 本章使用FrameBuffer实现了离屏渲染，并且将FrameBuffer上的绘制信息保存
+  成Bitmap到本地(此处省略，详细可以看GitHub工程)，而FrameBuffer除了这
+  个作用外，还可以将离屏渲染好的图片再绘制到屏幕上，而不用绘制到本地，
+  毕竟我们绘制后得到一个Texture，那就有发挥的空间。比如我们要做的效果
+  是屏幕上画一个背景，背景上有朵花，一共2张图，但背景要做滤镜处理，而
+  花不用，那么，我们可以将背景通过FrameBuffer去做滤镜处理，然后得到一
+  个纹理，直接绘制到屏幕上，而花直接绘制，那么就得到想要的效果了。具体
+  留给读者作为练习题。
+** Frame Buffer和Render Buffer
+- 关联项目： https://github.com/doggycoder/AndroidOpenGLDemo
+- Frame Buffer Object（FBO）即为帧缓冲对象，用于离屏渲染缓冲。相对于其它同类技术，如数据拷贝或交换缓冲区等，使用FBO技术会更高效并且更容易实现。而且FBO不受窗口大小限制。FBO可以包含许多颜色缓冲区，可以同时从一个片元着色器写入。FBO是一个容器，自身不能用于渲染，需要与一些可渲染的缓冲区绑定在一起，像纹理或者渲染缓冲区。
+- Render Buffer Object（RBO）即为渲染缓冲对象，分为color buffer(颜色)、depth buffer(深度)、stencil buffer(模板)。
+- 在使用FBO做离屏渲染时，可以只绑定纹理，也可以只绑定Render Buffer，也可以都绑定或者绑定多个，视使用场景而定。如只是对一个图像做变色处理等，只绑定纹理即可。如果需要往一个图像上增加3D的模型和贴纸，则一定还要绑定depth Render Buffer。
+- 同Texture使用一样，FrameBuffer使用也需要调用GLES20.glGenFrameBuffers生成FrameBuffer，然后在需要使用的时候调用GLES20.glBindFrameBuffer。
+*** Frame Buffer只与Texture绑定
+- FrameBuffer的创建，Texture的创建及参数设置，代码如下：
+#+BEGIN_SRC csharp
+GLES20.glGenFramebuffers(1, fFrame, 0);
+GLES20.glGenTextures(2, textures, start);
+for (int i = 0; i < 2; i++) {
+    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textures[i]);
+    GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0,gl_format, width, height,
+        0, gl_format, GLES20.GL_UNSIGNED_BYTE, null);
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER,GLES20.GL_NEAREST);
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER,GLES20.GL_LINEAR);
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_CLAMP_TO_EDGE);
+    GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE);
+}
+GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,0);
+#+END_SRC 
+- 创建完毕后，在渲染时使用：
+#+BEGIN_SRC csharp
+// 绑定FrameBuffer
+GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fFrame[0]);
+// 为FrameBuffer挂载Texture[1]来存储颜色
+GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+    GLES20.GL_TEXTURE_2D, textures[1], 0);
+// 绑定FrameBuffer后的绘制会绘制到textures[1]上了
+GLES20.glViewport(0,0,w,h);
+mFilter.draw();
+// 解绑FrameBuffer
+GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,0);
+#+END_SRC 
+*** Frame Buffer与Texture、Render Buffer绑定
+- 有时候只绑定纹理并不能满足我们的要求，当我们需要深度的时候，还需要绑定Render Buffer。在绑定纹理的基础上再绑定RenderBuffer其实也就比较简单了。首先使用前还是先生成RenderBuffer，并为RenderBuffer建立数据存储的格式和渲染对象的尺寸:
+#+BEGIN_SRC csharp
+// 生成Render Buffer
+GLES20.glGenRenderbuffers(1,fRender,0);
+// 绑定Render Buffer
+GLES20.glBindRenderbuffer(GLES20.GL_RENDERBUFFER,fRender[0]);
+// 设置为深度的Render Buffer，并传入大小
+GLES20.glRenderbufferStorage(GLES20.GL_RENDERBUFFER,GLES20.GL_DEPTH_COMPONENT16,
+    width, height);
+// 为FrameBuffer挂载fRender[0]来存储深度
+GLES20.glFramebufferRenderbuffer(GLES20.GL_FRAMEBUFFER, GLES20.GL_DEPTH_ATTACHMENT,
+    GLES20.GL_RENDERBUFFER, fRender[0]);
+// 解绑Render Buffer
+GLES20.glBindRenderbuffer(GLES20.GL_RENDERBUFFER,0);
+#+END_SRC 
+- 然后渲染时，增加深度绑定和解绑：
+#+BEGIN_SRC csharp
+GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBufferId);
+GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+    GLES20.GL_TEXTURE_2D, textureId, 0);
+// 为FrameBuffer挂载fRender[0]来存储深度
+GLES20.glFramebufferRenderbuffer(GLES20.GL_FRAMEBUFFER, GLES20.GL_DEPTH_ATTACHMENT,
+            GLES20.GL_RENDERBUFFER, fRender[0]);
+GLES20.glViewport(0,0,width,height);
+mFilter.draw();
+GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,0);
+// 解绑Render Buffer
+GLES20.glBindRenderbuffer(GLES20.GL_RENDERBUFFER,0);
+#+END_SRC 
+- 最后的处理
+  - 不管是FrameBuffer、RenderBuffer还是Texture不再使用时，都应该删除掉，删除的方法类似：
+#+BEGIN_SRC csharp
+// 删除Render Buffer
+GLES20.glDeleteRenderbuffers(1, fRender, 0);
+// 删除Frame Buffer
+GLES20.glDeleteFramebuffers(1, fFrame, 0);
+// 删除纹理
+GLES20.glDeleteTextures(1, fTexture, 0);
+#+END_SRC 
