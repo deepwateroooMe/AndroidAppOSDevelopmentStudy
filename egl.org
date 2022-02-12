@@ -1332,3 +1332,280 @@ GLES20.glDeleteFramebuffers(1, fFrame, 0);
 // 删除纹理
 GLES20.glDeleteTextures(1, fTexture, 0);
 #+END_SRC 
+* EGL环境
+** EGLHelper
+- 我们模仿Android中GLSurfaceView里面的EglHelper来做一个自己的MyEglHelper方便未来我们使用GLSurfaceView, OpenGL这一块的开发。
+- 大体分为九个步骤
+   #+BEGIN_SRC csharp
+import android.view.Surface;
+import javax.microedition.khronos.egl.EGL;
+import javax.microedition.khronos.egl.EGL10;
+import javax.microedition.khronos.egl.EGLConfig;
+import javax.microedition.khronos.egl.EGLContext;
+import javax.microedition.khronos.egl.EGLDisplay;
+import javax.microedition.khronos.egl.EGLSurface;
+
+public class MyEglHelper {
+    private EGL10 mEgl;
+    private EGLDisplay mEglDisplay;
+    private EGLContext mEglContext;
+    private EGLSurface mEglSurface;
+
+    private void initEgl(Surface surface, EGLContext eglContext) {
+        // 1.得到Egl实例
+        mEgl = (EGL10) EGLContext.getEGL();
+
+        // 2.得到默认的显示设备(就是窗口)
+        mEglDisplay = mEgl.eglGetDisplay(EGL10.EGL_DEFAULT_DISPLAY);
+        if (mEglDisplay == EGL10.EGL_NO_DISPLAY) {
+            throw new RuntimeException("My  eglGetDisplay failed...");
+        }
+
+        // 3.初始化默认显示设备
+        int[] version = new int[2]; // 主版本号，次版本号
+        if (!mEgl.eglInitialize(mEglDisplay, version)) {
+            throw new RuntimeException("My eglInitialize failed...");
+        }
+
+        // 4.设置显示设备的属性
+        int[] attribes = new int[]{
+                EGL10.EGL_RED_SIZE, 8,   // 红
+                EGL10.EGL_GREEN_SIZE, 8, // 绿
+                EGL10.EGL_BLUE_SIZE, 8,  // 蓝
+                EGL10.EGL_ALPHA_SIZE, 8, // 透明度
+                EGL10.EGL_DEPTH_SIZE, 8, // 深度 3D相关的
+                EGL10.EGL_STENCIL_SIZE, 8,    // 模板
+                EGL10.EGL_RENDERABLE_TYPE, 4, // 这个是安卓规定的 用opengl2.0这个版本
+                EGL10.EGL_NONE // 到这个NONE 他就知道结尾了
+        };
+        int[] num_config = new int[1];
+        if (!mEgl.eglChooseConfig(mEglDisplay, attribes, null, 1, num_config)) {
+            throw new IllegalArgumentException("My eglChooseConfig failed...");
+        }
+        int numConfigs = num_config[0];
+        if (numConfigs <= 0) {
+            throw new IllegalArgumentException("My No configs match configSpec...");
+        }
+        // 5.从系统中获取对应属性的配置
+        EGLConfig[] configs = new EGLConfig[numConfigs];
+        if (!mEgl.eglChooseConfig(mEglDisplay, attribes, configs, numConfigs, num_config)) {
+            throw new IllegalArgumentException("My eglChooseConfig#2 failed...");
+        }
+        // 6. 创建EglContext
+        if (eglContext != null) {
+            mEglContext = mEgl.eglCreateContext(mEglDisplay, configs[0], eglContext, null);
+        } else {
+            mEglContext = mEgl.eglCreateContext(mEglDisplay, configs[0], EGL10.EGL_NO_CONTEXT, null);
+        }
+        // 7.创建渲染的Surface
+        mEglSurface = mEgl.eglCreateWindowSurface(mEglDisplay, configs[0], surface, null);
+        // 8.绑定EglContext 和 Surface到显示设备中
+        if(!mEgl.eglMakeCurrent(mEglDisplay, mEglSurface, mEglSurface, mEglContext)){
+            throw new IllegalArgumentException("My eglMakeCurrent failed...");
+        }
+        // 9.刷新数据，显示渲染场景
+    }
+    /**
+     * 刷新数据，显示渲染场景
+     * @return
+     */
+    public boolean swapBuffers(){
+        if (mEgl != null){
+            return mEgl.eglSwapBuffers(mEglDisplay, mEglSurface);
+        }else {
+            throw new IllegalArgumentException("My eglSwapBuffers failed...");
+        }
+    }
+    /**
+     * 释放资源
+     */
+    public void destroyEgl(){
+        if(mEgl != null){
+            mEgl.eglMakeCurrent(mEglDisplay, EGL10.EGL_NO_SURFACE, EGL10.EGL_NO_SURFACE, EGL10.EGL_NO_CONTEXT);
+            mEgl.eglDestroyContext(mEglDisplay, mEglContext);
+            mEglContext = null;
+            mEgl.eglDestroySurface(mEglDisplay,mEglSurface);
+            mEglSurface = null;
+            mEgl.eglTerminate(mEglDisplay);
+            mEglDisplay = null;
+            mEgl = null;
+        }
+    }
+    public EGLContext getmEglContext() {
+        return mEglContext;
+    }
+}
+   #+END_SRC 
+** 自定义一个我们自己的GLSurfaceView
+#+BEGIN_SRC csharp
+public abstract class BaseSurfaceView extends SurfaceView implements SurfaceHolder.Callback {
+    
+    private Surface surface;
+    private EGLContext eglContext;
+    private GLThread glThread;
+    private GLRender glRender;
+    
+    public final static int RENDERMODE_WHEN_DIRTY = 0;
+    public final static int RENDERMODE_CONTINUOUSLY = 1;
+    private int mRenderMode = RENDERMODE_CONTINUOUSLY;
+
+    public BaseSurfaceView(Context context) {
+        this(context, null);
+    }
+    public BaseSurfaceView(Context context, AttributeSet attrs) {
+        this(context, attrs, 0);
+    }
+    public BaseSurfaceView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        getHolder().addCallback(this);
+    }
+
+    public void setRender(GLRender GLRender) {
+        this.glRender = GLRender;
+    }
+    public void setRenderMode(int mRenderMode) {
+        if (glRender == null) 
+            throw new RuntimeException("must set render before");
+        this.mRenderMode = mRenderMode;
+    }
+    public void setSurfaceAndEglContext(Surface surface, EGLContext eglContext) {
+        this.surface = surface;
+        this.eglContext = eglContext;
+    }
+
+    public EGLContext getEglContext() {
+        if (glThread != null)        
+            return glThread.getEglContext();
+        return null;
+    }
+
+    public void requestRender() {
+        if (glThread != null) 
+            glThread.requestRender();
+    }
+    @Override public void surfaceCreated(SurfaceHolder holder) {
+        if (surface == null) 
+            surface = holder.getSurface();
+        glThread = new GLThread(new WeakReference<BaseSurfaceView>(this));
+        glThread.isCreate = true;
+        glThread.start();
+    }
+    @Override public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        glThread.width = width;
+        glThread.height = height;
+        glThread.isChange = true;
+    }
+    @Override public void surfaceDestroyed(SurfaceHolder holder) {
+        glThread.onDestory();
+        glThread = null;
+        surface = null;
+        eglContext = null;
+    }
+
+    public interface GLRender {
+        void onSurfaceCreated();
+        void onSurfaceChanged(int width, int height);
+        void onDrawFrame();
+    }
+
+    static class GLThread extends Thread {
+        private WeakReference<BaseSurfaceView> wleglSurfaceViewWeakReference;
+        private BaseEglHelper baseEglHelper = null;
+        private Object object = null;
+        private boolean isExit = false;
+        private boolean isCreate = false;
+        private boolean isChange = false;
+        private boolean isStart = false;
+        private int width;
+        private int height;
+
+        public GLThread(WeakReference<BaseSurfaceView> wleglSurfaceViewWeakReference) {
+            this.wleglSurfaceViewWeakReference = wleglSurfaceViewWeakReference;
+        }
+
+        @Override public void run() {
+            super.run();
+            isExit = false;
+            isStart = false;
+            object = new Object();
+            baseEglHelper = new BaseEglHelper();
+            baseEglHelper.initEgl(wleglSurfaceViewWeakReference.get().surface, wleglSurfaceViewWeakReference.get().eglContext);
+            while (true) {
+                if (isExit) {
+                    //释放资源
+                    release();
+                    break;
+                }
+                if (isStart) {
+                    if (wleglSurfaceViewWeakReference.get().mRenderMode == RENDERMODE_WHEN_DIRTY) {
+                        synchronized (object) {
+                            try {
+                                object.wait();
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    } else if (wleglSurfaceViewWeakReference.get().mRenderMode == RENDERMODE_CONTINUOUSLY) {
+                        try {
+                            Thread.sleep(1000 / 60);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    } else throw new RuntimeException("mRenderMode is wrong value");
+                }
+                onCreate();
+                onChange(width, height);
+                onDraw();
+                isStart = true;
+            }
+        }
+        private void onCreate() {
+            if (isCreate && wleglSurfaceViewWeakReference.get().glRender != null) {
+                isCreate = false;
+                wleglSurfaceViewWeakReference.get().glRender.onSurfaceCreated();
+            }
+        }
+        private void onChange(int width, int height) {
+            if (isChange && wleglSurfaceViewWeakReference.get().glRender != null) {
+                isChange = false;
+                wleglSurfaceViewWeakReference.get().glRender.onSurfaceChanged(width, height);
+            }
+        }
+        private void onDraw() {
+            if (wleglSurfaceViewWeakReference.get().glRender != null && baseEglHelper != null) {
+                wleglSurfaceViewWeakReference.get().glRender.onDrawFrame();
+                if (!isStart) 
+                    wleglSurfaceViewWeakReference.get().glRender.onDrawFrame();
+                baseEglHelper.swapBuffers();
+            }
+        }
+        private void requestRender() {
+            if (object != null) {
+                synchronized (object) {
+                    object.notifyAll();
+                }
+            }
+        }
+        public void onDestory() {
+            isExit = true;
+            requestRender();
+        }
+        public void release() {
+            if (baseEglHelper != null) {
+                baseEglHelper.destoryEgl();
+                baseEglHelper = null;
+                object = null;
+                wleglSurfaceViewWeakReference = null;
+            }
+        }
+        public EGLContext getEglContext() {
+            if (baseEglHelper != null) 
+                return baseEglHelper.getmEglContext();
+            return null;
+        }
+    }
+}
+#+END_SRC 
+- 调用EGL
+- 在surfaceview Surface创建后，初始化 opengl的shader 创建program 绘制，绘制完毕后，调用eglSwapBuffers(display,surface); 来将opengl绘制的纹理渲染到 窗口。在上面的EGL中已经封装在Draw函数内部了。
+- node：渲染的线程 必须 与 EGL的创建，即init必须在同一个线程，否则就会绘制失效。这里主要是因为：eglMakeCurrent(display, surface, surface,context)在里面调用了，当然可以在别的线程先初始化好 context 、display 和context ，然后再渲染线程中 绘制前就调用 eglMakeCurrent。

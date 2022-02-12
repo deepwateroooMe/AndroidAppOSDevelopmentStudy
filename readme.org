@@ -275,3 +275,4 @@ Android 调试桥；启用logcat日志调试；模拟器上安装删除软件；
 通过对ITelephony接口和ISms接口以及AIDL在Android程序中的开发应用，开发一个打电话和发短信的程序。
 
 
+
