@@ -1,0 +1,8 @@
+onCreate()
+onStart()
+onRestoreInstanceState() // onStart() 之后恢复数据
+onResume()
+onPause()
+onSaveInstanceState()    // onStop() 之前保存数据
+onStop()
+onDestory()
