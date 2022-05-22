@@ -1,0 +1,11 @@
+#+latex_class: cn-article
+#+title: Android IPC 机制
+#+author: deepwaterooo
+
+* Android进阶——AIDL详解之使用远程服务AIDL实现进程间（IPC）简单通信小结（一）
+- https://blog.csdn.net/CrazyMo_/article/details/80240840
+* Android进阶——AIDL详解之使用远程服务AIDL实现进程间带远程回调接口和自定义Bean的较复杂通信小结（二）
+- https://crazymo.blog.csdn.net/article/details/80250565
+* Android 进阶——AIDL 详解之AIDL 借助Binder 实现IPC背后的核心思想和原理（三）
+- https://crazymo.blog.csdn.net/article/details/106156588
+

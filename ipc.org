@@ -2372,7 +2372,7 @@ interface IRemoteBookBinder {
     List<BookBean> getBookList();
 }
 #+END_SRC 
-[[/Users/jennyhuang/myandr/pic/ipc_20220505_103934.png]]
+[[~/myandr/pic/ipc_20220505_103934.png]]
 ** 内部类 Default
 #+BEGIN_SRC csharp
 public static class Default implements com.renj.service.aidl.IRemoteBookBinder {
@@ -2736,4 +2736,4 @@ getInterfaceDescriptor()方法返回 Stub 的 DESCRIPTOR 字段，Binder 的唯�
      #+END_SRC 
 - 和addBookInOut() 方法类似，封装参数，然后调用mRemote 的 transact() 方法，最后将结果 _reply 对象封装成客户端需要的类型返回。
 ** 总结图
-[[/Users/jennyhuang/myandr/pic/ipc_20220505_104700.png]]
+[[~/myandr/pic/ipc_20220505_104700.png]]

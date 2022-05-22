@@ -1,0 +1,23 @@
+#+latex_class: cn-article
+#+title: 安卓 IPC AIDL Service 用法及原理详解
+#+author: deepwaterooo
+
+* 基本过程概述：一般实现步骤讲解
+- 学习新知识的科学方法是怎样的呢？
+  - 我觉得只读源码，然后自己去动脑筋去想，我应该是多花点儿时间，应该也是自己能够最终想得明白的；
+  - 但是与其用读很多源码的经验来一再巩固自己的识知：想要 bind 到远程服务，就必须得实现 ServiceConnection 接口，不如自己磨刀不误砍柴工地，先化一两个小时的时间，从网络上先把原理弄明白，清楚了，先有一个大概的认知，再去读这些 IPC AIDL IBinder 的远程绑定，是不是能够轻松愉快很多呢？嗯，这是我今天想要尝试的科学学习方法。。。。。。
+** 在客户端(Activity中)要完成：
+- 1. 客户端通过 BindService() 方法来绑定一个服务对象(业务对象，应用是 IBinder 对象的具体实现类吧，但是 IBinder 对象)
+    - 如绑定成功会回调 ServiceConnection 接口方法 onServiceConnected()
+- 2. onServiceConnected() 方法的其中一个参数是在Service中OnBind()返回的Binder的实例 （IBinder 对象）。
+- 3. 通过在 onServiceConnected() 方法中接受 Binder 的实例（IBinder 对象）来调用 Binder 中返回 Service 实例（也就是 IBinder 实例中实现过）的方法，获得 Service 的实现。
+- 4. 通过 Service 的实例就可以调用 Service 的的公有方法。
+** 在服务端一般要实现:
+- 1. 服务端通过创建一个*.aidl文件来定义一个可以被客户端调用的业务接口
+  - 一个AIDL文件的规范：
+    - 1> 不能有修饰符，类似接口的写法
+    - 2> 支持数据类型，String\CharSequence\List(存放字符串)\Map\自定义类型
+  - 自定义类型：
+    - (要实现 Parcelable 接口,定义一个 AIDL 文件声明该类型,在其他 AIDL 中使用该类型需要 import 包)
+- 2. 服务端需要提供一个业务接口的实现类，通常继承 Stub 类
+- 3. 通过 Service 的 onBind() 方法返回被绑定的业务对象
