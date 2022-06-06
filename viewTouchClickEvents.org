@@ -1,0 +1,349 @@
+#+latex_class: cn-article
+#+title: 安卓 View onTouch onClick 事件分发处理机制
+#+author: deepwaterooo
+
+* Button的onTouch，onClick，onLongClick事件发生先后顺序和关联：
+** 一，onTouch返回false
+- 首先是onTouch事件的down事件发生，此时，如果长按，触发onLongClick事件；
+- 然后是onTouch事件的up事件发生，up完毕，最后触发onClick事件。
+** 二，onTouch返回true
+- 首先是onTouch事件的down事件发生，然后是onTouch事件的up事件发生；期间不触发onClick和onLongClick事件
+** 三，onTouch：down返回true，up返回false：结果同二。
+- 机制分析：
+   - onTouch事件中：down事件返回值标记此次事件是否为点击事件（返回false，是点击事件；返回true，不记为点击事件），而up事件标记此次事件结束时间，也就是判断是否为长按。
+- 只要当down返回true时候，系统将不把本次事件记录为点击事件，也就不会触发onClick或者onLongClick事件了。因此尽管当up的时候返回false，系统也不会继续触发onClick事件了。
+** 四，onTouch：down返回false，up返回true：
+- 首先是onTouch事件的down事件发生，此时：
+- 长按，触发onLongClick事件，然后是onTouch事件的up事件发生，完毕。
+- 短按，先触发onTouch的up事件， 到一定时间后，自动触发onLongClick事件。
+- 机制分析：
+  - onTouch事件中：down事件返回值标记此次事件是否为点击事件（返回false，是点击事件；返回true，不记为点击事件），而up事件标记此次事件结束时间，也就是判断是否为长按。
+  - 当down返回false，标记此次事件为点击事件，而up返回了true，则表示此次事件一直没有结束，也就是一直长按下去了，达到长按临界时间后，自然触发长按事件，而onClick事件没有触发到
+** some code theories
+  #+BEGIN_SRC csharp
+/**
+ * Implement this method to handle touch screen motion events.
+ *
+ * @param event The motion event.
+ * @return True if the event was handled, false otherwise.
+ */
+public boolean onTouchEvent(MotionEvent event) {
+    final int viewFlags = mViewFlags;
+    if ((viewFlags & ENABLED_MASK) == DISABLED) {
+        if (event.getAction() == MotionEvent.ACTION_UP && (mPrivateFlags & PRESSED) != 0) {
+            mPrivateFlags &= ~PRESSED;
+            refreshDrawableState();
+        }
+        // A disabled view that is clickable still consumes the touch
+        // events, it just doesn't respond to them.
+        return (((viewFlags & CLICKABLE) == CLICKABLE ||
+                 (viewFlags & LONG_CLICKABLE) == LONG_CLICKABLE));
+    }
+    if (mTouchDelegate != null) {
+        if (mTouchDelegate.onTouchEvent(event)) {
+            return true;
+        }
+    }
+    if (((viewFlags & CLICKABLE) == CLICKABLE ||
+         (viewFlags & LONG_CLICKABLE) == LONG_CLICKABLE)) {
+        switch (event.getAction()) {
+        case MotionEvent.ACTION_UP:
+            boolean prepressed = (mPrivateFlags & PREPRESSED) != 0;
+            if ((mPrivateFlags & PRESSED) != 0 || prepressed) {
+                // take focus if we don't have it already and we should in
+                // touch mode.
+                boolean focusTaken = false;
+                if (isFocusable() && isFocusableInTouchMode() && !isFocused()) {
+                    focusTaken = requestFocus();
+                }
+                if (prepressed) {
+                    // The button is being released before we actually
+                    // showed it as pressed.  Make it show the pressed
+                    // state now (before scheduling the click) to ensure
+                    // the user sees it.
+                    mPrivateFlags |= PRESSED;
+                    refreshDrawableState();
+                }
+                if (!mHasPerformedLongPress) {
+                    // This is a tap, so remove the longpress check
+                    removeLongPressCallback();
+                    // Only perform take click actions if we were in the pressed state
+                    if (!focusTaken) {                               focustaken 为 false 时， click才触发。
+                            // Use a Runnable and post this rather than calling
+                            // performClick directly. This lets other visual state
+                            // of the view update before click actions start.
+                            if (mPerformClick == null) {
+                                mPerformClick = new PerformClick();
+                            }
+                        if (!post(mPerformClick)) {
+                            performClick();
+                        }
+                    }
+                }
+                if (mUnsetPressedState == null) {
+                    mUnsetPressedState = new UnsetPressedState();
+                }
+                if (prepressed) {
+                    postDelayed(mUnsetPressedState,
+                                ViewConfiguration.getPressedStateDuration());
+                } else if (!post(mUnsetPressedState)) {
+                    // If the post failed, unpress right now
+                    mUnsetPressedState.run();
+                }
+                removeTapCallback();
+            }
+            break;
+        case MotionEvent.ACTION_DOWN:
+            mHasPerformedLongPress = false;
+            if (performButtonActionOnTouchDown(event)) {
+                break;
+            }
+            // Walk up the hierarchy to determine if we're inside a scrolling container.
+            boolean isInScrollingContainer = isInScrollingContainer();
+            // For views inside a scrolling container, delay the pressed feedback for
+            // a short period in case this is a scroll.
+            if (isInScrollingContainer) {
+                mPrivateFlags |= PREPRESSED;
+                if (mPendingCheckForTap == null) {
+                    mPendingCheckForTap = new CheckForTap();
+                }
+                postDelayed(mPendingCheckForTap, ViewConfiguration.getTapTimeout());
+            } else {
+                // Not inside a scrolling container, so show the feedback right away
+                mPrivateFlags |= PRESSED;
+                refreshDrawableState();
+                checkForLongClick(0);
+            }
+            break;
+        case MotionEvent.ACTION_CANCEL:
+            mPrivateFlags &= ~PRESSED;
+            refreshDrawableState();
+            removeTapCallback();
+            break;
+        case MotionEvent.ACTION_MOVE:
+            final int x = (int) event.getX();
+            final int y = (int) event.getY();
+            // Be lenient about moving outside of buttons
+            if (!pointInView(x, y, mTouchSlop)) {
+                // Outside button
+                removeTapCallback();
+                if ((mPrivateFlags & PRESSED) != 0) {
+                    // Remove any future long press/tap checks
+                    removeLongPressCallback();
+                    // Need to switch from pressed to not pressed
+                    mPrivateFlags &= ~PRESSED;
+                    refreshDrawableState();
+                }
+            }
+            break;
+        }
+        return true;
+    }   
+#+END_SRC 
+
+
+* SimpleOnGestureListener 静态内部类
+** 构造方法
+- GestureDetector 一共有 5 种构造函数，但有 2 种被废弃了，1 种是重复的，所以只需要关注其中的 2 种构造函数即可，如下：
+#+BEGIN_SRC csharp
+public GestureDetector(Context context, OnGestureListener listener)
+public GestureDetector(Context context, OnGestureListener listener, Handler handler)
+#+END_SRC 
+- 第 1 种构造函数里面需要传递两个参数，Context(上下文)和 OnGestureListener(手势监听器)，这个很容易理解，也是最经常使用的一种。
+- 第 2 种构造函数则需要多传递一个 Handler 作为参数，这个有什么作用呢？其实作用也非常简单，这个 Handler 主要是为了给 GestureDetector 提供一个 Looper。
+- 在通常情况下是不需这个 Handler 的，因为它会在内部自动创建一个 Handler 用于处理数据，如果在主线程中创建 GestureDetector，那么它内部创建的 Handler 会自动获得主线程的 Looper，然而如果在一个没有创建 Looper 的子线程中创建 GestureDetector 则需要传递一个带有 Looper 的 Handler 给它，否则就会因为无法获取到 Looper 导致创建失败。重点是传递的 Handler 一定要有 Looper，重点是 Looper，而非 Handler。
+** 创建方法：在没有 Looper 的地方使用 GestureDetector 时可以通过以下方法：
+   #+BEGIN_SRC csharp
+// 方法一：在主线程创建 Handler，使用第 2 种构造方法进行创建
+final Handler handler = new Handler();
+new Thread(new Runnable() {
+        @Override public void run() {
+            final GestureDetector detector = new GestureDetector(getContext(), new GestureDetector.SimpleOnGestureListener(), handler);
+            // ... 
+        }
+    }).start();
+
+// 方法二：在子线程创建 Handler，并且指定 Looper，使用第 2 种构造方法进行创建
+new Thread(new Runnable() {
+        @Override public void run() {
+            final Handler handler = new Handler(Looper.getMainLooper());
+            final GestureDetector detector = new GestureDetector(getContext(), new GestureDetector.SimpleOnGestureListener(), handler);
+            // ... 
+        }
+    }).start();
+
+// 方法三：子线程准备了 Looper，那么可以直接使用第 1 种构造方法进行创建
+new Thread(new Runnable() {
+        @Override public void run() {
+            Looper.prepare(); // 初始化Looper(重点)
+            final GestureDetector detector = new GestureDetector(getContext(), new GestureDetector.SimpleOnGestureListener());
+            // ... 
+        }
+    }).start();
+   #+END_SRC 
+
+** 接口方法的定义
+- GestureDetector类中已经为我们定义了一个静态内部类SimpleOnGestureListener，它实现了OnGestureListener，OnDoubleTapListener，OnContextClickListener接口，定义为
+  #+BEGIN_SRC csharp
+ public static class SimpleOnGestureListener 
+     implements OnGestureListener, OnDoubleTapListener, OnContextClickListener {
+ }
+// 下面是一个例子
+private class simpleGestureListener extends GestureDetector.SimpleOnGestureListener {  
+    /*****OnGestureListener的函数*****/  
+    @Override public boolean onDown(MotionEvent e) {  
+        return false;  
+    }  
+    @Override public void onShowPress(MotionEvent e) {  
+    }  
+    @Override public boolean onSingleTapUp(MotionEvent e) {  
+        return true;  
+    }  
+    @Override public boolean onScroll(MotionEvent e1, MotionEvent e2,  
+                            float distanceX, float distanceY) {  
+        return true;  
+    }  
+    @Override public void onLongPress(MotionEvent e) {  
+    }  
+    @Override public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX,  
+                           float velocityY) {  
+        return true;  
+    }  
+          
+    /*****OnDoubleTapListener的函数*****/  
+    @Override public boolean onSingleTapConfirmed(MotionEvent e) {  
+        return true;  
+    }  
+    @Override public boolean onDoubleTap(MotionEvent e) {  
+        return true;  
+    }  
+    @Override public boolean onDoubleTapEvent(MotionEvent e) {  
+        return true;  
+    }  
+}   
+#+END_SRC 
+- SimpleOnGestureListener类内重写接口中的所有方法，但是都是空实现，返回的布尔值都是false。主要作用是方便我们继承这个类有选择的复写回调方法，而不是实现接口去重写所有的方法。 
+- onTouchEvent()方法用来分析传入的事件，如果匹配的话就去触发OnGestureListener中相应的回调方法。 
+- 如果要监听双击事件必须调用GestureDector.setOnDoubleTapListener()
+- 上面所有的回调方法的返回值都是boolean类型，和View的事件传递机制一样，返回true表示消耗了事件，flase表示没有消耗。
+- 要实现捕捉屏幕手势，除了在Activity中创建gestureDetector外，还有一种思路：构建一个Overlay,这个Overlay实现OnGestureListener接口，使其维护自己的GestureDetector。在主视图上添加这个Overlay,并传入相应的listener，即可实现捕捉手势的功能。
+
+* onInterceptTouchEvent()
+- 这个方法其实以前不怎么关注，后来自定义布局用的多了，发现很多时候都必须要重载这个函数，  
+- 一般重载这个函数地方就是你自定义了一个布局，extends LinearLayout等等布局
+- onInterceptTouchEvent()是ViewGroup类中的方法,而不是来自Activity.
+- 您可以通过将逻辑从onInterceptTouchEvent()移动到dispatchTouchEvent(MotionEvent ev)来实现所需的行为.请记住调用dispatchTouchEvent(MotionEvent ev)的超类实现来处理应该正常处理的事件.
+- 另请注意,只有在delta大于system constant for touch slop时才应考虑移动.我建议用户通过测试yDelta / 2>确保用户正在按照您想要的方向滑动. xDelta而不是yDelta> xDelta.
+#+BEGIN_SRC csharp
+public class Game extends Activity {
+    private int mSlop;
+    private float mDownX;
+    private float mDownY;
+    private boolean mSwiping;
+    @Override
+        protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.game_activity);
+        ViewConfiguration vc = ViewConfiguration.get(this);
+        mSlop = vc.getScaledTouchSlop();
+//other code....
+    }
+    @Override
+        public boolean dispatchTouchEvent(MotionEvent ev) {
+        switch (ev.getAction()) {
+        case MotionEvent.ACTION_DOWN:
+            mDownX = ev.getX();
+            mDownY = ev.getY();
+            mSwiping = false;
+            break;
+        case MotionEvent.ACTION_CANCEL:
+        case MotionEvent.ACTION_UP:
+            if(mSwiping) {
+                swipeScreen(); //if action recognized as swipe then swipe
+            }
+            break;
+        case MotionEvent.ACTION_MOVE:
+            float x = ev.getX();
+            float y = ev.getY();
+            float xDelta = Math.abs(x - mDownX);
+            float yDelta = Math.abs(y - mDownY);
+            if (yDelta > mSlop && yDelta / 2 > xDelta) {
+                mSwiping = true;
+                return true;
+            }
+            break;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+}
+#+END_SRC 
+- 一般除了自己的业务处理外，返回值只有两种，
+** 第一种：让父类去处理  返回值，跟踪android源码你会知道返回的是false
+- 作用：让自定义布局上面的所有子view 例如button imageview 等可以被点击
+#+BEGIN_SRC csharp
+@Override
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+    // TODO Auto-generated method stub
+    if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+        downX = (int) ev.getX();
+        downY = (int) ev.getY();
+        windowX = (int) ev.getX();
+        windowY = (int) ev.getY();
+        setOnItemClickListener(ev);
+    }
+    return super.onInterceptTouchEvent(ev);
+}
+#+END_SRC 
+** 第二种：直接返回true
+- 作用：让自定义布局上面的所有子view不可以被点击
+#+BEGIN_SRC csharp
+@Override  
+public boolean onInterceptTouchEvent(MotionEvent ev) {  
+    return true;  
+}
+#+END_SRC 
+** ViewGroup中有一个 onInterceptTouchEvent 方法，我们来看一下这个方法的源码
+#+BEGIN_SRC csharp
+/** 
+ * Implement this method to intercept all touch screen motion events.  This 
+ * allows you to watch events as they are dispatched to your children, and 
+ * take ownership of the current gesture at any point. 
+ * 
+ * <p>Using this function takes some care, as it has a fairly complicated 
+ * interaction with {@link View#onTouchEvent(MotionEvent) 
+ * View.onTouchEvent(MotionEvent)}, and using it requires implementing 
+ * that method as well as this one in the correct way.  Events will be 
+ * received in the following order: 
+ * 
+ * <ol> 
+ * <li> You will receive the down event here. 
+ * <li> The down event will be handled either by a child of this view 
+ * group, or given to your own onTouchEvent() method to handle; this means 
+ * you should implement onTouchEvent() to return true, so you will 
+ * continue to see the rest of the gesture (instead of looking for 
+ * a parent view to handle it).  Also, by returning true from 
+ * onTouchEvent(), you will not receive any following 
+ * events in onInterceptTouchEvent() and all touch processing must 
+ * happen in onTouchEvent() like normal. 
+ * <li> For as long as you return false from this function, each following 
+ * event (up to and including the final up) will be delivered first here 
+ * and then to the target's onTouchEvent(). 
+ * <li> If you return true from here, you will not receive any 
+ * following events: the target view will receive the same event but 
+ * with the action {@link MotionEvent#ACTION_CANCEL}, and all further 
+ * events will be delivered to your onTouchEvent() method and no longer 
+ * appear here. 
+ * </ol> 
+ * 
+ * @param ev The motion event being dispatched down the hierarchy. 
+ * @return Return true to steal motion events from the children and have 
+ * them dispatched to this ViewGroup through onTouchEvent(). 
+ * The current target will receive an ACTION_CANCEL event, and no further 
+ * messages will be delivered here. 
+ */  
+public boolean onInterceptTouchEvent(MotionEvent ev) {  
+//  返回 false：表示当前的 layoutgroup 不处理触摸事件，交由其子视图们去处理
+    return false;  
+//  返回 true：表示当前的 layoutgroup 拦截处理所有的触摸事件，其所有的子视图将无法接收到任何触摸事件 
+}  
+#+END_SRC 

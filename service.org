@@ -21,3 +21,6 @@
     - (要实现 Parcelable 接口,定义一个 AIDL 文件声明该类型,在其他 AIDL 中使用该类型需要 import 包)
 - 2. 服务端需要提供一个业务接口的实现类，通常继承 Stub 类
 - 3. 通过 Service 的 onBind() 方法返回被绑定的业务对象
+
+* 安卓 AIDL 讲得比较全面透彻，需要总结一下
+- https://www.jianshu.com/p/4e6eedff1bf6
