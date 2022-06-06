@@ -347,3 +347,1553 @@ public boolean onInterceptTouchEvent(MotionEvent ev) {
 //  返回 true：表示当前的 layoutgroup 拦截处理所有的触摸事件，其所有的子视图将无法接收到任何触摸事件 
 }  
 #+END_SRC 
+
+* android 事件分发原理
+** 事件分发4大方法
+   #+BEGIN_SRC text
+dispatchTouchEvent    // 事件分发
+onInterceptTouchEvent // 事件拦截
+onTouchEvent          // 事件处理
+requestDisallowInterceptTouchEvent(true)
+   #+END_SRC 
+- ViewGroup 4个方法都有，View 没有事件拦截方法。这4个方法就是 Android 事件分发和处理的具体方法了，我们在实际处理时都是重写这4个方法。
+- 这3个方法都有一个 boolean 的返回值，onInterceptTouchEvent 方法表示我要拦截这个事件，onTouchEvent 表示我处理了事件
+*** dispatchTouchEvent
+- dispatchTouchEvent 方法作为 view 的事件处理的 API 入口，内部会调用 onInterceptTouchEvent 和 onTouchEvent 来计算返回的 boolean 值，一般我们都不会动 dispatchTouchEvent 方法，因为没有意思。但是我们直接返回 true 时，表示我消费这个事件了
+*** onInterceptTouchEvent
+- onInterceptTouchEvent 方法默认是返回 false 的，表示不会拦截这个事件，但是若是返回 true 则表示这个事件我拦截住了，就不再往我下一级 view 传递了，然后会把事件交给自己的 onTouchEvent 方法
+*** onTouchEvent
+- onTouchEvent 方法可以获取具体的触控参数，进行手势方向，当前手势类型判断，可以记录触摸点的 x，y 坐标。onTouchEvent 方法若是返回 true ，则表示这个事件我已经处理过了，那么整个事件传递过程就结速了，否则的话这个事件会原路返回，去一级一级的跑上一层 view 的 onTouchEvent 方法，直到有人返回 true 或是没有了。
+*** requestDisallowInterceptTouchEvent
+- view.getParent().requestDisallowInterceptTouchEvent(true) ,可以让内层的 view 获取到事件，而忽略上层视图的拦截。true 表示接受事件，fasle 表示不接受事件。原理分析看这里：
+- ScrollView嵌套ScrollView的滑动冲突: https://www.jianshu.com/p/eedc98eecf02
+** 事件分发的顺序
+- 总的来说，事件是由其父视图向子视图传递，按前面的图来说是这样。
+#+BEGIN_SRC text
+Activity －> PhoneWindow －> DecorView －> ViewGroup －> ... －> View
+#+END_SRC 
+- window 根据视图树顺序，从外到内遍历所有的 view ，询问每一个遍历出来的 view 你要不要消费触摸事件
+- 每个 view 会跑自己的 dispatchTouchEvent 方法，判断自己是否需要消费这个事件
+- dispatchTouchEvent 方法首先会询问 onInterceptTouchEvent 方法，是否要拦截这个事件。
+- 若是拦截则会跑自己的 onTouchEvent 方法，若不拦截则会传递给下一级 view，调用下一级 view 的 dispatchTouchEvent 方法
+- onTouchEvent 若是返回 true ，表示事件实际处理过了，那么整个事件传递在这个节点就结速了，不再传递了。若是返回 fasle，这个事件会原路返回，去一级一级的跑上一层 view 的 onTouchEvent 方法，直到有人返回 true 或是没有了。
+- 再总结一遍的话：
+
+[[/Users/jennyhuang/myandr/pic/viewTouchClickEvents_20220606_082001.png]]
+- 用一个图来形象描述的话： 
+
+[[/Users/jennyhuang/myandr/pic/viewTouchClickEvents_20220606_082250.png]]
+- another simpler one: 
+
+[[/Users/jennyhuang/myandr/pic/viewTouchClickEvents_20220606_082333.png]]
+** 我复制一下核心要点:
+- 事件分发原理: 责任链模式，事件层层传递，直到被消费。
+- View 的 dispatchTouchEvent 主要用于调度自身的监听器和 onTouchEvent。
+- View的事件的调度顺序是 onTouchListener > onTouchEvent > onLongClickListener > onClickListener 。
+- 不论 View 自身是否注册点击事件，只要 View 是可点击的就会消费事件。
+- 事件是否被消费由返回值决定，true 表示消费，false 表示不消费，与是否使用了事件无关。
+- ViewGroup 中可能有多个 ChildView 时，将事件分配给包含点击位置的 ChildView。
+- ViewGroup 和 ChildView 同时注册了事件监听器(onClick等)，由 ChildView 消费。
+- 一次触摸流程中产生事件应被同一 View 消费，全部接收或者全部拒绝。
+- 只要接受 ACTION_DOWN 就意味着接受所有的事件，拒绝 ACTION_DOWN 则不会收到后内容。
+- 如果当前正在处理的事件被上层 View 拦截，会收到一个 ACTION_CANCEL，后续事件不会再传递过来。
+
+* ScrollView嵌套ScrollView的滑动冲突
+-  https://www.jianshu.com/p/eedc98eecf02
+** 结论： 在自定义控件中如下重写onInterceptTouchEvent就告诉所有父View：不要拦截事件，让我消费！！
+   #+BEGIN_SRC csharp
+@Override
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+    getParent().requestDisallowInterceptTouchEvent(true);
+    return super.onInterceptTouchEvent(ev);
+}
+   #+END_SRC 
+- 这是一个从源码角度分析滑动冲突的原因
+- 以及在源码中理解为何能解决滑动冲突
+** 滑动冲突 case 模拟
+- 这是MainActivity主界面的布局内容:
+
+[[/Users/jennyhuang/myandr/pic/viewTouchClickEvents_20220606_083147.png]]
+- xml:
+#+begin_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 这里外面还有个大的 scrollview -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+            xmlns:app="http://schemas.android.com/apk/res-auto"
+            xmlns:tools="http://schemas.android.com/tools"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            tools:context="com.solory.learnview.MainActivity">
+  <!-- viewgroup的子类 -->
+  <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical">
+    <!-- 几个不同的视图 -->
+    <Button
+        android:id="@+id/btn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp" />
+    <ImageView
+        android:id="@+id/imageView"
+        android:layout_width="105dp"
+        android:layout_height="86dp"
+        android:layout_margin="8dp"
+        app:srcCompat="@mipmap/ic_launcher_round" />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/article_1"
+        android:textSize="36sp" />
+    <!-- 关注的重点： -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:background="@color/colorPrimary">
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:text="@string/article_2" />
+    </ScrollView>
+  </LinearLayout>
+</ScrollView>
+#+END_SRC
+- MainActivity不用动。跑起来：外面的大的可以上下滚动，但是下面的那个小的动不了！！！外面的ScrollView正常滑动，但是里面的那个ScrollView动不了。
+** 直接给出解决方案再看如何解决：
+- 新建一个类继承ScrollView
+#+BEGIN_SRC csharp
+public class MyScrollView extends ScrollView {
+    public MyScrollView(Context context) {
+        this(context,null);
+    }
+    public MyScrollView(Context context, AttributeSet attrs) {
+        this(context, attrs,0);
+    }
+    public MyScrollView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+    }
+// 覆写了这个方法
+    @Override public boolean onInterceptTouchEvent(MotionEvent ev) {
+        // 关键点在这 
+        getParent().requestDisallowInterceptTouchEvent(true);
+        return super.onInterceptTouchEvent(ev);
+    }
+}
+#+END_SRC 
+- buildProject,然后在xml中将里面的ScrollView修改成这个MyScrollView。
+#+begin_SRC xml
+<com.solory.learnview.MyScrollView
+    android:layout_width="match_parent"
+    android:layout_height="80dp"
+    android:background="@color/colorPrimary">
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/article_2" />
+</com.solory.learnview.MyScrollView>
+#+END_SRC
+- 跑起来：
+- 问题解决。
+** 现在研究为什么：为什么在重写的onInterceptTouchEvent(MotionEvent ev)中神奇的一句代码，就把问题解决了？
+   #+BEGIN_SRC csharp
+getParent().requestDisallowInterceptTouchEvent(true);
+   #+END_SRC 
+- 先看ScollView源码中的onInterceptTouchEvent:
+#+BEGIN_SRC csharp
+ @Override
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+    /*
+     * 这个方法决定了我们是否要拦截这个事件。
+     * 如果我们返回true, onMotionEvent方法将被调用，
+     * 我们将在那执行实际的滚动操作。
+     */
+    /*
+    * 最常见的情况:用户在拖拽中。
+    * 他在动他的手指。我们想要截取这个
+    * 事件.
+    */
+    final int action = ev.getAction();
+    if ((action == MotionEvent.ACTION_MOVE) && (mIsBeingDragged)) {
+        return true;
+    }
+    if (super.onInterceptTouchEvent(ev)) {
+        return true;
+    }
+    /*
+     * 如果我们不能滚动，不要试图截取触摸。
+     */
+    if (getScrollY() == 0 && !canScrollVertically(1)) {
+        return false;
+    }
+#+END_SRC 
+- 清晰明了，干净简单,后面还有一大段代码，就不放了。这里一进来就是一个判断，如果进来的是ACTION_MOVE, 那么直接返回true，直接拦截，那么后面就没他的子View什么事了（不懂的话去看一下ViewGroup的dispatchTouchEvent方法），event被传入他自己的onTouchEvent中去进行滚动操作了。
+  - 那么我们一开始内部的ScrollView滑动没有响应的原因就是，那时候手指是在滑动的，一直不断传入ACTION_MOVE, 所以event一直被外部的ScrollView在如上的操作中拦截了。
+  - 意思就是只要你手指在ScrollView上滑动，ScrollView内部的子View就永远接收不到任何事件，就是永远无响应。
+- 冲突的原因明白了，现在看如何解决的
+- 回头看MyScrollView是如何解决的：
+#+BEGIN_SRC csharp
+@Override
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+    getParent().requestDisallowInterceptTouchEvent(true);
+    return super.onInterceptTouchEvent(ev);
+}
+#+END_SRC 
+- 意思就是取得父类，然后请求父类不拦截TouchEvent的意思。
+- 首先getParent就是返回父类，在这里是返回的那个LinearLayout，然后点requestDisallowInterceptTouchEvent进去看，发现是一个叫做ViewParent的接口中的抽象方法，
+#+BEGIN_SRC csharp
+public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {  }
+#+END_SRC 
+- 注释的英文：
+#+BEGIN_SRC text
+当一个子View不想要他的父View和它的祖先View们拦截触摸事件的时候。调用该方法
+他的父View应该将该方法接着向上传递给每一个祖先View们。
+#+END_SRC 
+- 抽象方法的话，看一下是谁实现了，因为继承的ScrollView，所以先看对应的ScrollView中的实现
+#+BEGIN_SRC csharp
+//-----ScrollView中
+@Override
+public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+    if (disallowIntercept) {
+    // 我也不知道这个方法干嘛的，反正不影响整体思路，先跳过。
+        recycleVelocityTracker();
+    }
+    // 无论如何，都会执行父类的该方法。
+    super.requestDisallowInterceptTouchEvent(disallowIntercept);
+}
+#+END_SRC 
+- 那么我们查看父类中的实现，ViewGroup中：
+#+BEGIN_SRC csharp
+//-----ViewGroup中
+@Override
+public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+    if (disallowIntercept == ((mGroupFlags & FLAG_DISALLOW_INTERCEPT) != 0)) {
+        // We're already in this state, assume our ancestors are too
+        return;
+    }
+    if (disallowIntercept) {
+        mGroupFlags |= FLAG_DISALLOW_INTERCEPT;
+    } else {
+        mGroupFlags &= ~FLAG_DISALLOW_INTERCEPT;
+    }
+    // Pass it up to our parent
+    if (mParent != null) {
+        mParent.requestDisallowInterceptTouchEvent(disallowIntercept);
+    }
+}
+#+END_SRC 
+- 意思就是 *将自己的FLAG更改，变成disallowIntercept，并且递归，只要有父View， 就把父View的FLAG同样设置。*
+- 大意为，设置了这个方法，MyScrollView就通过递归，告诉了他的父View和向上的所有祖先View：统统不要拦截事件！交给我来！
+- 那这个FLAG是在哪里发挥作用？当然是在ViewGroup的dispatchTouchEvent(MotionEvent event)内部，并且用一个if条件先于onInterceptMotionEvent(MotionEvent event)来判断
+- 图片为证：
+
+[[/Users/jennyhuang/myandr/pic/viewTouchClickEvents_20220606_084412.png]]
+- 但是！
+#+BEGIN_SRC csharp
+//-----MyScrollView中
+@Override public boolean onInterceptTouchEvent(MotionEvent ev) {
+        getParent().requestDisallowInterceptTouchEvent(true);
+        return super.onInterceptTouchEvent(ev);
+    }
+#+END_SRC 
+- 这段代码的getParent().requestDisallowInterceptTouchEvent(true);能执行到的前提是MyScrollView能执行onInterceptTouchEvent，也就是能执行dispatchTouchEvent，可是事件早都被外层的ScrollView拦截了，你还怎么获取父类然后请求不要拦截TouchEvent？
+- 当时我在这里思考了蛮久的， 那么我们返回到ScrollView的onInterceptTouchEvent里去看吧
+#+BEGIN_SRC csharp
+@Override
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+    final int action = ev.getAction();
+    if ((action == MotionEvent.ACTION_MOVE) && (mIsBeingDragged)) {
+        return true;
+    }
+    if (super.onInterceptTouchEvent(ev)) {
+        return true;
+    }
+    if (getScrollY() == 0 && !canScrollVertically(1)) {
+        return false;
+    }
+#+END_SRC 
+- 他只拦截ACTION_MOVE，不拦截ACTION_DOWN，所以当ACTION_DOWN的那一次事件还是可以传到下面的子View去的，而利用这一点，MyScrollView利用第一次触碰那唯一的一次event，将他FLAG给改了，事件就可以顺利地传递到MyScrollView了~
+** 总结：
+- 在自定义控件中重写onInterceptTouchEvent就告诉所有父View：不要拦截事件，让我消费！！
+#+BEGIN_SRC csharp
+@Override
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+    getParent().requestDisallowInterceptTouchEvent(true);
+    return super.onInterceptTouchEvent(ev);
+}
+#+END_SRC 
+
+
+* Android触摸屏事件派发机制详解与源码分析一(View篇)
+- https://blog.csdn.net/yanbober/article/details/45887547
+** 基础实例现象
+*** 例子
+- 从一个例子分析说起吧。如下是一个很简单不过的Android实例：
+#+begin_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:id="@+id/mylayout">
+    <Button
+        android:id="@+id/my_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="click test"/>
+</LinearLayout>
+#+END_SRC
+#+BEGIN_SRC csharp
+public class ListenerActivity extends Activity implements View.OnTouchListener, View.OnClickListener {
+    private LinearLayout mLayout;
+    private Button mButton;
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.main);
+        mLayout = (LinearLayout) this.findViewById(R.id.mylayout);
+        mButton = (Button) this.findViewById(R.id.my_btn);
+        mLayout.setOnTouchListener(this);
+        mButton.setOnTouchListener(this);
+        mLayout.setOnClickListener(this);
+        mButton.setOnClickListener(this);
+    }
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        Log.i(null, "OnTouchListener--onTouch-- action="+event.getAction()+" --"+v);
+        return false;
+    }
+    @Override
+    public void onClick(View v) {
+        Log.i(null, "OnClickListener--onClick--"+v);
+    }
+}
+#+END_SRC 
+*** 现象
+- 如上代码很简单，但凡学过几天Android的人都能看懂吧。Activity中有一个LinearLayout（ViewGroup的子类，ViewGroup是View的子类）布局，布局中包含一个按钮（View的子类）；然后分别对这两个控件设置了Touch与Click的监听事件，具体运行结果如下：
+- 我们看下onTouch和onClick，从参数都能看出来onTouch比onClick强大灵活，毕竟多了一个event参数。这样onTouch里就可以处理ACTION_DOWN、ACTION_UP、ACTION_MOVE等等的各种触摸。现在来分析下上面的打印结果；在1中，当我们点击Button时会先触发onTouch事件（之所以打印action为0,1各一次是因为按下抬起两个触摸动作被触发）然后才触发onClick事件；在2中也同理类似1；在3中会发现onTouch被多次调运后才调运onClick，是因为手指晃动了，所以触发了ACTION_DOWN->ACTION_MOVE…->ACTION_UP。
+- 如果你眼睛比较尖你会看见onTouch会有一个返回值，而且在上面返回了false。你可能会疑惑这个返回值有啥效果？那就验证一下吧，我们将上面的onTouch返回值改为ture。如下：
+#+BEGIN_SRC csharp
+@Override
+public boolean onTouch(View v, MotionEvent event) {
+    Log.i(null, "OnTouchListener--onTouch-- action="+event.getAction()+" --"+v);
+    return true;
+}
+#+END_SRC 
+*** 总结结论
+- 好了，经过这个简单的实例验证你可以总结发现：
+  - Android控件的Listener事件触发顺序是先触发onTouch，其次onClick。
+  - 如果控件的onTouch返回true将会阻止事件继续传递，返回false事件会继续传递。
+- 对于伸手党码农来说其实到这足矣应付常规的App事件监听处理使用开发了，但是对于复杂的事件监听处理或者想自定义控件的码农来说这才是刚刚开始，只是个热身。既然这样那就继续喽。。。
+** Android 5.1.1(API 22) View触摸屏事件传递源码分析
+*** 写在前面的话
+- 其实Android源码无论哪个版本对于触摸屏事件的传递机制都类似，这里只是选用了目前最新版本的源码来分析而已。分析Android View事件传递机制之前有必要先看下源码的一些关系，如下是几个继承关系图：
+- 怎么样？看了官方这个继承图是不是明白了上面例子中说的LinearLayout是ViewGroup的子类，ViewGroup是View的子类，Button是View的子类关系呢？其实，在Android中所有的控件无非都是ViewGroup或者View的子类，说高尚点就是所有控件都是View的子类。
+- 这里通过继承关系是说明一切控件都是View，同时View与ViewGroup又存在一些区别，所以该模块才只单单先分析View触摸屏事件传递机制。
+*** 从View的dispatchTouchEvent方法说起
+- 在Android中你只要触摸控件首先都会触发控件的dispatchTouchEvent方法（其实这个方法一般都没在具体的控件类中，而在他的父类View中），所以我们先来看下View的dispatchTouchEvent方法，如下：
+#+BEGIN_SRC csharp
+public boolean dispatchTouchEvent(MotionEvent event) {
+    // If the event should be handled by accessibility focus first.
+    if (event.isTargetAccessibilityFocus()) {
+        // We don't have focus or no virtual descendant has it, do not handle the event.
+        if (!isAccessibilityFocusedViewOrHost()) {
+            return false;
+        }
+        // We have focus and got the event, then use normal event dispatch.
+        event.setTargetAccessibilityFocus(false);
+    }
+    boolean result = false;
+    if (mInputEventConsistencyVerifier != null) {
+        mInputEventConsistencyVerifier.onTouchEvent(event, 0);
+    }
+    final int actionMasked = event.getActionMasked();
+    if (actionMasked == MotionEvent.ACTION_DOWN) {
+        // Defensive cleanup for new gesture
+        stopNestedScroll();
+    }
+    if (onFilterTouchEventForSecurity(event)) { // 判断当前View是否没被遮住等
+        //noinspection SimplifiableIfStatement
+// ListenerInfo是View的静态内部类，用来定义一堆关于View的XXXListener等方法
+        ListenerInfo li = mListenerInfo;
+// 首先li对象自然不会为null，li.mOnTouchListener呢 ?        
+        if (li != null && li.mOnTouchListener != null
+// 通过位与运算确定控件（View）是不是ENABLED 的，默认控件都是ENABLED 的；
+            && (mViewFlags & ENABLED_MASK) == ENABLED
+// 判断 onTouch 的返回值是不是 true            
+            && li.mOnTouchListener.onTouch(this, event)) {
+            result = true;
+        }
+        if (!result && onTouchEvent(event)) {
+            result = true;
+        }
+    }
+    if (!result && mInputEventConsistencyVerifier != null) {
+        mInputEventConsistencyVerifier.onUnhandledEvent(event, 0);
+    }
+    // Clean up after nested scrolls if this is the end of a gesture;
+    // also cancel it if we tried an ACTION_DOWN but we didn't want the rest
+    // of the gesture.
+    if (actionMasked == MotionEvent.ACTION_UP ||
+        actionMasked == MotionEvent.ACTION_CANCEL ||
+        (actionMasked == MotionEvent.ACTION_DOWN && !result)) {
+        stopNestedScroll();
+    }
+    return result;
+}
+#+END_SRC 
+- dispatchTouchEvent的代码有点长，咱们看重点就可以。前面都是设置一些标记和处理input与手势等传递，到24行的if (onFilterTouchEventForSecurity(event))语句判断当前View是否没被遮住等，接着26行定义ListenerInfo局部变量，ListenerInfo是View的静态内部类，用来定义一堆关于View的XXXListener等方法；接着if (li != null && li.mOnTouchListener != null && (mViewFlags & ENABLED_MASK) == ENABLED && li.mOnTouchListener.onTouch(this, event))语句就是重点，首先li对象自然不会为null，li.mOnTouchListener呢？你会发现ListenerInfo的mOnTouchListener成员是在哪儿赋值的呢？怎么确认他是不是null呢？通过在View类里搜索可以看到：
+#+BEGIN_SRC csharp
+/**
+ * Register a callback to be invoked when a touch event is sent to this view.
+ * @param l the touch listener to attach to this view
+ */
+public void setOnTouchListener(OnTouchListener l) {
+    getListenerInfo().mOnTouchListener = l;
+}
+#+END_SRC 
+- li.mOnTouchListener是不是null取决于控件（View）是否设置setOnTouchListener监听，在上面的实例中我们是设置过Button的setOnTouchListener方法的，所以也不为null；接着通过位与运算确定控件（View）是不是ENABLED 的，默认控件都是ENABLED 的；接着判断onTouch的返回值是不是true。通过如上判断之后如果都为true则设置默认为false的result为true，那么接下来的if (!result && onTouchEvent(event))就不会执行，最终dispatchTouchEvent也会返回true。而如果if (li != null && li.mOnTouchListener != null && (mViewFlags & ENABLED_MASK) == ENABLED && li.mOnTouchListener.onTouch(this, event))语句有一个为false则if (!result && onTouchEvent(event))就会执行，如果onTouchEvent(event)返回false则dispatchTouchEvent返回false，否则返回true。
+- 这下再看前面的实例部分明白了吧？控件触摸就会调运dispatchTouchEvent方法，而在dispatchTouchEvent中先执行的是onTouch方法，所以验证了实例结论总结中的onTouch优先于onClick执行道理。如果控件是ENABLE且在onTouch方法里返回了true则dispatchTouchEvent方法也返回true，不会再继续往下执行；反之，onTouch返回false则会继续向下执行onTouchEvent方法，且dispatchTouchEvent的返回值与onTouchEvent返回值相同。
+- 所以依据这个结论和上面实例打印结果你指定已经大胆猜测认为onClick一定与onTouchEvent有关系？是不是呢？先告诉你，是的。下面我们会分析。
+**** 总结结论
+- 在View的触摸屏传递机制中通过分析dispatchTouchEvent方法源码我们会得出如下基本结论：
+  - 触摸控件（View）首先执行 dispatchTouchEvent 方法。
+  - 在 dispatchTouchEvent 方法中先执行 onTouch 方法，后执行 onClick 方法（onClick 方法在 onTouchEvent 中执行，下面会分析）。
+  - 如果控件（View）的 onTouch 返回 false 或者 mOnTouchListener 为 null（控件没有设置 setOnTouchListener 方法）或者控件不是 enable 的情况下会调运 onTouchEvent，dispatchTouchEvent 返回值与 onTouchEvent 返回一样。
+  - 如果控件不是 enable 的设置了 onTouch 方法也不会执行，只能通过重写控件的 onTouchEvent 方法处理（上面已经处理分析了），dispatchTouchEvent 返回值与 onTouchEvent 返回一样。
+  - 如果控件（View）是 enable 且 onTouch 返回 true 情况下，dispatchTouchEvent 直接返回 true，不会调用 onTouchEvent 方法。
+- 上面说了onClick一定与onTouchEvent有关系，那么接下来就分析分析dispatchTouchEvent方法中的onTouchEvent方法。
+*** 继续说说View的dispatchTouchEvent方法中调运的onTouchEvent方法
+- 上面说了dispatchTouchEvent方法中如果onTouch返回false或者mOnTouchListener为null（控件没有设置setOnTouchListener方法）或者控件不是enable的情况下会调运onTouchEvent，所以接着看就知道了，如下：
+#+BEGIN_SRC csharp
+public boolean onTouchEvent(MotionEvent event) {
+    final float x = event.getX();
+    final float y = event.getY();
+    final int viewFlags = mViewFlags;
+// 如果控件（View）是disenable状态，同时是可以clickable的则onTouchEvent直接消费事件返回true，
+// 反之如果控件（View）是disenable状态，同时是disclickable的则onTouchEvent直接false
+    if ((viewFlags & ENABLED_MASK) == DISABLED) {
+        if (event.getAction() == MotionEvent.ACTION_UP && (mPrivateFlags & PFLAG_PRESSED) != 0) {
+            setPressed(false);
+        }
+        // A disabled view that is clickable still consumes the touch
+        // events, it just doesn't respond to them.
+        return (((viewFlags & CLICKABLE) == CLICKABLE ||
+                 (viewFlags & LONG_CLICKABLE) == LONG_CLICKABLE));
+    }
+    if (mTouchDelegate != null) {
+        if (mTouchDelegate.onTouchEvent(event)) {
+            return true;
+        }
+    }
+// 如果一个控件是enable且disclickable则onTouchEvent直接返回false了；
+// 反之，如果一个控件是enable且clickable则继续进入过于一个event的switch判断中，
+    if (((viewFlags & CLICKABLE) == CLICKABLE ||
+         (viewFlags & LONG_CLICKABLE) == LONG_CLICKABLE)) {
+        switch (event.getAction()) {
+        case MotionEvent.ACTION_UP:
+            // 首先判断了是否按下过
+            boolean prepressed = (mPrivateFlags & PFLAG_PREPRESSED) != 0;
+            if ((mPrivateFlags & PFLAG_PRESSED) != 0 || prepressed) {
+                // take focus if we don't have it already and we should in
+                // touch mode.
+                // 是不是可以得到焦点
+                boolean focusTaken = false;
+                if (isFocusable() && isFocusableInTouchMode() && !isFocused()) {
+                    // 然后尝试获取焦点
+                    focusTaken = requestFocus();
+                }
+                if (prepressed) {
+                    // The button is being released before we actually
+                    // showed it as pressed.  Make it show the pressed
+                    // state now (before scheduling the click) to ensure
+                    // the user sees it.
+                    setPressed(true, x, y);
+                }
+// 然后判断如果不是longPressed则通过post在UI Thread中执行一个PerformClick的Runnable，也就是performClick方法
+                if (!mHasPerformedLongPress) {
+                    // This is a tap, so remove the longpress check
+                    removeLongPressCallback();
+                    // Only perform take click actions if we were in the pressed state
+                    if (!focusTaken) {
+                        // Use a Runnable and post this rather than calling
+                        // performClick directly. This lets other visual state
+                        // of the view update before click actions start.
+                        if (mPerformClick == null) {
+                            mPerformClick = new PerformClick();
+                        }
+                        if (!post(mPerformClick)) {
+                            performClick();
+                        }
+                    }
+                }
+                if (mUnsetPressedState == null) {
+                    mUnsetPressedState = new UnsetPressedState();
+                }
+                if (prepressed) {
+                    postDelayed(mUnsetPressedState,
+                                ViewConfiguration.getPressedStateDuration());
+                } else if (!post(mUnsetPressedState)) {
+                    // If the post failed, unpress right now
+                    mUnsetPressedState.run();
+                }
+                removeTapCallback();
+            }
+            break;
+        case MotionEvent.ACTION_DOWN:
+            mHasPerformedLongPress = false;
+            if (performButtonActionOnTouchDown(event)) {
+                break;
+            }
+            // Walk up the hierarchy to determine if we're inside a scrolling container.
+            boolean isInScrollingContainer = isInScrollingContainer();
+            // For views inside a scrolling container, delay the pressed feedback for
+            // a short period in case this is a scroll.
+            if (isInScrollingContainer) {
+                mPrivateFlags |= PFLAG_PREPRESSED;
+                if (mPendingCheckForTap == null) {
+                    mPendingCheckForTap = new CheckForTap();
+                }
+                mPendingCheckForTap.x = event.getX();
+                mPendingCheckForTap.y = event.getY();
+                postDelayed(mPendingCheckForTap, ViewConfiguration.getTapTimeout());
+            } else {
+                // Not inside a scrolling container, so show the feedback right away
+                setPressed(true, x, y);
+                checkForLongClick(0);
+            }
+            break;
+        case MotionEvent.ACTION_CANCEL:
+            setPressed(false);
+            removeTapCallback();
+            removeLongPressCallback();
+            break;
+        case MotionEvent.ACTION_MOVE:
+            drawableHotspotChanged(x, y);
+            // Be lenient about moving outside of buttons
+            if (!pointInView(x, y, mTouchSlop)) {
+                // Outside button
+                removeTapCallback();
+                if ((mPrivateFlags & PFLAG_PRESSED) != 0) {
+                    // Remove any future long press/tap checks
+                    removeLongPressCallback();
+                    setPressed(false);
+                }
+            }
+            break;
+        }
+// 最终onTouchEvent都返回了true        
+        return true; 
+    }
+// 如果一个控件是enable且disclickable则onTouchEvent直接返回false了；    
+    return false;
+}
+#+END_SRC 
+我勒个去！一个方法比一个方法代码多。好吧，那咱们继续只挑重点来说明呗。
+首先地6到14行可以看出，如果控件（View）是disenable状态，同时是可以clickable的则onTouchEvent直接消费事件返回true，反之如果控件（View）是disenable状态，同时是disclickable的则onTouchEvent直接false。多说一句，关于控件的enable或者clickable属性可以通过java或者xml直接设置，每个view都有这些属性。
+接着22行可以看见，如果一个控件是enable且disclickable则onTouchEvent直接返回false了；反之，如果一个控件是enable且clickable则继续进入过于一个event的switch判断中，然后最终onTouchEvent都返回了true。switch的ACTION_DOWN与ACTION_MOVE都进行了一些必要的设置与置位，接着到手抬起来ACTION_UP时你会发现，首先判断了是否按下过，同时是不是可以得到焦点，然后尝试获取焦点，然后判断如果不是longPressed则通过post在UI Thread中执行一个PerformClick的Runnable，也就是performClick方法。具体如下：
+#+BEGIN_SRC csharp
+public boolean performClick() {
+    final boolean result;
+    final ListenerInfo li = mListenerInfo;
+    if (li != null && li.mOnClickListener != null) {
+        playSoundEffect(SoundEffectConstants.CLICK);
+        li.mOnClickListener.onClick(this);
+        result = true;
+    } else {
+        result = false;
+    }
+    sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_CLICKED);
+    return result;
+}
+#+END_SRC 
+- 这个方法也是先定义一个ListenerInfo的变量然后赋值，接着判断li.mOnClickListener是不是为null，决定执行不执行onClick。你指定现在已经很机智了，和onTouch一样，搜一下mOnClickListener在哪赋值的呗，结果发现：
+#+BEGIN_SRC csharp
+public void setOnClickListener(OnClickListener l) {
+    if (!isClickable()) {
+        setClickable(true);
+    }
+    getListenerInfo().mOnClickListener = l;
+}
+#+END_SRC 
+- 看见了吧！控件只要监听了onClick方法则mOnClickListener就不为null，而且有意思的是如果调运setOnClickListener方法设置监听且控件是disclickable的情况下默认会帮设置为clickable。
+- 我勒个去！！！惊讶吧！！！猜的没错onClick就在onTouchEvent中执行的，而且是在onTouchEvent的ACTION_UP事件中执行的。
+**** 总结结论
+  - onTouchEvent方法中会在ACTION_UP分支中触发onClick的监听。
+  - 当dispatchTouchEvent在进行事件分发的时候，只有前一个action返回true，才会触发下一个action。
+- 到此上面例子中关于Button点击的各种打印的真实原因都找到了可靠的证据，也就是说View的触摸屏事件传递机制其实也就这么回事。
+** 透过源码继续进阶实例验证
+- 其实上面分析完View的触摸传递机制之后已经足够用了。如下的实例验证可以说是加深阅读源码的理解，还有一个主要作用就是为将来自定义控件打下坚实基础。因为自定义控件中时常会与这几个方法打交道。
+*** 例子
+- 我们自定义一个Button（Button实质继承自View），如下：
+#+BEGIN_SRC csharp
+public class TestButton extends Button {
+    public TestButton(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "dispatchTouchEvent-- action=" + event.getAction());
+        return super.dispatchTouchEvent(event);
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "onTouchEvent-- action="+event.getAction());
+        return super.onTouchEvent(event);
+    }
+}
+#+END_SRC 
+- 其他代码如下：
+#+begin_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:id="@+id/mylayout">
+    <com.zzci.light.TestButton
+        android:id="@+id/my_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="click test"/>
+</LinearLayout>
+#+END_SRC
+#+BEGIN_SRC csharp
+public class ListenerActivity extends Activity implements View.OnTouchListener, View.OnClickListener {
+    private LinearLayout mLayout;
+    private TestButton mButton;
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.main);
+        mLayout = (LinearLayout) this.findViewById(R.id.mylayout);
+        mButton = (TestButton) this.findViewById(R.id.my_btn);
+        mLayout.setOnTouchListener(this);
+        mButton.setOnTouchListener(this);
+        mLayout.setOnClickListener(this);
+        mButton.setOnClickListener(this);
+    }
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        Log.i(null, "OnTouchListener--onTouch-- action="+event.getAction()+" --"+v);
+        return false;
+    }
+    @Override
+    public void onClick(View v) {
+        Log.i(null, "OnClickListener--onClick--"+v);
+    }
+}
+#+END_SRC 
+- 其实这段代码只是对上面例子中的Button换为了自定义Button而已。
+*** 现象分析
+**** 点击Button（手抽筋了一下）
+- dispatchTouchEvent方法先派发down事件，完事调运onTouch，完事调运onTouchEvent返回true，同时dispatchTouchEvent返回true，然后dispatchTouchEvent继续派发move或者up事件，循环，直到onTouchEvent处理up事件时调运onClick事件，完事返回true，同时dispatchTouchEvent返回true；一次完整的View事件派发流程结束。
+**** 简单修改onTouchEvent返回值为true
+- 将TestButton类的onTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "onTouchEvent-- action="+event.getAction());
+        return true;
+    }
+#+END_SRC 
+- 可以发现，当自定义了控件（View）的onTouchEvent直接返回true而不调运super方法时，事件派发机制如同4.2.1类似，只是最后up事件没有触发onClick而已（因为没有调用super）。
+- 所以可想而知，如果TestButton类的onTouchEvent修改为如下：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "onTouchEvent-- action="+event.getAction());
+        super.onTouchEvent(event);
+        return true;
+    }
+#+END_SRC 
+- 整个派发机制和4.2.1完全类似。
+**** 简单修改onTouchEvent返回值为false
+- 将TestButton类的onTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "onTouchEvent-- action="+event.getAction());
+        return false;
+    }
+#+END_SRC 
+- 你会发现如果onTouchEvent返回false（也即dispatchTouchEvent一旦返回false将不再继续派发其他action，立即停止派发），这里只派发了down事件。至于后面触发了LinearLayout的touch与click事件我们这里不做关注，下一篇博客会详细解释为啥（其实你可以想下的，LinearLayout是ViewGroup的子类，你懂的），这里你只用知道View的onTouchEvent返回false会阻止继续派发事件。
+- 同理修改如下：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "onTouchEvent-- action="+event.getAction());
+        super.onTouchEvent(event);
+        return false;
+    }
+#+END_SRC 
+**** 简单修改dispatchTouchEvent返回值为true
+- 将TestButton类的dispatchTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "dispatchTouchEvent-- action=" + event.getAction());
+        return true;
+    }
+#+END_SRC 
+- 你会发现如果dispatchTouchEvent直接返回true且不调运super任何事件都得不到触发。
+- 继续修改如下呢？
+- 将TestButton类的dispatchTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "dispatchTouchEvent-- action=" + event.getAction());
+        super.dispatchTouchEvent(event);
+        return true;
+    }
+#+END_SRC 
+- 可以发现所有事件都可以得到正常派发，和4.2.1类似。
+**** 简单修改dispatchTouchEvent返回值为false
+- 将TestButton类的dispatchTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "dispatchTouchEvent-- action=" + event.getAction());
+        return false;
+    }
+#+END_SRC 
+- 你会发现事件不进行任何继续触发，关于点击Button触发了LinearLayout的事件暂时不用关注，下篇详解。
+- 继续修改如下呢？
+- 将TestButton类的dispatchTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "dispatchTouchEvent-- action=" + event.getAction());
+        super.dispatchTouchEvent(event);
+        return false;
+    }
+#+END_SRC 
+- 你会发现结果和4.2.3的第二部分结果一样，也就是说如果dispatchTouchEvent返回false事件将不再继续派发下一次。
+**** 简单修改dispatchTouchEvent与onTouchEvent返回值
+- 修改dispatchTouchEvent返回值为true，onTouchEvent为false：
+- 将TestButton类的dispatchTouchEvent方法和onTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "dispatchTouchEvent-- action=" + event.getAction());
+        super.dispatchTouchEvent(event);
+        return true;
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "onTouchEvent-- action=" + event.getAction());
+        super.onTouchEvent(event);
+        return false;
+    }
+#+END_SRC 
+- 修改dispatchTouchEvent返回值为false，onTouchEvent为true：
+- 将TestButton类的dispatchTouchEvent方法和onTouchEvent方法修改如下，其他和基础代码保持不变：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "dispatchTouchEvent-- action=" + event.getAction());
+        super.dispatchTouchEvent(event);
+        return false;
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "onTouchEvent-- action=" + event.getAction());
+        super.onTouchEvent(event);
+        return true;
+    }
+#+END_SRC 
+- 由此对比得出结论，dispatchTouchEvent事件派发是传递的，如果返回值为false将停止下次事件派发，如果返回true将继续下次派发。譬如，当前派发down事件，如果返回true则继续派发up，如果返回false派发完down就停止了。
+*** 总结
+这个例子组合了很多种情况的值去验证上面源码的分析，同时也为自定义控件打下了基础。仔细理解这个例子对于View的事件传递就差不多了。
+** 总结View触摸屏事件传递机制
+- 上面例子也测试了，源码也分析了，总得有个最终结论方便平时写代码作为参考依据呀，不能每次都再去分析一遍源码，那得多蛋疼呢！
+- 综合得出Android View的触摸屏事件传递机制有如下特征：
+  - 触摸控件（View）首先执行dispatchTouchEvent方法。
+  - 在dispatchTouchEvent方法中先执行onTouch方法，后执行onClick方法（onClick方法在onTouchEvent中执行，下面会分析）。
+  - 如果控件（View）的onTouch返回false或者mOnTouchListener为null（控件没有设置setOnTouchListener方法）或者控件不是enable的情况下会调运onTouchEvent，dispatchTouchEvent返回值与onTouchEvent返回一样。
+  - 如果控件不是enable的设置了onTouch方法也不会执行，只能通过重写控件的onTouchEvent方法处理（上面已经处理分析了），dispatchTouchEvent返回值与onTouchEvent返回一样。
+  - 如果控件（View）是enable且onTouch返回true情况下，dispatchTouchEvent直接返回true，不会调用onTouchEvent方法。
+  - 当dispatchTouchEvent在进行事件分发的时候，只有前一个action返回true，才会触发下一个action（也就是说dispatchTouchEvent返回true才会进行下一次action派发）。
+
+* Android触摸屏事件派发机制详解与源码分析二(ViewGroup篇)
+- http://static.kancloud.cn/digest/androidframeworks/127775
+** 基础实例现象
+*** 例子
+- 这个例子布局等还和上一篇的例子相似，只是重写了Button和LinearLayout而已，所以效果图不在提供，具体参见上一篇。
+- 首先我们简单的自定义一个Button（View的子类），再自定义一个LinearLayout（ViewGroup的子类），其实没有自定义任何属性，只是重写部分方法（添加了打印，方便查看）而已，如下：
+#+BEGIN_SRC csharp
+public class TestButton extends Button {
+    public TestButton(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "TestButton dispatchTouchEvent-- action=" + event.getAction());
+        return super.dispatchTouchEvent(event);
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "TestButton onTouchEvent-- action=" + event.getAction());
+        return super.onTouchEvent(event);
+    }
+}
+public class TestLinearLayout extends LinearLayout {
+    public TestLinearLayout(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+        Log.i(null, "TestLinearLayout onInterceptTouchEvent-- action=" + ev.getAction());
+        return super.onInterceptTouchEvent(ev);
+    }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "TestLinearLayout dispatchTouchEvent-- action=" + event.getAction());
+        return super.dispatchTouchEvent(event);
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "TestLinearLayout onTouchEvent-- action=" + event.getAction());
+        return super.onTouchEvent(event);
+    }
+}
+#+END_SRC 
+- 如上两个控件很简单吧，不解释，继续看其他代码：
+#+begin_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<com.zzci.light.TestLinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:id="@+id/mylayout">
+    <com.zzci.light.TestButton
+        android:id="@+id/my_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="click test"/>
+</com.zzci.light.TestLinearLayout>
+#+END_SRC
+#+BEGIN_SRC csharp
+public class ListenerActivity extends Activity implements View.OnTouchListener, View.OnClickListener {
+    private TestLinearLayout mLayout;
+    private TestButton mButton;
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.main);
+        mLayout = (TestLinearLayout) this.findViewById(R.id.mylayout);
+        mButton = (TestButton) this.findViewById(R.id.my_btn);
+        mLayout.setOnTouchListener(this);
+        mButton.setOnTouchListener(this);
+        mLayout.setOnClickListener(this);
+        mButton.setOnClickListener(this);
+    }
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        Log.i(null, "OnTouchListener--onTouch-- action="+event.getAction()+" --"+v);
+        return false;
+    }
+    @Override
+    public void onClick(View v) {
+        Log.i(null, "OnClickListener--onClick--"+v);
+    }
+}
+#+END_SRC 
+- 到此基础示例的代码编写完成。没有啥难度，很简单易懂，不多解释了。
+*** 运行现象
+- 当直接点击Button时打印现象如下：
+#+BEGIN_SRC text
+TestLinearLayout dispatchTouchEvent-- action=0
+TestLinearLayout onInterceptTouchEvent-- action=0
+TestButton dispatchTouchEvent-- action=0
+OnTouchListener--onTouch-- action=0 --com.zzci.light.TestButton
+TestButton onTouchEvent-- action=0
+TestLinearLayout dispatchTouchEvent-- action=1
+TestLinearLayout onInterceptTouchEvent-- action=1
+TestButton dispatchTouchEvent-- action=1
+OnTouchListener--onTouch-- action=1 --com.zzci.light.TestButton
+TestButton onTouchEvent-- action=1
+OnClickListener--onClick--com.zzci.light.TestButton
+#+END_SRC
+- 分析：你会发现这个结果好惊讶吧，点击了Button却先执行了TestLinearLayout（ViewGroup）的dispatchTouchEvent，接着执行 TestLinearLayout（ViewGroup）的onInterceptTouchEvent，接着执行TestButton（TestLinearLayout包含的成员View）的dispatchTouchEvent，接着就是View触摸事件的分发流程，上一篇已经讲过了。也就是说当点击View时事件派发每一个down，up的action顺序是先触发最父级控件
+- （这里为LinearLayout）的dispatchTouchEvent->onInterceptTouchEvent->然后向前一级传递（这里就是传递到Button View）。
+- 那么继续看，当直接点击除Button以外的其他部分时打印如下：
+#+BEGIN_SRC text
+TestLinearLayout dispatchTouchEvent-- action=0
+TestLinearLayout onInterceptTouchEvent-- action=0
+OnTouchListener--onTouch-- action=0 --com.zzci.light.TestLinearLayout
+TestLinearLayout onTouchEvent-- action=0
+TestLinearLayout dispatchTouchEvent-- action=1
+OnTouchListener--onTouch-- action=1 --com.zzci.light.TestLinearLayout
+TestLinearLayout onTouchEvent-- action=1
+OnClickListener--onClick--com.zzci.light.TestLinearLayout
+#+END_SRC
+- 分析：你会发现一个奇怪的现象，派发ACTION_DOWN（action=0）事件时顺序为dispatchTouchEvent->onInterceptTouchEvent->onTouch->onTouchEvent，而接着派发ACTION_UP（action=1）事件时与上面顺序不同的时竟然没触发onInterceptTouchEvent方法。这是为啥呢？
+- 我也纳闷，那就留着下面分析源码再找答案吧，先记住这个问题。
+- 有了上面这个例子你是不是发现包含ViewGroup与View的事件触发有些相似又有很大差异吧（PS：在Android中继承View实现的控件已经是最小单位了，也即在XML布局等操作中不能再包含子项了，而继承ViewGroup实现的控件通常不是最小单位，可以包含不确定数目的子项）。具体差异是啥呢？咱们类似上篇一样，带着这个实例疑惑去看源码找答案吧。
+** Android 5.1.1(API 22) ViewGroup触摸屏事件传递源码分析
+- 通过上面例子的打印我们可以确定分析源码的顺序，那就开始分析呗。
+*** 从ViewGroup的dispatchTouchEvent方法说起
+- 前一篇的3-2小节说在Android中你只要触摸控件首先都会触发控件的dispatchTouchEvent方法（其实这个方法一般都没在具体的控件类中，而在他的父类View中）。这其实是思维单单局限在View的角度去看待的，这里通过上面的例子你是否发现触摸控件会先从他的父级dispatchTouchEvent方法开始派发呢？是的，所以咱们先从ViewGroup的dispatchTouchEvent方法说起，如下：
+#+BEGIN_SRC csharp
+public boolean dispatchTouchEvent(MotionEvent ev) {
+    if (mInputEventConsistencyVerifier != null) {
+        mInputEventConsistencyVerifier.onTouchEvent(ev, 1);
+    }
+    // If the event targets the accessibility focused view and this is it, start
+    // normal event dispatch. Maybe a descendant is what will handle the click.
+    if (ev.isTargetAccessibilityFocus() && isAccessibilityFocusedViewOrHost()) {
+        ev.setTargetAccessibilityFocus(false);
+    }
+    boolean handled = false;
+    if (onFilterTouchEventForSecurity(ev)) {
+        final int action = ev.getAction();
+        final int actionMasked = action & MotionEvent.ACTION_MASK;
+        // Handle an initial down.
+// 因为ACTION_DOWN是一系列事件的开端，当是ACTION_DOWN时进行一些初始化操作:
+        if (actionMasked == MotionEvent.ACTION_DOWN) {
+            // Throw away all previous state when starting a new touch gesture.
+            // The framework may have dropped the up or cancel event for the previous gesture
+            // due to an app switch, ANR, or some other state change.
+        // 清除以往的Touch状态然后开始新的手势
+            // 在这里你会发现cancelAndClearTouchTargets(ev)方法中有一个非常重要的操作就是将mFirstTouchTarget设置为了null
+            // 这个是分析ViewGroup的dispatchTouchEvent方法第一步中重点要记住的一个地方
+            cancelAndClearTouchTargets(ev);
+        // 接着在resetTouchState()方法中重置Touch状态标识
+            resetTouchState();
+        }
+        // Check for interception.
+// 检查是否要拦截
+    // 使用变量intercepted来标记ViewGroup是否拦截Touch事件的传递
+        final boolean intercepted;
+        // 当事件为ACTION_DOWN或者mFirstTouchTarget不为null(即已经找到能够接收touch事件的目标组件)时if成立
+        if (actionMasked == MotionEvent.ACTION_DOWN || mFirstTouchTarget != null) {
+            // 当事件为ACTION_DOWN或者mFirstTouchTarget不为null时判断disallowIntercept(禁止拦截)标志位
+            final boolean disallowIntercept = (mGroupFlags & FLAG_DISALLOW_INTERCEPT) != 0;
+            if (!disallowIntercept) {
+                intercepted = onInterceptTouchEvent(ev);
+                ev.setAction(action); // restore action in case it was changed
+            } else {
+                intercepted = false;
+            }
+        } else {
+            // There are no touch targets and this action is not an initial down
+            // so this view group continues to intercept touches.
+            intercepted = true;
+        }
+        // If intercepted, start normal event dispatch. Also if there is already
+        // a view that is handling the gesture, do normal event dispatch.
+        if (intercepted || mFirstTouchTarget != null) {
+            ev.setTargetAccessibilityFocus(false);
+        }
+        // Check for cancelation.
+        final boolean canceled = resetCancelNextUpFlag(this)
+            || actionMasked == MotionEvent.ACTION_CANCEL;
+        // Update list of touch targets for pointer down, if needed.
+        final boolean split = (mGroupFlags & FLAG_SPLIT_MOTION_EVENTS) != 0;
+        TouchTarget newTouchTarget = null;
+        boolean alreadyDispatchedToNewTouchTarget = false;
+// 如果没有取消没有拦截，就进入执行下面的逻辑：        
+        if (!canceled && !intercepted) {
+            // If the event is targeting accessiiblity focus we give it to the
+            // view that has accessibility focus and if it does not handle it
+            // we clear the flag and dispatch the event to all children as usual.
+            // We are looking up the accessibility focused host to avoid keeping
+            // state since these events are very rare.
+            View childWithAccessibilityFocus = ev.isTargetAccessibilityFocus()
+                ? findChildWithAccessibilityFocus() : null;
+            if (actionMasked == MotionEvent.ACTION_DOWN
+                || (split && actionMasked == MotionEvent.ACTION_POINTER_DOWN)
+                || actionMasked == MotionEvent.ACTION_HOVER_MOVE) {
+                final int actionIndex = ev.getActionIndex(); // always 0 for down
+                final int idBitsToAssign = split ? 1 << ev.getPointerId(actionIndex)
+                    : TouchTarget.ALL_POINTER_IDS;
+                // Clean up earlier touch targets for this pointer id in case they
+                // have become out of sync.
+                removePointersFromTouchTargets(idBitsToAssign);
+                final int childrenCount = mChildrenCount;
+                // 判断了childrenCount个数是否不为0
+                if (newTouchTarget == null && childrenCount != 0) {
+                    final float x = ev.getX(actionIndex);
+                    final float y = ev.getY(actionIndex);
+                    // Find a child that can receive the event.
+                    // Scan children from front to back.
+                    final ArrayList<View> preorderedList = buildOrderedChildList();
+                    final boolean customOrder = preorderedList == null
+                        && isChildrenDrawingOrderEnabled();
+                    final View[] children = mChildren;
+// 倒序遍历所有的子view：倒序是因为：
+// 这是因为preorderedList中的顺序是按照addView或者XML布局文件中的顺序来的，后addView添加的子View，会因为Android的UI后刷新机制显示在上层；
+// 假如点击的地方有两个子View都包含的点击的坐标，那么后被添加到布局中的那个子view会先响应事件；
+// 这样其实也是符合人的思维方式的，因为后被添加的子view会浮在上层，所以我们去点击的时候一般都会希望点击最上层的那个组件先去响应事件                    
+                    for (int i = childrenCount - 1; i >= 0; i--) { // 倒序遍历所有的子view
+                        final int childIndex = customOrder
+                            ? getChildDrawingOrder(childrenCount, i) : i;
+                        final View child = (preorderedList == null)
+                            ? children[childIndex] : preorderedList.get(childIndex);
+                        // If there is a view that has accessibility focus we want it
+                        // to get the event first and if not handled we will perform a
+                        // normal dispatch. We may do a double iteration but this is
+                        // safer given the timeframe.
+                        if (childWithAccessibilityFocus != null) {
+                            if (childWithAccessibilityFocus != child) {
+                                continue;
+                            }
+                            childWithAccessibilityFocus = null;
+                            i = childrenCount - 1;
+                        }
+                        if (!canViewReceivePointerEvents(child)
+                            || !isTransformedTouchPointInView(x, y, child, null)) {
+                            ev.setTargetAccessibilityFocus(false);
+                            continue;
+                        }
+// 通过getTouchTarget去查找当前子View是否在mFirstTouchTarget.next这条target链中的某一个targe中，如果在则返回这个target，否则返回null。
+                        newTouchTarget = getTouchTarget(child);
+                        if (newTouchTarget != null) {
+                            // 说明找到了接收Touch事件的子View，即newTouchTarget，那么，既然已经找到了，所以执行break跳出for循环
+                            // Child is already receiving touch within its bounds.
+                            // Give it the new pointer in addition to the ones it is handling.
+                            newTouchTarget.pointerIdBits |= idBitsToAssign;
+                            break;
+                        }
+                        resetCancelNextUpFlag(child);
+// 调用方法dispatchTransformedTouchEvent()将Touch事件传递给特定的子View。
+// 该方法十分重要，在该方法中为一个递归调用，会递归调用dispatchTouchEvent()方法。
+// 在dispatchTouchEvent()中如果子View为ViewGroup并且Touch没有被拦截,那么递归调用dispatchTouchEvent()，
+// 如果子View为View那么就会调用其onTouchEvent()。dispatchTransformedTouchEvent方法如果返回true则表示子View消费掉该事件                        
+                        if (dispatchTransformedTouchEvent(ev, false, child, idBitsToAssign)) {
+                            // Child wants to receive touch within its bounds.
+                            mLastTouchDownTime = ev.getDownTime();
+                            if (preorderedList != null) {
+                                // childIndex points into presorted list, find original index
+                                for (int j = 0; j < childrenCount; j++) {
+                                    if (children[childIndex] == mChildren[j]) {
+                                        mLastTouchDownIndex = j;
+                                        break;
+                                    }
+                                }
+                            } else {
+                                mLastTouchDownIndex = childIndex;
+                            }
+                            mLastTouchDownX = ev.getX();
+                            mLastTouchDownY = ev.getY();
+                            // 给newTouchTarget赋值
+                            newTouchTarget = addTouchTarget(child, idBitsToAssign);
+                            // 给alreadyDispatchedToNewTouchTarget赋值为true
+                            alreadyDispatchedToNewTouchTarget = true;
+                            // 执行break，因为该for循环遍历子View判断哪个子View接受Touch事件，既然已经找到了就跳出该外层for循环
+                            break;
+                        }
+                        // The accessibility focus didn't handle the event, so clear
+                        // the flag and do a normal dispatch to all children.
+                        ev.setTargetAccessibilityFocus(false);
+                    }
+                    if (preorderedList != null) preorderedList.clear();
+                } // (newTouchTarget == null && childrenCount != 0)  结束
+// 该if表示经过前面的for循环没有找到子View接收Touch事件并且之前的mFirstTouchTarget不为空则为真                
+                if (newTouchTarget == null && mFirstTouchTarget != null) {
+                    // Did not find a child to receive the event.
+                    // Assign the pointer to the least recently added target.
+                    newTouchTarget = mFirstTouchTarget; // newTouchTarget指向了最初的TouchTarget
+                    while (newTouchTarget.next != null) {
+                        newTouchTarget = newTouchTarget.next;
+                    }
+                    newTouchTarget.pointerIdBits |= idBitsToAssign;
+                }
+            }
+        }
+        // Dispatch to touch targets.
+// if判断的mFirstTouchTarget为null时，也就是说Touch事件未被消费，即没有找到能够消费touch事件的子组件或Touch事件被拦截了，
+// 则调用ViewGroup的dispatchTransformedTouchEvent()方法处理Touch事件（和普通View一样），即子View没有消费Touch事件，
+// 那么子View的上层ViewGroup才会调用其onTouchEvent()处理Touch事件。        
+        if (mFirstTouchTarget == null) {
+            // No touch targets so treat this as an ordinary view.
+            handled = dispatchTransformedTouchEvent(ev, canceled, null,
+                                                    TouchTarget.ALL_POINTER_IDS);
+        } else {
+            // 找到了可以消费Touch事件的子View且后续Touch事件可以传递到该子View
+            // 对于非ACTION_DOWN事件继续传递给目标子组件进行处理，依然是递归调用dispatchTransformedTouchEvent()方法来实现的处理
+            // Dispatch to touch targets, excluding the new touch target if we already
+            // dispatched to it.  Cancel touch targets if necessary.
+            TouchTarget predecessor = null;
+            TouchTarget target = mFirstTouchTarget;
+            while (target != null) {
+                final TouchTarget next = target.next;
+                if (alreadyDispatchedToNewTouchTarget && target == newTouchTarget) {
+                    handled = true;
+                } else {
+                    final boolean cancelChild = resetCancelNextUpFlag(target.child)
+                        || intercepted;
+                    if (dispatchTransformedTouchEvent(ev, cancelChild,
+                                                      target.child, target.pointerIdBits)) {
+                        handled = true;
+                    }
+                    if (cancelChild) {
+                        if (predecessor == null) {
+                            mFirstTouchTarget = next;
+                        } else {
+                            predecessor.next = next;
+                        }
+                        target.recycle();
+                        target = next;
+                        continue;
+                    }
+                }
+                predecessor = target;
+                target = next;
+            }
+        }
+        // Update list of touch targets for pointer up or cancel, if needed.
+        if (canceled
+            || actionMasked == MotionEvent.ACTION_UP
+            || actionMasked == MotionEvent.ACTION_HOVER_MOVE) {
+            resetTouchState();
+        } else if (split && actionMasked == MotionEvent.ACTION_POINTER_UP) {
+            final int actionIndex = ev.getActionIndex();
+            final int idBitsToRemove = 1 << ev.getPointerId(actionIndex);
+            removePointersFromTouchTargets(idBitsToRemove);
+        }
+    }
+    if (!handled && mInputEventConsistencyVerifier != null) {
+        mInputEventConsistencyVerifier.onUnhandledEvent(ev, 1);
+    }
+    return handled;
+}
+#+END_SRC 
+- 我勒个去！！！这比View的dispatchTouchEvent方法长很多啊，那就只关注重点分析吧。
+- 第一步，17-24行，对ACTION_DOWN进行处理。
+- 因为ACTION_DOWN是一系列事件的开端，当是ACTION_DOWN时进行一些初始化操作，从上面源码中注释也可以看出来，清除以往的Touch状态然后开始新的手势。在这里你会发现cancelAndClearTouchTargets(ev)方法中有一个非常重要的操作就是将mFirstTouchTarget设置为了null（刚开始分析大眼瞄一眼没留意，结果越往下看越迷糊，所以这个是分析ViewGroup的dispatchTouchEvent方法第一步中重点要记住的一个地方），接着在resetTouchState()方法中重置Touch状态标识。
+- 第二步，26-47行，检查是否要拦截。
+- 在dispatchTouchEvent(MotionEvent ev)这段代码中使用变量intercepted来标记ViewGroup是否拦截Touch事件的传递，该变量类似第一步的mFirstTouchTarget变量，在后续代码中起着很重要的作用。if (actionMasked == MotionEvent.ACTION_DOWN || mFirstTouchTarget != null)这一条判断语句说明当事件为ACTION_DOWN或者mFirstTouchTarget不为null(即已经找到能够接收touch事件的目标组件)时if成立，否则if不成立，然后将intercepted设置为true，也即拦截事件。当当事件为ACTION_DOWN或者mFirstTouchTarget不为null时判断disallowIntercept(禁止拦截)标志位，而这个标记在ViewGroup中提供了public的设置方法，如下：
+#+BEGIN_SRC csharp
+public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+        if (disallowIntercept == ((mGroupFlags & FLAG_DISALLOW_INTERCEPT) != 0)) {
+            // We're already in this state, assume our ancestors are too
+            return;
+        }
+        if (disallowIntercept) {
+            mGroupFlags |= FLAG_DISALLOW_INTERCEPT;
+        } else {
+            mGroupFlags &= ~FLAG_DISALLOW_INTERCEPT;
+        }
+        // Pass it up to our parent
+        if (mParent != null) {
+            mParent.requestDisallowInterceptTouchEvent(disallowIntercept);
+        }
+    }
+#+END_SRC 
+- 所以你可以在其他地方调用requestDisallowInterceptTouchEvent(boolean disallowIntercept)方法，从而禁止执行是否需要拦截的判断。
+- 当disallowIntercept为true（禁止拦截判断）时则intercepted直接设置为false，否则调用onInterceptTouchEvent(ev)方法，然后将结果赋值给 intercepted。那就来看下ViewGroup与众不同与View特有的onInterceptTouchEvent方法，如下：
+#+BEGIN_SRC csharp
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+        return false;
+    }
+#+END_SRC 
+- 看见了吧，默认的onInterceptTouchEvent方法只是返回了一个false，也即intercepted=false。所以可以说明上面例子的部分打印（dispatchTouchEvent->onInterceptTouchEvent->onTouchEvent），这里很明显表明在ViewGroup的dispatchTouchEvent()中默认（不在其他地方调运requestDisallowInterceptTouchEvent方法设置禁止拦截标记）首先调用了onInterceptTouchEvent()方法。
+- 第三步，49-51行，检查cancel。
+- 通过标记和action检查cancel，然后将结果赋值给局部boolean变量canceled。
+- 第四步，53-函数结束，事件分发。
+- 54行首先可以看见获取一个boolean变量标记split来标记，默认是true，作用是是否把事件分发给多个子View，这个同样在ViewGroup中提供了public的方法设置，如下：
+#+BEGIN_SRC csharp
+public void setMotionEventSplittingEnabled(boolean split) {
+        // TODO Applications really shouldn't change this setting mid-touch event,
+        // but perhaps this should handle that case and send ACTION_CANCELs to any child views
+        // with gestures in progress when this is changed.
+        if (split) {
+            mGroupFlags |= FLAG_SPLIT_MOTION_EVENTS;
+        } else {
+            mGroupFlags &= ~FLAG_SPLIT_MOTION_EVENTS;
+        }
+    }
+#+END_SRC 
+- 接着57行if (!canceled && !intercepted)判断表明，事件不是ACTION_CANCEL并且ViewGroup的拦截标志位intercepted为false(不拦截)则会进入其中。事件分发步骤中关于ACTION_DOWN的特殊处理接着67行这个很大的if语句if (actionMasked == MotionEvent.ACTION_DOWN || (split && actionMasked == MotionEvent.ACTION_POINTER_DOWN) || actionMasked == MotionEvent.ACTION_HOVER_MOVE)处理ACTION_DOWN事件，这个环节比较繁琐，也比较重要，如下具体分析。
+- 在79行判断了childrenCount个数是否不为0，然后接着在84行拿到了子View的list集合preorderedList；接着在88行通过一个for循环i从childrenCount - 1开始遍历到0，倒序遍历所有的子view，这是因为preorderedList中的顺序是按照addView或者XML布局文件中的顺序来的，后addView添加的子View，会因为Android的UI后刷新机制显示在上层；假如点击的地方有两个子View都包含的点击的坐标，那么后被添加到布局中的那个子view会先响应事件；这样其实也是符合人的思维方式的，因为后被添加的子view会浮在上层，所以我们去点击的时候一般都会希望点击最上层的那个组件先去响应事件。
+- 接着在106到112行通过getTouchTarget去查找当前子View是否在mFirstTouchTarget.next这条target链中的某一个targe中，如果在则返回这个target，否则返回null。在这段代码的if判断通过说明找到了接收Touch事件的子View，即newTouchTarget，那么，既然已经找到了，所以执行break跳出for循环。如果没有break则继续向下执行走到115行开始到134行，这里你可以看见一段if判断的代码if (dispatchTransformedTouchEvent(ev, false, child, idBitsToAssign))，这个被if的大括弧括起来的一段代码很重要，具体解释如下：
+- 调用方法dispatchTransformedTouchEvent()将Touch事件传递给特定的子View。该方法十分重要，在该方法中为一个递归调用，会递归调用dispatchTouchEvent()方法。在dispatchTouchEvent()中如果子View为ViewGroup并且Touch没有被拦截那么递归调用dispatchTouchEvent()，如果子View为View那么就会调用其onTouchEvent()。dispatchTransformedTouchEvent方法如果返回true则表示子View消费掉该事件，同时进入
+- 该if判断。满足if语句后重要的操作有：
+  - 给newTouchTarget赋值；
+  - 给alreadyDispatchedToNewTouchTarget赋值为true；
+  - 执行break，因为该for循环遍历子View判断哪个子View接受Touch事件，既然已经找到了就跳出该外层for循环；
+- 如果115行if判断中的dispatchTransformedTouchEvent()方法返回false，即子View的onTouchEvent返回false(即Touch事件未被消费)，那么就不满足该if条件，也就无法执行addTouchTarget()，从而导致mFirstTouchTarget为null（没法对mFirstTouchTarget赋值，因为上面分析了mFirstTouchTarget一进来是ACTION_DOWN就置位为null了），那么该子View就无法继续处理ACTION_MOVE事件和ACTION_UP事件（28行的判断为false，也即intercepted=true了，所以之后一系列判断无法通过）。
+- 如果115行if判断中的dispatchTransformedTouchEvent()方法返回true，即子View的onTouchEvent返回true(即Touch事件被消费)，那么就满足该if条件，从而mFirstTouchTarget不为null。
+- 继续看143行的判断if (newTouchTarget == null && mFirstTouchTarget != null)。该if表示经过前面的for循环没有找到子View接收Touch事件并且之前的mFirstTouchTarget不为空则为真，然后newTouchTarget指向了最初的TouchTarget。
+- 通过上面67到157行关于事件分发步骤中ACTION_DOWN的特殊处理可以发现，对于此处ACTION_DOWN的处理具体体现在dispatchTransformedTouchEvent()方法，该方法返回值具备如下特征：
+|--------+--------------+-------------------------|
+| return | description  | set                     |
+|--------+--------------+-------------------------|
+| true   | 事件被消费   | mFirstTouchTarget!=null |
+| false  | 事件未被消费 | mFirstTouchTarget==null |
+|--------+--------------+-------------------------|
+- 因为在dispatchTransformedTouchEvent()会调用递归调用dispatchTouchEvent()和onTouchEvent()，所以dispatchTransformedTouchEvent()的返回值实际上是由onTouchEvent()决定的。简单地说onTouchEvent()是否消费了Touch事件的返回值决定了dispatchTransformedTouchEvent()的返回值，从而决定mFirstTouchTarget是否为null，进一步决定了ViewGroup是否处理Touch事件，这一点在160行开始的代码中有体现。如下分析事件分发步骤中关于ACTION_DOWN处理之后的其他处理逻辑，也即160行开始剩余的逻辑。
+- 事件分发步骤中关于ACTION_DOWN处理之后的其他处理逻辑
+- 可以看到，如果派发的事件不是ACTION_DOWN就不会经过上面的流程，而是直接从此处开始执行。上面说了，经过上面对于ACTION_DOWN的处理后mFirstTouchTarget可能为null或者不为null。所以可以看见161行代码if (mFirstTouchTarget == null)与else判断了mFirstTouchTarget值是否为null的情况，完全符合如上分析。那我们分情况继续分析一下：
+- 当161行if判断的mFirstTouchTarget为null时，也就是说Touch事件未被消费，即没有找到能够消费touch事件的子组件或Touch事件被拦截了，则调用ViewGroup的dispatchTransformedTouchEvent()方法处理Touch事件（和普通View一样），即子View没有消费Touch事件，那么子View的上层ViewGroup才会调用其onTouchEvent()处理Touch事件。具体就是在调用dispatchTransformedTouchEvent()时第三个参数为null，关于dispatchTransformedTouchEvent方法下面会分析，暂时先记住就行。
+- 这下再回想上面例子，点击Button时为啥触发了Button的一系列touch方法而没有触发父级LinearLayout的touch方法的疑惑？明白了吧？
+- 子view对于Touch事件处理返回true那么其上层的ViewGroup就无法处理Touch事件了，子view对于Touch事件处理返回false那么其上层的ViewGroup才可以处理Touch事件。
+- 当161行if判断的mFirstTouchTarget不为null时，也就是说找到了可以消费Touch事件的子View且后续Touch事件可以传递到该子View。可以看见在源码的else中对于非ACTION_DOWN事件继续传递给目标子组件进行处理，依然是递归调用dispatchTransformedTouchEvent()方法来实现的处理。
+- 到此ViewGroup的dispatchTouchEvent方法分析完毕。
+- 上面说了ViewGroup的dispatchTouchEvent方法详细情况，也知道在其中可能会执行onInterceptTouchEvent方法，所以接下来咱们先简单分析一下这个方法。
+- 如下系统源码：
+#+BEGIN_SRC csharp
+public boolean onInterceptTouchEvent(MotionEvent ev) {
+        return false;
+    }
+#+END_SRC 
+- 看到了吧，这个方法算是ViewGroup不同于View特有的一个事件派发调运方法。在源码中可以看到这个方法实现很简单，但是有一堆注释。其实上面
+- 分析了，如果ViewGroup的onInterceptTouchEvent返回false就不阻止事件继续传递派发，否则阻止传递派发。
+- 对了，还记得在dispatchTouchEvent方法中除过可能执行的onInterceptTouchEvent以外在后面派发事件时执行的dispatchTransformedTouchEvent方法吗？上面分析dispatchTouchEvent时说了下面会仔细分析，那么现在就来继续看看这个方法吧。
+*** 继续说说ViewGroup的dispatchTouchEvent中执行的dispatchTransformedTouchEvent方法
+- ViewGroup的dispatchTransformedTouchEvent方法系统源码如下：
+#+BEGIN_SRC csharp
+private boolean dispatchTransformedTouchEvent(MotionEvent event, boolean cancel,
+                                              View child, int desiredPointerIdBits) {
+    final boolean handled;
+    // Canceling motions is a special case.  We don't need to perform any transformations
+    // or filtering.  The important part is the action, not the contents.
+    final int oldAction = event.getAction();
+    if (cancel || oldAction == MotionEvent.ACTION_CANCEL) {
+        event.setAction(MotionEvent.ACTION_CANCEL);
+        if (child == null) {
+            handled = super.dispatchTouchEvent(event);
+        } else {
+            handled = child.dispatchTouchEvent(event);
+        }
+        event.setAction(oldAction);
+        return handled;
+    }
+    // Calculate the number of pointers to deliver.
+    final int oldPointerIdBits = event.getPointerIdBits();
+    final int newPointerIdBits = oldPointerIdBits & desiredPointerIdBits;
+    // If for some reason we ended up in an inconsistent state where it looks like we
+    // might produce a motion event with no pointers in it, then drop the event.
+    if (newPointerIdBits == 0) {
+        return false;
+    }
+    // If the number of pointers is the same and we don't need to perform any fancy
+    // irreversible transformations, then we can reuse the motion event for this
+    // dispatch as long as we are careful to revert any changes we make.
+    // Otherwise we need to make a copy.
+    final MotionEvent transformedEvent;
+    if (newPointerIdBits == oldPointerIdBits) {
+        if (child == null || child.hasIdentityMatrix()) {
+            if (child == null) {
+                handled = super.dispatchTouchEvent(event);
+            } else {
+                final float offsetX = mScrollX - child.mLeft;
+                final float offsetY = mScrollY - child.mTop;
+                event.offsetLocation(offsetX, offsetY);
+                handled = child.dispatchTouchEvent(event);
+                event.offsetLocation(-offsetX, -offsetY);
+            }
+            return handled;
+        }
+        transformedEvent = MotionEvent.obtain(event);
+    } else {
+        transformedEvent = event.split(newPointerIdBits);
+    }
+    // Perform any necessary transformations and dispatch.
+    if (child == null) {
+        handled = super.dispatchTouchEvent(transformedEvent);
+    } else {
+        final float offsetX = mScrollX - child.mLeft;
+        final float offsetY = mScrollY - child.mTop;
+        transformedEvent.offsetLocation(offsetX, offsetY);
+        if (! child.hasIdentityMatrix()) {
+            transformedEvent.transform(child.getInverseMatrix());
+        }
+        handled = child.dispatchTouchEvent(transformedEvent);
+    }
+    // Done.
+    transformedEvent.recycle();
+    return handled;
+}
+#+END_SRC 
+- 看到了吧，这个方法也算是ViewGroup不同于View特有的一个事件派发调运方法，而且奇葩的就是这个方法也很长。那也继续分析吧。。。
+- 上面分析了，在dispatchTouchEvent()中调用dispatchTransformedTouchEvent()将事件分发给子View处理。在此我们需要重点分析该方法的第三个参数（View child）。在dispatchTouchEvent()中多次调用了dispatchTransformedTouchEvent()方法，而且有时候第三个参数为null，有时又不是，他们到底有啥区别呢？这段源码中很明显展示了结果。在dispatchTransformedTouchEvent()源码中可以发现多次对于child是否为null的判断，并且均做出如下类似的操作。其中，当child == null时会将Touch事件传递给该ViewGroup自身的dispatchTouchEvent()处理，即super.dispatchTouchEvent(event)（也就是View的这个方法，因为ViewGroup的父类是View）；当child != null时会调用该子view(当然该view可能是一个View也可能是一个ViewGroup)的dispatchTouchEvent(event)处理，即child.dispatchTouchEvent(event)。别的代码几乎没啥需要具体注意分析的。
+- 所以，到此你也会发现ViewGroup没有重写View的onTouchEvent(MotionEvent event) 方法，也就是说接下来的调运关系就是上一篇分析的流程了，这里不在多说。
+- 好了，到此你是不是即明白了上面实例演示的代码结果，也明白了上一篇最后升级实例验证模块留下的点击Button触发了LinearLayout的一些疑惑呢？答案自然是必须的！
+** Android 5.1.1(API 22) ViewGroup触摸屏事件传递总结
+- 如上就是所有ViewGroup关于触摸屏事件的传递机制源码分析与实例演示。具体总结如下：
+- Android事件派发是先传递到最顶级的ViewGroup，再由ViewGroup递归传递到View的。
+- 在ViewGroup中可以通过onInterceptTouchEvent方法对事件传递进行拦截，onInterceptTouchEvent方法返回true代表不允许事件继续向子View传递，返回false代表不对事件进行拦截，默认返回false。
+- 子View中如果将传递的事件消费掉，ViewGroup中将无法接收到任何事件。
+
+* Android触摸屏事件派发机制详解与源码分析三(Activity篇)
+- https://blog.csdn.net/yanbober/article/details/45932123
+** 实例验证
+*** 代码
+- 如下实例与前面实例相同，一个Button在LinearLayout里，只不过我们这次重写了Activity的一些方法而已。具体如下：
+- 自定义的Button与LinearLayout：
+#+BEGIN_SRC csharp
+public class TestButton extends Button {
+    public TestButton(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "TestButton--dispatchTouchEvent--action="+event.getAction());
+        return super.dispatchTouchEvent(event);
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "TestButton--onTouchEvent--action="+event.getAction());
+        return super.onTouchEvent(event);
+    }
+}
+public class TestLinearLayout extends LinearLayout {
+    public TestLinearLayout(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+        Log.i(null, "TestLinearLayout--onInterceptTouchEvent--action="+ev.getAction());
+        return super.onInterceptTouchEvent(ev);
+    }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        Log.i(null, "TestLinearLayout--dispatchTouchEvent--action=" + event.getAction());
+        return super.dispatchTouchEvent(event);
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "TestLinearLayout--onTouchEvent--action="+event.getAction());
+        return super.onTouchEvent(event);
+    }
+}
+#+END_SRC 
+- 整个界面的布局文件：
+#+begin_SRC xml
+<com.example.yanbo.myapplication.TestLinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:id="@+id/layout">
+    <com.example.yanbo.myapplication.TestButton
+        android:text="click test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/button"/>
+</com.example.yanbo.myapplication.TestLinearLayout>
+#+END_SRC
+- 整个界面Activity，重写了Activity的一些关于触摸派发的方法（三个）：
+#+BEGIN_SRC csharp
+public class MainActivity extends Activity implements View.OnClickListener, View.OnTouchListener {
+    private TestButton mButton;
+    private TestLinearLayout mLayout;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        mButton = (TestButton) this.findViewById(R.id.button);
+        mLayout = (TestLinearLayout) this.findViewById(R.id.layout);
+        mButton.setOnClickListener(this);
+        mLayout.setOnClickListener(this);
+        mButton.setOnTouchListener(this);
+        mLayout.setOnTouchListener(this);
+    }
+    @Override
+    public void onClick(View v) {
+        Log.i(null, "onClick----v=" + v);
+    }
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        Log.i(null, "onTouch--action="+event.getAction()+"--v="+v);
+        return false;
+    }
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        Log.i(null, "MainActivity--dispatchTouchEvent--action=" + ev.getAction());
+        return super.dispatchTouchEvent(ev);
+    }
+    @Override
+    public void onUserInteraction() {
+        Log.i(null, "MainActivity--onUserInteraction");
+        super.onUserInteraction();
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        Log.i(null, "MainActivity--onTouchEvent--action="+event.getAction());
+        return super.onTouchEvent(event);
+    }
+}
+#+END_SRC 
+- 如上就是实例测试代码，非常简单，没必要分析，直接看结果吧。
+*** 结果分析
+- 直接点击Button按钮打印如下：
+#+BEGIN_SRC text
+MainActivity--dispatchTouchEvent--action=0
+MainActivity--onUserInteraction
+TestLinearLayout--dispatchTouchEvent--action=0
+TestLinearLayout--onInterceptTouchEvent--action=0
+TestButton--dispatchTouchEvent--action=0
+onTouch--action=0--v=com.example.yanbo.myapplication.TestButton
+TestButton--onTouchEvent--action=0
+
+MainActivity--dispatchTouchEvent--action=1
+TestLinearLayout--dispatchTouchEvent--action=1
+TestLinearLayout--onInterceptTouchEvent--action=1
+TestButton--dispatchTouchEvent--action=1
+onTouch--action=1--v=com.example.yanbo.myapplication.TestButton
+TestButton--onTouchEvent--action=1
+onClick----v=com.example.yanbo.myapplication.TestButton
+#+END_SRC
+- 分析可以发现，当点击Button时除过派发Activity的几个新方法之外其他完全符合前面两篇分析的View与ViewGroup的触摸事件派发机制。对于Activity来说，ACTION_DOWN事件首先触发dispatchTouchEvent，然后触发onUserInteraction，再次onTouchEvent，接着的ACTION_UP事件触发dispatchTouchEvent后触发了onTouchEvent，也就是说ACTION_UP事件时不会触发onUserInteraction（待会可查看源代码分析原因）。
+- 直接点击Button以外的其他区域：
+#+BEGIN_SRC text
+MainActivity--dispatchTouchEvent--action=0
+MainActivity--onUserInteraction
+TestLinearLayout--dispatchTouchEvent--action=0
+TestLinearLayout--onInterceptTouchEvent--action=0
+onTouch--action=0--v=com.example.yanbo.myapplication.TestLinearLayout
+TestLinearLayout--onTouchEvent--action=0
+
+MainActivity--dispatchTouchEvent--action=1
+TestLinearLayout--dispatchTouchEvent--action=1
+onTouch--action=1--v=com.example.yanbo.myapplication.TestLinearLayout
+TestLinearLayout--onTouchEvent--action=1
+onClick----v=com.example.yanbo.myapplication.TestLinearLayout
+#+END_SRC 
+- 怎么样？完全符合上面点击Button结果分析的猜想。
+- 那接下来还是要看看Activity里关于这几个方法的源码了。
+** Android 5.1.1(API 22) Activity触摸屏事件传递源码分析
+- 通过上面例子的打印我们可以确定分析源码的顺序，那就开始分析呗。
+*** 从Activity的dispatchTouchEvent方法说起
+**** 开始分析
+- 先上源码，如下：
+#+BEGIN_SRC csharp
+/**
+ * Called to process touch screen events.  You can override this to
+ * intercept all touch screen events before they are dispatched to the
+ * window.  Be sure to call this implementation for touch screen events
+ * that should be handled normally.
+ *
+ * @param ev The touch screen event.
+ *
+ * @return boolean Return true if this event was consumed.
+ */
+public boolean dispatchTouchEvent(MotionEvent ev) {
+    // 只有ACTION_DOWN事件派发时调运了onUserInteraction方法
+    if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+        onUserInteraction();
+    }
+// 本质执行的是一个ViewGroup的dispatchTouchEvent方法
+//（这个ViewGroup是Activity特有的root view，也就是id为content的FrameLayout布局）
+    if (getWindow().superDispatchTouchEvent(ev)) {
+        return true;
+    }
+    return onTouchEvent(ev);
+}
+#+END_SRC     
+- 哎呦！这次看着代码好少的样子，不过别高兴，浓缩才是精华，这里代码虽少，涉及的问题点还是很多的，那么咱们就来一点一点分析吧。
+- 12到14行看见了吧？上面例子咱们看见只有ACTION_DOWN事件派发时调运了onUserInteraction方法，当时还在疑惑呢，这下明白了吧，不多解释，咱们直接跳进去可以看见是一个空方法，具体下面会分析。
+- 好了，自己分析15到17行，看着简单吧，我勒个去，我怎么有点懵，这是哪的方法？咱们分析分析吧。
+- 首先分析Activity的attach方法可以发现getWindow()返回的就是PhoneWindow对象（PhoneWindow为抽象Window的实现子类），那就简单了，也就相当于PhoneWindow类的方法，而PhoneWindow类实现于Window抽象类，所以先看下Window类中抽象方法的定义，如下：
+#+BEGIN_SRC csharp
+/**
+     * Used by custom windows, such as Dialog, to pass the touch screen event
+     * further down the view hierarchy. Application developers should
+     * not need to implement or call this.
+     *
+     */
+// 用户不需要重写实现的方法
+    public abstract boolean superDispatchTouchEvent(MotionEvent event);
+#+END_SRC     
+- 看见注释没有？用户不需要重写实现的方法，实质也不能，在Activity中没有提供重写的机会，因为Window是以组合模式与Activity建立关系的。好了，看完了抽象的Window方法，那就去PhoneWindow里看下Window抽象方法的实现吧，如下：
+#+BEGIN_SRC csharp
+    @Override
+    public boolean superDispatchTouchEvent(MotionEvent event) {
+        return mDecor.superDispatchTouchEvent(event);
+    }
+#+END_SRC 
+- 又是看着好简单的样子哦，实际又是一堆问题，继续分析。你会发现在PhoneWindow的superDispatchTouchEvent方法里又直接返回了另一个mDecor对象的superDispatchTouchEvent方法，mDecor是啥？继续分析吧。
+- 在PhoneWindow类里发现，mDecor是DecorView类的实例，同时DecorView是PhoneWindow的内部类。最惊人的发现是DecorView extends FrameLayout implements RootViewSurfaceTaker，看见没有？它是一个真正Activity的root view,它继承了FrameLayout。怎么验证他一定是root view呢？很简单，不知道大家是不是熟悉Android App开发技巧中关于UI布局优化使用的SDK工具Hierarchy Viewer。咱们通过他来看下上面刚刚展示的那个例子的Hierarchy Viewer你就明白了，如下我在Ubuntu上截图的Hierarchy Viewer分析结果：
+
+[[/Users/jennyhuang/myandr/pic/viewTouchClickEvents_20220606_120513.png]]
+
+- 看见没有，我们上面例子中Activity中setContentView时放入的xml layout是一个LinearLayout，其中包含一个Button，上图展示了我们放置的LinearLayout被放置在一个id为content的FrameLayout的布局中，这也就是为啥Activity的setContentView方法叫set content view了，就是把我们的xml放入了这个id为content的FrameLayout中。
+- 赶快回过头，你是不是发现上面PhoneWindow的superDispatchTouchEvent直接返回了DecorView的superDispatchTouchEvent，而DecorView又是FrameLayout的子类，FrameLayout又是ViewGroup的子类。机智的你想到了啥木有？
+- 没想到就继续看下DecorView类的superDispatchTouchEvent方法吧，如下：
+#+BEGIN_SRC csharp
+  public boolean superDispatchTouchEvent(MotionEvent event) {
+      return super.dispatchTouchEvent(event);
+  }
+#+END_SRC 
+- 这回你一定恍然大悟了吧，不然就得脑补前面两篇博客的内容了。。。
+- 搞半天Activity的dispatchTouchEvent方法的15行if (getWindow().superDispatchTouchEvent(ev))本质执行的是一个ViewGroup的dispatchTouchEvent方法（这个ViewGroup是Activity特有的root view，也就是id为content的FrameLayout布局），接下来就不用多说了吧，完全是前面两篇分析的执行过程。
+- 接下来依据派发事件返回值决定是否触发Activity的onTouchEvent方法。
+**** 小总结一下
+- 在Activity的触摸屏事件派发中：
+  - 首先会触发Activity的dispatchTouchEvent方法。
+  - dispatchTouchEvent方法中如果是ACTION_DOWN的情况下会接着触发onUserInteraction方法。
+  - 接着在dispatchTouchEvent方法中会通过Activity的root View（id为content的FrameLayout），实质是ViewGroup，通过super.dispatchTouchEvent把touchevent派发给各个activity的子view，也就是我们再Activity.onCreat方法中setContentView时设置的view。
+  - 若Activity下面的子view拦截了touchevent事件(返回true)则Activity.onTouchEvent方法就不会执行。
+*** 继续Activity的dispatchTouchEvent方法中调运的onUserInteraction方法
+- 如下源码：
+#+BEGIN_SRC csharp
+    /**
+     * Called whenever a key, touch, or trackball event is dispatched to the
+     * activity.  Implement this method if you wish to know that the user has
+     * interacted with the device in some way while your activity is running.
+     * This callback and {@link #onUserLeaveHint} are intended to help
+     * activities manage status bar notifications intelligently; specifically,
+     * for helping activities determine the proper time to cancel a notfication.
+     *
+     * <p>All calls to your activity's {@link #onUserLeaveHint} callback will
+     * be accompanied by calls to {@link #onUserInteraction}.  This
+     * ensures that your activity will be told of relevant user activity such
+     * as pulling down the notification pane and touching an item there.
+     *
+     * <p>Note that this callback will be invoked for the touch down action
+     * that begins a touch gesture, but may not be invoked for the touch-moved
+     * and touch-up actions that follow.
+     *
+     * @see #onUserLeaveHint()
+     */
+    public void onUserInteraction() {
+    }
+#+END_SRC 
+- 搞了半天就像上面说的，这是一个空方法，那它的作用是啥呢？
+- 此方法是activity的方法，当此activity在栈顶时，触屏点击按home，back，menu键等都会触发此方法。下拉statubar、旋转屏幕、锁屏不会触发此方法。所以它会用在屏保应用上，因为当你触屏机器 就会立马触发一个事件，而这个事件又不太明确是什么，正好屏保满足此需求；或者对于一个Activity，控制多长时间没有用户点响应的时候，自己消失等。
+- 这个方法也分析完了，那就剩下onTouchEvent方法了，如下继续分析。
+*** 继续Activity的dispatchTouchEvent方法中调运的onTouchEvent方法
+- 如下源码：
+#+BEGIN_SRC csharp
+    /**
+     * Called when a touch screen event was not handled by any of the views
+     * under it.  This is most useful to process touch events that happen
+     * outside of your window bounds, where there is no view to receive it.
+     *
+     * @param event The touch screen event being processed.
+     *
+     * @return Return true if you have consumed the event, false if you haven't.
+     * The default implementation always returns false.
+     */
+    public boolean onTouchEvent(MotionEvent event) {
+        if (mWindow.shouldCloseOnTouch(this, event)) {
+            finish();
+            return true;
+        }
+        return false;
+    }
+#+END_SRC 
+- 看见没有，这个方法看起来好简单的样子。
+- 如果一个屏幕触摸事件没有被这个Activity下的任何View所处理，Activity的onTouchEvent将会调用。这对于处理window边界之外的Touch事件非常有用，因为通常是没有View会接收到它们的。返回值为true表明你已经消费了这个事件，false则表示没有消费，默认实现中返回false。
+- 继续分析吧，重点就一句，mWindow.shouldCloseOnTouch(this, event)中的mWindow实际就是上面分析dispatchTouchEvent方法里的getWindow()对象，所以直接到Window抽象类和PhoneWindow子类查看吧，发现PhoneWindow没有重写Window的shouldCloseOnTouch方法，所以看下Window类的shouldCloseOnTouch实现吧，如下：
+#+BEGIN_SRC csharp
+    /** @hide */
+    public boolean shouldCloseOnTouch(Context context, MotionEvent event) {
+        if (mCloseOnTouchOutside && event.getAction() == MotionEvent.ACTION_DOWN
+                && isOutOfBounds(context, event) && peekDecorView() != null) {
+            return true;
+        }
+        return false;
+    }
+#+END_SRC 
+- 这其实就是一个判断，判断mCloseOnTouchOutside标记及是否为ACTION_DOWN事件，同时判断event的x、y坐标是不是超出Bounds，然后检查FrameLayout的content的id的DecorView是否为空。其实没啥太重要的，这只是对于处理window边界之外的Touch事件有判断价值而已。
+- 所以，到此Activity的onTouchEvent分析完毕。
+** Android触摸事件综合总结
+- 到此整个Android的Activity->ViewGroup->View的触摸屏事件分发机制完全分析完毕。这时候你可以回过头看这三篇文章的例子，你会完全明白那些打印的含义与原理。
+- 当然，了解这些源码机制不仅对你写普通代码时有帮助，最重要的是对你想自定义装逼控件时有不可磨灭的基础性指导作用与技巧提示作用。
