@@ -2,7 +2,46 @@
 #+title: Android Fragments
 #+author: deepwaterooo
 
-* AndroidX下你得知道的Activity和Fragment的变化
+* 关于Fragment的onResume() 以及可见状态的判断
+- Fragment中有onResume()和onPause()方法，一般来说这两个方法是跟Activity绑定的，即触发Activity的这两个方法时就会触发Fragment的这两个方法，另外Fragment还有可见与不可见状态，但是Fragment中的onResume()/onPause()和可见/不可见完全是两码事。这里我将这两种情况做了一下分析，以做记录。
+** onResume()和onPause()
+- 这两个方法会跟随Activity而变化，但是也不一定只有经历Activity的生命周期才会触发，这又分两种情况：
+- 1. 在Activity中单独使用Fragment
+  - 单独使用Fragment的情况下，除了会跟随Activity的onResume和onPause的情况外，在当前Activity中添加一个Fragment时，被添加的Fragment都会调用onResume，这包括通过add和replace的方式添加；在Fragment销毁的情况下都会触发onPause，如果是add到回退栈的情况，back键就会触发onPause，如果是replace的情况，则被替换掉的Fragment会触发onPause。
+  - 如果Activity中添加了多个Fragment，那么当Activity触发onResume和onPause时，Activity中的每一个Fragment都会触发这两个方法，即便这个Fragment不在最顶层。
+- 2. 在ViewPager中使用Fragment
+  - 在ViewPager中使用Fragment时这两个方法就更加奇妙了，因为你看不见的Fragment也会触发onResume和onPause，这时跟ViewPager预加载相关，默认情况下，ViewPager左右会预加载1页，所以如果ViewPager中有四个Fragment A、B、C、D，当你展示A Fragment的时候，A和B两个Fragment都会触发onResume，当你切换到B，则C Fragment触发onResume，当你再切换到C，则A Fragment会触发onPause(这时A已经销毁了)，然后D Fragment会触发onResume，再回来的时候也是这样，如此反复。
+  - 即被ViewPager预加载的Fragment全部会调用onResume，被ViewPager销毁的Fragment全部会调用onPause。
+  - 当ViewPager所在的Activity触发onResume和onPause时，ViewPager中所有已创建的Fragment都会触发这两个方法（即包括ViewPager预加载的Fragment），比如假如你当前处于B Fragment, 当你按下Home键时，A B C三个Fragment都会触发onPause，当你再返回来的时候，A B C三个Fragment都会触发onResume。
+** Visible和Hidden
+- Fragment 中有两个方法isHidden()和isVisible()，注释说是可以用来判断其可见性，但是经过测试如果你是在Fragment的onResume/onPause方法中调用这两个方法判断是不准确的，onResume的方法中isVisible()有可能为false, 而onPause的方法中isVisible()也有可能为true。可见性需要通过下面两个方法做判断：
+#+BEGIN_SRC csharp
+@Override
+public void onHiddenChanged(boolean hidden) {
+    super.onHiddenChanged(hidden);
+}
+@Override
+public void setUserVisibleHint(boolean isVisibleToUser) {
+    super.setUserVisibleHint(isVisibleToUser);
+}
+#+END_SRC 
+- 这也分两种情况，onHiddenChanged是在单独使用Fragment的时候进行show/hide操作时使用，setUserVisibleHint是在ViewPager中使用时判断。
+- 1. 单独使用Fragment的情况
+  - 单独使用Fragment的情况比较简单，就是对Fragment进行show和hide的时候会回调onHiddenChanged方法。除此之外的操作，如add/replace/remove都不会触发这个方法。
+- 2. 在ViewPager中使用Fragment的情况
+  - 在ViewPager中使用Fragment时，同样跟ViewPager的预加载有关，假如我们有A B C D四个Fragment，初次打开默认是A Fragment，这时会调用A和B的setUserVisibleHint方法设置参数值为false, 紧接着它会再调用一次A的setUserVisibleHint方法设置参数值为true。当切换到B时，则会调用C和A的setUserVisibleHint方法参设置数值为false，当切换到C时，则会调用D和B的setUserVisibleHint方法设置参数值为false，当再次返回B时，则会调用A和C的setUserVisibleHint方法设置参数值为false。
+  - 即被ViewPager预加载的Fragment全部会调用setUserVisibleHint方法设置参数值为false，只有当前展示的那一页则会调用setUserVisibleHint方法设置参数值为true。另外值得注意的一点是setUserVisibleHint这个方法的调用时机很早，会在Fragment的onAttach()、onCreate()等方法之前调用，所以，如果你在这里用到了全局变量一定要判断是否初始化了。
+** 总结
+- 以上是经过测试分析的结果，看了一些博客，有些人喜欢将onResume和可见状态联合起来做Fragment的可见性的判断，这个是非常麻烦并且十分不靠谱的，因为在Fragment的onResume/onPause的时候它的可见状态是完全不确定的。因此不能把onResume/onPause和visible/hidden状态混为一谈，要分开对待，因为这两种有可能会交叉发生。
+
+* 其它一些零零碎碎的补充
+- 当碎片第一次被加载到屏幕上时，会依次执行onAttach（），onCreate（），onCreateView（），onActivityCreated（），onStart（）和onResume（）方法。
+- 当点击按钮切换到下一张图片时，第二张将第一张图片覆盖掉，此时用户看不到第一张图片，第一个碎片进入了停止状态。因此onPause（），onStop（）和onDestroyView（）方法会得到执行。当然如果在替换的时候没有调用addTobackStack（）方法，此时第一个碎片就会进入销毁状态，onDestroy（）和onDetach（）方法就会得到执行。
+- 接着按下Back键，第一个图片就会重新回到屏幕，由于第一个碎片重新回到了运行状态，因此onCreateView（），onActivityCreated（），onSart（）和onResume（）方法会得到执行。注意此时onCreate（）方法不会执行，因为我们借助了addToBackStack（）方法使得第一个碎片并没有被销毁。
+- 再次按下Back键后，依次会执行onPause（），onStop（），onDestroyView（）onDestroy（）和onDetach（）方法，最终将碎片销毁掉。
+- 另外值得一提的是，在碎片中你也是可以通过onSaveInstanceState（）方法来保存数据的，因为进入停止状态的碎片有可能在系统内存不足的时候被回收。保存下来的数据在onCreate（），onCreateView（）和onActivityCreated（）这3个方法中都可以重新得到，他们都含有一个Bundle类型的savedInstanceState参数。
+
+* AndroidX下你得知道的Activity和Fragment的变化: 可能还稍微有点作显得假大空而缺少实际体会
 ** 在构造器中传入布局 ID
 - 从 AndroidX  AppCompat 1.1.0 和 Fragment 1.1.0 ( 译者注：AppCompat 包含 Fragment，且 Fragment 包含 Activity，详情见【整理】Jetpack 主要组件的依赖及传递关系 )开始，您可以使用将 layoutId 作为参数的构造函数：
 - class MyActivity : AppCompatActivity(R.layout.my_activity)class MyFragmentActivity: FragmentActivity(R.layout.my_fragment_activity)class MyFragment : Fragment(R.layout.my_fragment)
@@ -115,3 +154,69 @@ supportFragmentManager.commit {
 #+END_SRC
 *** FragmentContainerView
 - 一件小而重要的事情。如果您将 FrameLayout 用作 Fragment 的容器，则应改用 FragmentContainerView 。它修复了一些动画 z轴索引顺序问题和窗口插入调度。从 AndroidX Fragment 1.2.0 开始可以使用 FragmentContainerView。
+
+* Fragment的生命周期函数详解
+** 几个常用生命周期函数的简介
+- onAttach()：Fragment和Activity相关联时调用。可以通过该方法获取Activity引用，还可以通过getArguments()获取参数。
+- onCreate()：Fragment被创建时调用。
+- onCreateView()：创建Fragment的布局。
+- onActivityCreated()：当Activity完成onCreate()时调用。
+- onStart()：当Fragment可见时调用。
+- onResume()：当Fragment可见且可交互时调用。
+- onPause()：当Fragment不可交互但可见时调用。
+- onStop()：当Fragment不可见时调用。
+- onDestroyView()：当Fragment的UI从视图结构中移除时调用。
+- onDestroy()：销毁Fragment时调用。
+- onDetach()：当Fragment和Activity解除关联时调用。
+** Fragment生命周期解析
+*** 当一个fragment被创建的时候：
+- onAttach()
+- onCreate()
+- onCreateView() //
+- onActivityCreated()
+*** 当这个fragment对用户可见的时候，它会经历以下状态。
+- onStart()
+- onResume()
+*** 当这个fragment进入“后台模式”的时候，它会经历以下状态。
+onPause()
+onStop()
+*** 当这个fragment被销毁了（或者持有它的activity被销毁了）：
+- onPause()
+- onStop()
+- onDestroyView() //
+- onDestroy()
+- onDetach()
+*** 就像Activity一样，在以下的状态中，可以使用Bundle对象保存一个fragment的对象。
+- onCreate()
+- onCreateView() // 
+- onActivityCreated()
+** 其他场景的调用
+*** 屏幕灭掉
+- onPause() 
+- onSaveInstanceState() // 这里可以保存
+- onStop()
+*** 屏幕解锁
+- onStart() 
+- onResume()
+*** 切换到其他Fragment
+- onPause() 
+- onStop() 
+- onDestroyView() // 
+*** 切换回本身的Fragment
+- onCreateView() // 
+- onActivityCreated() 
+- onStart() 
+- onResume()
+*** 回到桌面: 这里写得好像是不对
+- onPause() 
+- onSaveInstanceState() // 
+- onStop()
+*** 回到应用
+- onStart() 
+- onResume()
+*** 退出应用
+- onPause() 
+- onStop()
+- onDestroyView() //
+- onDestroy() 
+- onDetach()
