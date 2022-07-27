@@ -772,7 +772,6 @@ class DownloadTask extends AsyncTask<Integer, Integer, String>{
 - 适用范围
   - 批处理任务
 
-
 *  IntentService
 - IntentService 继承自 Service 类，用于启动一个异步服务任务，它的内部是通过 HandlerThread 来实现异步处理任务的。
 - 作用

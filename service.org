@@ -21,6 +21,312 @@
     - (要实现 Parcelable 接口,定义一个 AIDL 文件声明该类型,在其他 AIDL 中使用该类型需要 import 包)
 - 2. 服务端需要提供一个业务接口的实现类，通常继承 Stub 类
 - 3. 通过 Service 的 onBind() 方法返回被绑定的业务对象
+* abstract class IntentService extends Service 源码通讯简单注释
+#+BEGIN_SRC csharp
+/**
+ * IntentService是一种特殊的Service，它继承于Service并且还是个抽象类
+ * 所以我们必须创建它的子类才能使用IntentService
+ * IntentService可以用来执行后台任务，当任务执行完后就会“自杀”
+ * 因为它自己也是个服务，所以优先级高于普通的线程，不容易被系统所干掉
+ * 所以IntentService比较适合执行优先级较高的后台任务
+ */
+public abstract class IntentService extends Service {
+    // HandlerThread的looper
+    private volatile Looper mServiceLooper;
+    // 通过looper创建的一个Handler对象，用于处理消息
+    private volatile ServiceHandler mServiceHandler;
+    private String mName;
+    private boolean mRedelivery;
+    /**
+     * 通过HandlerThread线程中的looper对象构造的一个Handler对象
+     * 可以看到这个handler中主要就是处理消息
+     * 并且将我们的onHandlerIntent方法回调出去
+     * 然后停止任务，销毁自己
+     */
+    private final class ServiceHandler extends Handler {
+        public ServiceHandler(Looper looper) {
+            super(looper);
+        }
+        @Override
+            public void handleMessage(Message msg) {
+            /**
+             * 收到消息后，会将Intent对象传递给onHandlerIntent方法去处理
+             * 注意这个Intent对象的内容和外界Activity中startService(intent)
+             * 中的intent的内容是完全一致的
+             * 通过这个intent对象可以得到外界启动IntentService时所传递的参数
+             * 通过这些参数我们就可以区分不同的业务逻辑
+             * 这样onHandlerIntent就可以对不同的逻辑做出不同的操作了
+             * 当onHandlerIntent方法执行结束后，IntentService会通过
+             * stopSelf(int startId)方法尝试停止服务
+             * 之所以使用stopSelf(int startId)而不是stopSelf()来停止
+             * 是因为stopSelf()会马上停止服务，但是有可能还有消息未处理
+             * stopSelf(int startId)则会等所有的消息都处理完后才销毁自己
+             * 一般来说的话，stopSelf(int startId)在停止之前会判断
+             * 最近启动服务的次数和startId是不是相等的，如果相等就立刻停止
+             * 如果不相等说明还有别的消息没处理，就不停止服务
+             * 具体的要看AMS中的stopServiceToken方法的实现
+             */
+            onHandleIntent((Intent)msg.obj);
+            stopSelf(msg.arg1);
+        }
+    }
+    /**
+     * 构造函数，可以传递一个name参数
+     */
+    public IntentService(String name) {
+        super();
+        mName = name;
+    }
+    public void setIntentRedelivery(boolean enabled) {
+        mRedelivery = enabled;
+    }
+    /**
+     * 当我们的IntentService第一次启动的时候，onCreate方法会执行一次
+     * 可以看到方法里创建了一个HandlerThread
+     * HandlerThread继承Thread，它是一种可以使用Handler的Thread
+     * 它的run方法里通过Looper.prepare()来创建消息队列
+     * 并通过Looper.loop()来开启消息循环，所以就可以在其中创建Handler了
+     * 这里我们通过HandlerThread得到一个looper对象
+     * 并且使用它的looper对象来构造一个Handler对象，就是我们上面看到的那个
+     * 这样做的好处就是通过mServiceHandler发出的消息都是在HandlerThread中执行
+     * 所以从这个角度来看，IntentService是可以执行后台任务的
+     */
+    @Override
+        public void onCreate() {
+        super.onCreate();
+        HandlerThread thread = new HandlerThread("IntentService[" + mName + "]");
+        thread.start();
+        mServiceLooper = thread.getLooper();
+        mServiceHandler = new ServiceHandler(mServiceLooper);
+    }
+    /**
+     * 这个方法里的实现其实就很简单了，就是通过handler发送了一个消息
+     * 把我们的intent对象和startId发送出去
+     * 在我们上面的handleMessage()会接收到消息
+     * 并且通过onHandlerIntent()方法将对象回调给子类
+     */
+    @Override
+        public void onStart(@Nullable Intent intent, int startId) {
+        Message msg = mServiceHandler.obtainMessage();
+        msg.arg1 = startId;
+        msg.obj = intent;
+        mServiceHandler.sendMessage(msg);
+    }
+    /**
+     * 每次启动IntentService，onStartCommand()就会被调用一次
+     * 在这个方法里处理每个后台任务的intent
+     * 可以看到在这个方法里调用的是上方的onStart()方法
+     */
+    @Override
+        public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
+        onStart(intent, startId);
+        return mRedelivery ? START_REDELIVER_INTENT : START_NOT_STICKY;
+    }
+    /**
+     * 因为looper是无限循环轮询消息的一个机制，所以当我们明确不需要继续使用的话
+     * 那么我们就应该通过它的quit()方法来终止它的执行
+     * 这是个编程的好习惯，要记住哦！
+     */
+    @Override
+        public void onDestroy() {
+        mServiceLooper.quit();
+    }
+    /**
+     * 这个方法的注释写了：除非你为这个service提供了绑定，否则不需要实现这个方法
+     * 因为这个方法默认是返回null的
+     * 所以咱们不用太关注这个方法
+     */
+    @Override
+        @Nullable
+        public IBinder onBind(Intent intent) {
+        return null;
+    }
+    /**
+     * 这就是IntentService中定义的抽象方法
+     * 具体交由它自己的子类来实现
+     */ 
+    @WorkerThread
+        protected abstract void onHandleIntent(@Nullable Intent intent);
+}
+#+END_SRC 
 
-* 安卓 AIDL 讲得比较全面透彻，需要总结一下
+* 安卓 Service 知识细节二 -- 绑定服务和 AIDL 
 - https://www.jianshu.com/p/4e6eedff1bf6
+在上一章节了解了后台服务之后，接下来我们来分析一下绑定服务，也是细节最多的一个地方。绑定服务，就是通过bindService启动的服务。有了绑定服务，既可以让同一App的其他组件与当前的Service进行交互，也可以暴露当前App的某些功能，从而给其他的App来提供服务。
+绑定服务遵循的是服务器-客户端的模式，与Service绑定的组件就是客户端，然后Service向这些客户端提供接口对象，接口就代表了两者交互的协议。客户端拿到了之后，根据双方的通信协议，调用相应的函数，来实现自己的功能。所以所谓的服务也就是接口，接口就承担了不同的App，不同的模块之间的通信。
+** 一：生命周期
+- 首先，我们来看一下绑定服务的生命周期。相关的函数除了基本的onCreate，onDestroy之外，还有的就是：onBind，onUnBind，onRebind。我们从bindService开始一点点分析。
+- 当当前的App或者其他的App的某个组件，想绑定Service的时候，就需要调用bindService函数，签名如下：
+#+BEGIN_SRC csharp
+public abstract boolean bindService(Intent service, @NonNull ServiceConnection conn, @BindServiceFlags int flags);
+#+END_SRC 
+- 首先来看一下参数，
+- 第一个参数Intent，代表被绑定的Service。这里只使用显示Intent，不要使用隐式Intent。并且Android也在5.0之后的系统做了限制，隐式Intent是会出错的。
+- 第二个参数是ServiceConnection:
+#+BEGIN_SRC csharp
+private interface ServiceConnection() {
+    public void onServiceConnected(ComponentName name, IBinder servcie) {
+    }
+    public void onServiceDisconnected(ComponentName name) {
+    }
+}
+#+END_SRC 
+  - ServiceConnection是一个回调接口，因为调用bindService的时候，绑定成不成功可以通过返回值判断出来。但是Service返回的接口对象却是异步的，所以需要提交这个回调来接收。
+  - ServiceConnection的两个接口都是在当前应用的*主线程*里执行，onServiceConnected是用来接收接口对象的，当连接建立的时候该函数会被调用。
+  - onServiceDisconnected() 是在客户端与Service的连接意外中断的情况下，才会被调用。
+  - 如果我们是通过*unBindService*主动的断开连接，那么这个函数不会被调用。而且即便这个函数被调用了，但在系统眼里，这个连接还存在，所以在内存允许的情况下，系统会帮我们重连。
+- 第三个参数是个int类型的Flag，大多数情况下可以是0或者BIND_AUTO_CREATE。除此之外，这个参数也可以决定客户端所在进程的优先级对Service所在进程的优先级的影响。相关的Flag有BIND_IMPORTANT，BIND_ABOVE_CLIENT，BIND_WAIVE_PRIORITY等等，这个细节就不再这里仔细分析了，有兴趣的朋友可以查看源码。
+- 当有客户端通过bindService与我们的Service建立连接后，Service的onBind函数就会被调用：
+  #+BEGIN_SRC csharp
+  // return an IBinder through which clients can call on to the service
+public abstract IBinder onBind(Intent intent);
+#+END_SRC 
+- 然后Service在这里将接口对象返回给客户端，客户端就可以使用Service提供的服务了。同时，这个地方有很多细节需要分析一下。
+  - 首先，对于Service来说，一个Service可以同时对外提供多个业务接口，这是可以的。要是提供多个接口，就要求客户端传递不同类型的Intent，从而让Service在onBind里区分，把相应的接口返回去。这里说的是不同类型的Intent，有点类似于Intent和IntentFilter的匹配，规则也类似，只有Action，Category这些关键信息会影响匹配，extra不影响。所以如果客户端将只有extra不同的Intent传递给Service，Service的onBind是不会被多次调用的。也就是说，在Service眼里，一种类型的Intent对应一种接口。针对同一接口，Framework会缓存返回的IBinder对象，所以当多个客户端传递的都是同一类型的Intent，那么缓存的接口对象直接返回给客户端，onBind不会调用。换句话说，系统会将Service提供的某一接口对象缓存，只有bindService传递的是不同类型的Intent的时候，onBind才会被调用。
+  - 对于客户端来说，如果使用同样类型的Intent和同一个ServiceConnection，多次调用bindService，没有任何影响，后续的bindService都不会调用onBind和ServiceConnection。
+  - 对于客户端来说，如果是同类型的Intent，但是多个ServiceConnection，相当于多个客户端对同一个接口感兴趣，每个ServiceConnection都会被调用，onBind则不会。
+- 如果传递的Intent不是同一类型的，那么Service的onBind就会被调用。而当Service接收到不同类型的Intent之后，Service可以自己做选择，要么根据Intent的类型返回不同的接口，要么不做判断直接返回同一个接口。当返回同一个接口的时候，和前面分析的相同类型的Intent就一致了。只不过，当Framework发现Intent的类型不一样时，一定会调用Service的onBind，有点类似于Touch事件的onInterrcept，就是给Service一个判断的机会，即便你返回的是同一个接口。
+- 当Service会根据Intent的类型来判断，返回不同的接口时。正常来说，这个时候客户端的ServiceConnection也不是同一个，互不干扰。但有一个例外的情况，就是这个时候客户端传递的还是同一个ServiceConnection。那么这个时候的调用顺序是，先调用这个ServiceConnection的onServiceDisConnected，在调用onServiceConnected。这种情况是一个错误用法，没有实际意义，只是简单的验证一下。
+- 对于Service来说，当可以提供多个接口的时候，每一种类型的Intent对应一种接口，每一种接口会有多个连接。*当其中一种接口的连接全部断开之后，onUnbind会调用。*
+#+BEGIN_SRC csharp
+public boolean onUnbind(Intent intent) {
+    return false;
+}
+#+END_SRC 
+- 然后如果还有客户端要建立这种接口的连接，那Service可能调用onBind，也可能调用onRebind，取决于onUnbind的返回值。返回true，调用onRebind，返回false，就是onBind。
+  - 当所有接口的所有连接全断开之后，这个Service也就没存在的必要了，就会被系统销毁，onDestroy会被调用。
+  - 对于刚才提到的错误情况，不同的接口使用同一个ServiceConnection。这个时候，系统认为Service只有一个连接，但Service确实对外提供了多个接口。比如你调用了三次bindService，当调用unBindService断开连接的时候，由于这是唯一的连接，系统会销毁Service；但同时由于Service提供了三个接口，所以onUnbind会被调用三次。
+- 可见，绑定服务的生命周期不会像后台服务那样长期的在后台运行，直到被明确的关闭为止。在没有连接的情况下，系统会自动杀死。
+  - 这里有两个例外，一个是有可能bindService返回的是false，也就是说我们的连接没有成功。
+  - 另一种是，onBind可能会在某些情况下，返回的是null，那么ServiceConnection的回调函数也就不会被调用了。
+- *上面的这两种情况下，我们还是要调用unBindService来解绑，否则就会阻止Framework销毁Service，造成资源的浪费。*
+  - 还有一点就是，*unBindService不要调用多次，否则会报错。*
+  - 如果unBindService里面是一个没有通过bindService的ServiceConnection，也会报错。
+- 上面的这两种情况，*系统都会抛出这个 ServiceConnection 没有被注册的异常。*
+- 对于生命周期的分析，我们现在还只局限在单纯的绑定服务的角度来分析，但开发中，更多的可能是混合的，也就是既被startService，又被bindService了。这个时候，即便所有的连接全断开了，Service也不会被系统回收，因为它还会做为后台服务继续运行，直到关闭为止。
+** 二：IPC
+- 对于绑定服务，前面分析到，采用的是服务-客户端的交互模式，由服务向客户端提供接口来访问，而提供接口的方式还要根据具体情况来确定，具体有：
+  - *创建Binder的子类：*要求/客户端和Service/ *在同一个进程里*
+  - *Messenger*: /客户端和Service不在同一个进程里/，但*不允许Service并发，必须串行的处理客户端的请求*，这在某些情况下就会有串行压力
+  - *AIDL:* /客户端和Service不在同一个进程里/，但对Service /串行与并行/有很大的自由，都可以。只不过一般串行处理的话，Messenger就可以了，*所以一般使用AIDL，都是为了并行处理。*
+- 这三种方式，我们首先来看AIDL。AIDL,Android Interface Definition Language,也就是Android接口定义语言。概念上算是一种语言，有自己的规范，主要目的是为了定义接口，这个接口比较特殊，是为了实现进程间通信的，也就是IPC。
+- 当两个不同的进程通信的时候，会有很多问题。
+- 每个进程都有自己的内存空间，并且不共享，所以在我们进行数据传递的时候，尤其是自定义的复杂的类型，就需要把这些对象先分解为操作系统可以识别的原始的类型，到了另一个进程在组装成对象，这个过程也就是序列化与反序列化的过程。
+- 对于IPC来说，要解决两个核心问题：数据序列化和执行线程。
+  - 对于*线程* 这块，我们不需要操心，系统已经帮我们做了。系统会给每个进程维护一个专门用于进程间调用的线程池，进程A调用进程B的一个对象的函数的时候，进程A就在自己的执行线程里执行，而进程B是在这个线程池里执行，而且默认是同步阻塞的。*所以如果Serivce某个接口是耗时的，那么客户端就要避免在主线程里直接调用，避免ANR*。*客户端调用Service的函数是这样，Service回调客户端的接口同样是这样。*
+  - 线程没问题了之后，下一个就是*序列化*，包括接口的序列化和请求参数和返回结果的序列化，因为我们也需要把接口的对象，跨越进程传递，而这部分就是AIDL帮我们完成的。
+** 明白了AIDL的作用，和IPC的基本概念之后，我们来看一下AIDL的使用。
+- 首先是定义给客户端的接口，文件格式为aidl，里面的语法和java一样，例子如下：
+#+BEGIN_SRC csharp
+package com.me.prac;
+interface IServer {
+    String getName();
+    int getPID();
+    void error();
+}
+#+END_SRC 
+- 其实看代码，和一个java普通接口没什么区别。
+- 需要注意的地方是*AIDL支持的数据格式*：原始类型，String，CharSequence，List，Map，Parcelable和Aidl接口。
+  - *其中List和Map里面的元素也要是被支持的数据类型，由于它只支持Aidl接口，这意味这如果客户端将来要向Service注册一个回调接口，也必须是Aidl接口*。
+  - 对于Map，可以用Bundle来替代。Bundle就可以理解为支持Parcelable的key-value的数据结构，在这比Map更好一些。
+  - 只不过使用Bundle的时候，读取数据之前，先设置Classloader。在请求参数中，*除了原始类型之外，其他的都应该标明方向，in，out，inout*。这里要根据实际需要标明，毕竟是有损耗的。*同时，接口里的函数可以用oneway关键字来标明*。因为进程间函数调用默认是同步的，使用oneway可以更改这一行为，调用方调用完了函数可以即刻返回，不会阻塞。
+- 以上就是接口定义需要注意的细节，如果其中引用了自定义的Parcelable类型，即便和接口在同一个包下，也要显示的导入。而且对于AIDL相关的接口，类，交互的两个进程都需要有一份，并且路径一致。因为数据的传输就是序列化，反序列化的过程，接收的进程需要有这个类才能反序列化成功。所以AIDL相关的东西，最好放在同一个包下，到时候直接拷贝到另一个进程的程序里即可。
+- 在遵循AIDL的语言规范，定义完了ADIL接口之后，SDK会自动帮我们生成一个同名的java接口，并且里面有个叫Stub的内部抽象类，针对上面那个例子，生成的部分代码为：
+
+[[/Users/jennyhuang/myandr/pic/service_20220716_205252.png]]
+- 为了方便截图，这里只截取了一部分，格式也进行了调整。这个地方就涉及到了AIDL的精髓：Binder。
+- AIDL从定义上看只是一个接口定义语言，但在IPC通信的过程中，真正起作用的是生成的同名Java接口和内部的Stub类。
+- 也就是说，AIDL只是Android给我提供的一个工具类，简化了我们的开发，但并不是IPC的必需品，真正的核心是里面的Binder。
+- Binder最核心的两个数据类型是IInterface和IBinder。先来看一下IInterface:
+#+BEGIN_SRC csharp
+public interface IInterface {
+    public IBinder asBinder();
+}
+#+END_SRC 
+- *IInterface*是一个接口，是IPC需要使用到的根接口。当调用另一个进程的接口的时候，这个接口就一定要实现IInterface，而它里面的函数很简单，就一个asBinder，转化为对应的IBinder。IBinder和IInterface的对应关系后面会讲。
+- 接下来就是*IBinder*，它也是一个接口，但*一般不直接使用，使用的是它的实现类Binder*。
+  - Binder是个特殊的数据类型，是Android实现IPC的Binder机制的核心。它可以理解为一个媒介或者传输介质，可以在进程间传递，并且跨越进程边界之后，两个进程的Binder还是同一个。也就是说，*Binder从一个进程传递到另一个进程之后，也会保持唯一*。
+  - 这是一个很重要的特性，可以在IPC过程中，作为id啊或者token之类的，Activity启动的过程中就使用到了这个特性。
+  - 同时Binder会对应一个接口，也就是Service给客户端提供的接口。但是在Binder进程间传递的过程中，对应的接口会发生变化。*在发送方进程里，这个接口就是Binder自己。到了接收方进程里，就会变成一个代理*。这些东西可以在SDK生成的Stub里看到，由于不方便截图，这里就不贴代码了。
+- 以上就是Binder能够实现IPC的基础，其他的一些细节都是围绕这个展开。
+- *IBinder里面的函数主要包括这么几个：*
+  - *pingBinder()/isBinderAlive()*：这两个函数主要用来判断Binder所在的进程是否还存活。对于客户端来说，就是判断Service的进程是否还存活，从而   决定，我们还可不可以正常的调用服务。毕竟Service进程是有可能因为内存等原因意外中止的。
+  - *linkToDeath()/unlinToDeath()*：这是一对函数，里面的参数类型都是DeathRecipient。这是  一个接口，里面只有一个函数：
+  - *DeathRecipient:* 这是一个回调接口，当Service所在的进程被意外中止的时候，里面的binderDied()函数就会被调用。由于这是一个回调接口，而且还是跨进程调用，所以它会在客户端的线程池里执行。
+    #+BEGIN_SRC csharp
+    public interface DeathRecipient {
+        public void binderDied();
+    }
+    #+END_SRC 
+  - *transact()*：这是Binder机制中最重要的函数，翻译过来是交易。在Android眼里，两个    不同的进程的通信就类似于交易。既有请求参数的输入，也有响应结果的输出，这个函数会在Binder类里面有实现，后面会有分析。
+- 以上就是对IBinder这个核心类的简要分析，实际开发中，我们不会使用它，而是使用的实现类Binder。接下来，我们就以IServer这个简单的例子来分析一下Aidl的调用流程：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_210122.png]]
+- 在我们创建了Aidl接口之后，这就是sdk帮我们自动生成的同名的Java接口。继承了IInterface，这是要求，给其他进程调用的远程对象，都得实现这个接口，并且这个Java接口里有和Aidl里面定义一样的函数。这个接口里有一个名为*Stub的内部类*：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_210237.png]]
+- 这个Stub继承了Binder，又实现了刚才的IServer接口。这个类我们很熟悉，使用的时候，就是创建它的子类，然后将IServer里定义的函数实现，至于需不需多线程啊，线程安全这些问题看自己的需要，这里不在详细分析了，重点看*Aidl的调用流程*。
+- 接口里的逻辑定义完了之后，然后*创建自定义Stub子类的对象，将它通过onBind()函数返回给客户端。*
+- 我们看一下Stub的构造函数，它内部调用了attachInterface函数，这是一个定义在IBinder的函数，Binder中的实现为：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_210419.png]]
+- 代码很简单，就是很字段赋值。我们前面提到，可以认为每个Binder对象都对应一个IInterface类型的业务接口，它内部有个字段来存储。所以这个函数的意思就是赋值，并且这个接口有自己对应的一个描述符：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_210503.png]]
+- 通过attachInterface的代码实现，我们可以确定，在Service端，Binder对应的业务接口就是自己。接下来我们来看客户端，由于Aidl相关的接口在客户端也有一份，所以*sdk同样也会给客户端构建对应的Java接口和Stub，只不过没有了自定义的Stub子类*。而客户端绑定服务成功之后，就会以在ServiceConnection中接收到的IBinder对象为参数，调用IServer.Stub.asInterface函数，将其转化为对应的业务接口IServer。
+- 接下来我们看*asInterface()*的逻辑，它是一个静态函数：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_210728.png]]
+- 首先根据接口对应的描述符，来调用queryLocalInterface：
+#+BEGIN_SRC csharp
+@NonNull public IInterface queryLocalInterface(@NonNull String descriptor) {
+    if (mDescriptor.equals(descriptor)) {
+        return mOwner;
+    }
+    return null;
+}
+#+END_SRC 
+- 这个函数的意思是，在本地查询descriptor对应的接口的实现类。而这个实现类在客户端肯定是没有的，所以queryLocalInterface就会返回null。然后asInterface就会以接收到的IBinder为参数，构建一个IServer.Stub.Proxy对象，可以理解为，远程接口在本地的代理对象。
+
+#+BEGIN_SRC csharp
+private static class Proxy implements com.me.prac.IServer {
+    private android.os.IBinder mRemote;
+    Proxy(android.ox.IBinder remote) {
+        mRemote = remote;
+    }
+    @Override public android.os.IBinder asBinder() {
+        return mRemote;
+    }
+    public java.lang.String getInterfaceDescriptor() {
+        return DESCRIPTOR;
+    }
+}
+#+END_SRC 
+- Proxy内部有一个mRemote字段代表它指向的远程服务接口，那么客户端转化后的接口对象，实际上就是一个Proxy，我们调用服务，其实就是调用Proxy里面的函数。所以，Binder机制可以通俗点理解为Service给客户端提供接口，由Binder负责传递，Binder保持唯一，但在Service端对应的接口是我们自定义的Stub的子类，而在客户端对应的就是一个Proxy，并且这个Proxy通过mRemote字段指向远程接口。
+- 客户端拿到了接口，接下来就会调用某个函数来实现自己的逻辑。这里以getName为例，调用的也就是Proxy的getName()：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_211351.png]]
+- 首先声明了两个Parcel，分别代表这个函数的请求参数和返回结果。Parcel大家都不陌生，和Parcelable一块使用。源码给的解释是不能把Parcelable当成普通的序列化机制，它主要应用在Binder中，在内存的序列化方面性能极其高效，特别适用于在内存中，跨越进程的传递，但不适合持久化到存储设备和网络中传输。至于为什么Parcelable比较高效，笔者暂时还没仔细研究，网上的说法很多比较笼统，类似于一次拷贝之类的，这个等以后在补充吧。使用Parcelable的时候，是用Parcel作为数据的载体，将对象的状态存储其中，可以将Parcel理解为操作系统能识别的字节序列。由于函数的请求参数和返回结果都要跨进程，这个地方使用了Parcel来传递。到这里，我们可以说，Parcel和Binder就是IPC的两大关键媒介，一个传输请求参数这些数据，一个传输接口，有了它俩，才有了IPC通信的可能。
+- 对于getName来说，不需要参数，所以其中的_data字段是空的。创建了_data和_reply两个Parcel，并在需要的情况下将参数塞到Parcel里，然后调用了mRemote的transact函数，开始了跨进程的通信，交易。这里transact还是在客户端的执行线程里执行，并且会到导致当前线程挂起，等待结果的返回。而mRemote位于Service进程，所以Service那边会在系统维护的线程池里继续进行。transact的实现为：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_211423.png]]
+- 这个函数是final的，不可重写。它的第一个参数是方法对应的code。在系统生成的Stub里面，会给每一个Aidl接口定义的函数声明一个code：
+#+BEGIN_SRC csharp
+static final int TRANSACTION_getName = (android.os.IBinder.FIRST_CALL_TRANSACTION + 0);
+static final int TRANSACTION_getPID = (android.os.IBinder.FIRST_CALL_TRANSACTION + 1);
+static final int TRANSACTION_error = (android.os.IBinder.FIRST_CALL_TRANSACTION + 2);
+#+END_SRC 
+- 这些code都和相应的函数相匹配，一般都是从IBinder.FIRST_CALL_TRANSACTION逐步累加。然后接下来的两个参数就是装载请求参数和返回结果的Parcel。最后一个参数是个flag，如果是默认的调用，也就是同步的调用，就是0。如果该函数被oneway修饰了，那么就是 *FLAG_ONEWAY：*
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_211651.png]]
+- 然后transact就会调用onTransact函数，这个函数才是真正发生IPC的地方。我们这里只需要关注Stub的onTransact就好：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_211722.png]]
+- onTransact的代码也很好理解，根据code调用对应的函数。而getName就会调用我们自定义Stub子类的getName()函数，调用我们自定义的业务逻辑。执行完毕后，将返回值塞到reply里面。而这个reply也就是客户端传过来的，然后onTransact和transact函数依次返回，再回到Proxy的getName里面：
+
+  [[/Users/jennyhuang/myandr/pic/service_20220716_211753.png]]
+- 当mRemote.transact返回的时候，其中的_reply也就有数据了。它从_reply里面读取结果，从而返回，这样客户端就可以拿到getName的返回值。可见，Parcel也和Binder一样算是一个载体，自由的跨进程传输，里面装载数据，从而实现进程间的数据传递和通信。
+- 至此，我们通过一个最简单的例子，把AIDL的调用过程分析完了。这里总结一下，对于Android系统下的IPC而言，真正的核心就是Binder。AIDL只是辅助，相当于是sdk给我们提供的工具类，帮我们自动生成了代码，但他并不是必须的。即便没有Aidl接口，我们也可以自己写出对应的Java接口和Stub。同时，bindService和ServiceConnection严格意义上来说，也不是必须的。比如在Framework中，像ServiceManager，AMS也大量的使用到了Binder，但他们就没有用到bindService。基于Binder实现IPC的话，真正要做的是Binder的传递和Binder到接口的转换，bindService只是Android系统为我们普通的App提供的传递Binder对象的方式而已。Android IPC真正的核心就是Binder，在依赖于Parcel，分别实现了接口和数据跨进程的传递，从而才有了跨进程通信/交易的可能，其他的只是基于此的辅助手段。
+- 同时，任玉刚大神的《Android开发艺术探索》里也提到了AIDL的一些常见问题扩展，包括权限验证，死亡通知，回调接口注册和Binder连接池等等。回调接口注册用到了RemoteCallbackList，源码也不复杂，关键用到了Binder的唯一性。大家可以自己看一下，这里就不再多说了。其中Binder连接池，在Android系统里也有类似的概念。比如Activity Manager Service，这个AMS服务，归根结底也就是系统的服务进程给我们提供的一个接口对象，类型为IActivityManager，在获得这个接口对象的时候，就是通过ServiceManager的getService来查询到的，和连接池的概念很相似，具体的在后续的Activity的启动过程中会有详细描述。
+- 至此，我们把Service给客户端提供接口的方式之一AIDL 的细节分析完了。除此之外，Service还可以通过Messenger和Binder子类的方式来提供接口，由于篇幅原因，下一章节会在分析。
+- 参考：https://developer.android.google.cn/guide/components/aidl
