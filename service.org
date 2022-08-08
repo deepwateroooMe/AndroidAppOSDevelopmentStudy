@@ -150,6 +150,54 @@ public abstract class IntentService extends Service {
 }
 #+END_SRC 
 
+* 透彻解析安卓Handler: Android--多线程之Handler
+- https://www.cnblogs.com/plokmju/p/android_Handler.html
+** 前言
+- Android的消息传递机制是另外一种形式的“事件处理”，这种机制主要是为了解决Android应用中多线程的问题，在Android中不允许Activity新启动的线程访问该Activity里的UI组件，这样会导致新启动的线程无法改变UI组件的属性值。但实际开发中，很多地方需要在工作线程中改变UI组件的属性值，比如下载网络图片、动画等等。本篇博客主要介绍Handler是如何发送与处理线程上传递来的消息，并讲解Message的几种传递数据的方式，最后均会以小Demo来演示。
+** Handler
+- Handler，它直接继承自Object，一个Handler允许发送和处理Message或者Runnable对象，并且会关联到主线程的MessageQueue中。每个Handler具有一个单独的线程，并且关联到一个消息队列的线程，就是说一个Handler有一个固有的消息队列。当实例化一个Handler的时候，它就承载在一个线程和消息队列的线程，这个Handler可以把Message或Runnable压入到消息队列，并且从消息队列中取出Message或Runnable，进而操作它们。
+- Handler主要有两个作用：
+  - 在工作线程中发送消息。
+  - 在UI线程中获取、处理消息。
+- 上面介绍到Handler可以把一个Message对象或者Runnable对象压入到消息队列中，进而在UI线程中获取Message或者执行Runnable对象，所以Handler把压入消息队列有两大体系，Post和sendMessage：
+  - Post：Post允许把一个Runnable对象入队到消息队列中。它的方法有：post(Runnable)、postAtTime(Runnable,long)、postDelayed(Runnable,long)。
+  - sendMessage：sendMessage允许把一个包含消息数据的Message对象压入到消息队列中。它的方法有：sendEmptyMessage(int)、sendMessage(Message)、sendMessageAtTime(Message,long)、sendMessageDelayed(Message,long)。
+- 从上面的各种方法可以看出，不管是post还是sendMessage都具有多种方法，它们可以设定Runnable对象和Message对象被入队到消息队列中，是立即执行还是延迟执行。
+** Post
+- 对于Handler的Post方式来说，它会传递一个Runnable对象到消息队列中，在这个Runnable对象中，重写run()方法。一般在这个run()方法中写入需要在UI线程上的操作。
+- 在Handler中，关于Post方式的方法有：
+  - boolean post(Runnable r)：把一个Runnable入队到消息队列中，UI线程从消息队列中取出这个对象后，立即执行。
+  - boolean postAtTime(Runnable r,long uptimeMillis)：把一个Runnable入队到消息队列中，UI线程从消息队列中取出这个对象后，在特定的时间执行。
+  - boolean postDelayed(Runnable r,long delayMillis)：把一个Runnable入队到消息队列中，UI线程从消息队列中取出这个对象后，延迟delayMills秒执行
+  - void removeCallbacks(Runnable r)：从消息队列中移除一个Runnable对象。
+** Message
+- Handler如果使用sendMessage的方式把消息入队到消息队列中，需要传递一个Message对象，而*在Handler中，需要重写handleMessage()方法，用于获取工作线程传递过来的消息，此方法运行在UI线程上。*下面先介绍一下Message。
+- Message是一个FINAL类，所以不可被继承。Message封装了线程中传递的消息，如果对于一般的数据，Message提供了getData()和setData()方法来获取与设置数据，其中操作的数据是一个Bundle对象.
+  - 这个Bundle对象提供一系列的getXxx()和setXxx()方法用于传递基本数据类型的键值对，
+    - 对于基本数据类型，使用起来很简单，这里不再详细讲解。
+    - 而对于复杂的数据类型，如一个对象的传递就要相对复杂一些。在Bundle中提供了两个方法，专门用来传递对象的，但是这两个方法也有相应的限制，需要实现特定的接口，
+  - 当然，一些Android自带的类，其实已经实现了这两个接口中的某一个，可以直接使用。方法如下：
+    - putParcelable(String key,Parcelable value)：需要传递的对象类实现Parcelable接口。
+    - pubSerializable(String key,Serializable value)：需要传递的对象类实现Serializable接口。
+- 还有另外一种方式在Message中传递对象，那就是使用Message自带的obj属性传值，它是一个Object类型，所以可以传递任意类型的对象，Message自带的有如下几个属性：
+  - int arg1：参数一，用于传递不复杂的数据，复杂数据使用setData()传递。
+  - int arg2：参数二，用于传递不复杂的数据，复杂数据使用setData()传递。
+  - Object obj：传递一个任意的对象。
+  - int what：定义的消息码，一般用于设定消息的标志。
+-  对于Message对象，一般并不推荐直接使用它的构造方法得到，而是建议通过使用*Message.obtain()这个静态的方法或者Handler.obtainMessage()获取。*
+  - Message.obtain()会从消息池中获取一个Message对象，如果消息池中是空的，才会使用构造方法实例化一个新Message，这样有利于消息资源的利用。并不需要担心消息池中的消息过多，它是有上限的，上限为10个。
+  - Handler.obtainMessage()具有多个重载方法，如果查看源码，会发现其实Handler.obtainMessage()在内部也是调用的Message.obtain()。
+- Message.obtain()方法具有多个重载方法，大致可以分为为两类:
+  - 一类是无需传递Handler对象，对于这类的方法，当填充好消息后，需要调用Handler.sendMessage()方法来发送消息到消息队列中。
+  - 第二类需要传递一个Handler对象，这类方法可以直接使用Message.sendToTarget()方法发送消息到消息队列中，这是因为在Message对象中有一个私有的Handler类型的属性Target，当时obtain方法传递进一个Handler对象的时候，会给Target属性赋值，当调用sendToTarget()方法的时候，实际在它内部还是调用的Target.sendMessage()方法。
+- 在Handler中，也定义了一些发送空消息的方法，如：sendEmptyMessage(int what)、sendEmptyMessageDelayed(int what,long delayMillis)，看似这些方法没有使用Message就可以发送一个消息，但是如果查看源码就会发现，其实内部也是从Message.obtain()方法中获取一个Message对象，然后给属性赋值，最后使用sendMessage()发送消息到消息队列中。
+- Handler中，与Message发送消息相关的方法有：
+  - Message obtainMessage()：获取一个Message对象。
+  - boolean sendMessage()：发送一个Message对象到消息队列中，并*在UI线程取到消息后，立即执行。*
+  - boolean sendMessageDelayed()：发送一个Message对象到消息队列中，在UI线程取到消息后，延迟执行。
+  - boolean sendEmptyMessage(int what)：发送一个空的Message对象到队列中，并在UI线程取到消息后，立即执行。
+  - boolean sendEmptyMessageDelayed(int what,long delayMillis)：发送一个空Message对象到消息队列中，在UI线程取到消息后，延迟执行。
+  - void removeMessage()：从消息队列中移除一个未响应的消息。
 * 安卓 Service 知识细节二 -- 绑定服务和 AIDL 
 - https://www.jianshu.com/p/4e6eedff1bf6
 在上一章节了解了后台服务之后，接下来我们来分析一下绑定服务，也是细节最多的一个地方。绑定服务，就是通过bindService启动的服务。有了绑定服务，既可以让同一App的其他组件与当前的Service进行交互，也可以暴露当前App的某些功能，从而给其他的App来提供服务。
@@ -165,16 +213,14 @@ public abstract boolean bindService(Intent service, @NonNull ServiceConnection c
 - 第二个参数是ServiceConnection:
 #+BEGIN_SRC csharp
 private interface ServiceConnection() {
-    public void onServiceConnected(ComponentName name, IBinder servcie) {
-    }
-    public void onServiceDisconnected(ComponentName name) {
-    }
+    public void onServiceConnected(ComponentName name, IBinder servcie) {}
+    public void onServiceDisconnected(ComponentName name) {}
 }
 #+END_SRC 
-  - ServiceConnection是一个回调接口，因为调用bindService的时候，绑定成不成功可以通过返回值判断出来。但是Service返回的接口对象却是异步的，所以需要提交这个回调来接收。
-  - ServiceConnection的两个接口都是在当前应用的*主线程*里执行，onServiceConnected是用来接收接口对象的，当连接建立的时候该函数会被调用。
+  - ServiceConnection是一个回调接口类，因为调用bindService()的时候，绑定成不成功可以通过返回值判断出来。但是Service返回的接口对象却是异步的，所以需要提交这个回调来接收。
+  - ServiceConnection的两个接口都是在当前应用的*主线程*里执行，onServiceConnected()是用来接收接口对象的，当连接建立的时候该函数会被调用。
   - onServiceDisconnected() 是在客户端与Service的连接意外中断的情况下，才会被调用。
-  - 如果我们是通过*unBindService*主动的断开连接，那么这个函数不会被调用。而且即便这个函数被调用了，但在系统眼里，这个连接还存在，所以在内存允许的情况下，系统会帮我们重连。
+  - *如果我们是通过unBindService()主动的断开连接，那么这个函数不会被调用。而且即便这个函数被调用了，但在系统眼里，这个连接还存在，所以在内存允许的情况下，系统会帮我们重连。*
 - 第三个参数是个int类型的Flag，大多数情况下可以是0或者BIND_AUTO_CREATE。除此之外，这个参数也可以决定客户端所在进程的优先级对Service所在进程的优先级的影响。相关的Flag有BIND_IMPORTANT，BIND_ABOVE_CLIENT，BIND_WAIVE_PRIORITY等等，这个细节就不再这里仔细分析了，有兴趣的朋友可以查看源码。
 - 当有客户端通过bindService与我们的Service建立连接后，Service的onBind函数就会被调用：
   #+BEGIN_SRC csharp
@@ -182,28 +228,45 @@ private interface ServiceConnection() {
 public abstract IBinder onBind(Intent intent);
 #+END_SRC 
 - 然后Service在这里将接口对象返回给客户端，客户端就可以使用Service提供的服务了。同时，这个地方有很多细节需要分析一下。
-  - 首先，对于Service来说，一个Service可以同时对外提供多个业务接口，这是可以的。要是提供多个接口，就要求客户端传递不同类型的Intent，从而让Service在onBind里区分，把相应的接口返回去。这里说的是不同类型的Intent，有点类似于Intent和IntentFilter的匹配，规则也类似，只有Action，Category这些关键信息会影响匹配，extra不影响。所以如果客户端将只有extra不同的Intent传递给Service，Service的onBind是不会被多次调用的。也就是说，在Service眼里，一种类型的Intent对应一种接口。针对同一接口，Framework会缓存返回的IBinder对象，所以当多个客户端传递的都是同一类型的Intent，那么缓存的接口对象直接返回给客户端，onBind不会调用。换句话说，系统会将Service提供的某一接口对象缓存，只有bindService传递的是不同类型的Intent的时候，onBind才会被调用。
-  - 对于客户端来说，如果使用同样类型的Intent和同一个ServiceConnection，多次调用bindService，没有任何影响，后续的bindService都不会调用onBind和ServiceConnection。
-  - 对于客户端来说，如果是同类型的Intent，但是多个ServiceConnection，相当于多个客户端对同一个接口感兴趣，每个ServiceConnection都会被调用，onBind则不会。
-- 如果传递的Intent不是同一类型的，那么Service的onBind就会被调用。而当Service接收到不同类型的Intent之后，Service可以自己做选择，要么根据Intent的类型返回不同的接口，要么不做判断直接返回同一个接口。当返回同一个接口的时候，和前面分析的相同类型的Intent就一致了。只不过，当Framework发现Intent的类型不一样时，一定会调用Service的onBind，有点类似于Touch事件的onInterrcept，就是给Service一个判断的机会，即便你返回的是同一个接口。
-- 当Service会根据Intent的类型来判断，返回不同的接口时。正常来说，这个时候客户端的ServiceConnection也不是同一个，互不干扰。但有一个例外的情况，就是这个时候客户端传递的还是同一个ServiceConnection。那么这个时候的调用顺序是，先调用这个ServiceConnection的onServiceDisConnected，在调用onServiceConnected。这种情况是一个错误用法，没有实际意义，只是简单的验证一下。
-- 对于Service来说，当可以提供多个接口的时候，每一种类型的Intent对应一种接口，每一种接口会有多个连接。*当其中一种接口的连接全部断开之后，onUnbind会调用。*
+  - 首先，对于Service来说，*一个Service可以同时对外提供多个业务接口，这是可以的*。要是提供多个接口，就*要求客户端传递不同类型的Intent*，从而让Service在onBind()里区分，把相应的接口返回去。这里说的是*不同类型的Intent，有点类似于Intent和IntentFilter的匹配，规则也类似，只有Action，Category这些关键信息会影响匹配，extra不影响。*所以如果客户端将只有extra不同的Intent传递给Service，Service的onBind是不会被多次调用的。也就是说，*在Service眼里，一种类型的Intent对应一种接口。针对同一接口，Framework会缓存返回的IBinder对象，所以当多个客户端传递的都是同一类型的Intent，那么缓存的接口对象直接返回给客户端，onBind()不会调用。*换句话说，系统会将Service提供的某一接口对象缓存，只有bindService()传递的是不同类型的Intent的时候，onBind()才会被调用。
+  - 对于客户端来说，如果使用*同样类型的Intent和同一个ServiceConnection，多次调用bindService()，没有任何影响*，后续的bindService()都不会调用onBind()和ServiceConnection。
+  - 对于客户端来说，如果是*同类型的Intent，但是多个ServiceConnection，相当于多个客户端对同一个接口感兴趣，每个ServiceConnection都会被调用，onBind()则不会*。
+- *如果传递的Intent不是同一类型的，那么Service的onBind()就会被调用*。而*当Service接收到不同类型的Intent之后，Service可以自己做选择，要么根据Intent的类型返回不同的接口，要么不做判断直接返回同一个接口*。当返回同一个接口的时候，和前面分析的相同类型的Intent就一致了。只不过，*当Framework发现Intent的类型不一样时，一定会调用Service的onBind()，有点类似于Touch事件的onInterrcept，就是给Service一个判断的机会，即便你返回的是同一个接口*。
+- *当Service会根据Intent的类型来判断，返回不同的接口时,正常来说，这个时候客户端的ServiceConnection也不是同一个，互不干扰*。但有一个例外的情况，就是*如果这个时候客户端传递的还是同一个ServiceConnection。那么这个时候的调用顺序是，先调用这个ServiceConnection的onServiceDisconnected()，再调用onServiceConnected()。*这种情况是一个错误用法，没有实际意义，只是简单的验证一下。
+- 对于Service来说，*当可以提供多个接口的时候，每一种类型的Intent对应一种接口，每一种接口会有多个连接*。*当其中一种接口的连接全部断开之后，onUnbind()会调用。*
 #+BEGIN_SRC csharp
 public boolean onUnbind(Intent intent) {
     return false;
 }
 #+END_SRC 
-- 然后如果还有客户端要建立这种接口的连接，那Service可能调用onBind，也可能调用onRebind，取决于onUnbind的返回值。返回true，调用onRebind，返回false，就是onBind。
+- 然后*如果还有客户端要建立这种接口的连接，那Service可能调用onBind()，也可能调用onRebind()，取决于onUnbind()的返回值。返回true，调用onRebind()，返回false，就是onBind()。*
   - 当所有接口的所有连接全断开之后，这个Service也就没存在的必要了，就会被系统销毁，onDestroy会被调用。
-  - 对于刚才提到的错误情况，不同的接口使用同一个ServiceConnection。这个时候，系统认为Service只有一个连接，但Service确实对外提供了多个接口。比如你调用了三次bindService，当调用unBindService断开连接的时候，由于这是唯一的连接，系统会销毁Service；但同时由于Service提供了三个接口，所以onUnbind会被调用三次。
+  - 对于刚才提到的错误情况，*不同的接口使用同一个ServiceConnection。这个时候，系统认为Service只有一个连接，但Service确实对外提供了多个接口。比如你调用了三次bindService()，当调用unBindService()断开连接的时候，由于这是唯一的连接，系统会销毁Service；但同时由于Service提供了三个接口，所以onUnbind()会被调用三次。*
 - 可见，绑定服务的生命周期不会像后台服务那样长期的在后台运行，直到被明确的关闭为止。在没有连接的情况下，系统会自动杀死。
-  - 这里有两个例外，一个是有可能bindService返回的是false，也就是说我们的连接没有成功。
-  - 另一种是，onBind可能会在某些情况下，返回的是null，那么ServiceConnection的回调函数也就不会被调用了。
+  - 这里有两个例外，一个是*有可能bindService()返回的是false，也就是说我们的连接没有成功。*
+  - 另一种是，*onBind()可能会在某些情况下，返回的是null，那么ServiceConnection的回调函数也就不会被调用了。*
 - *上面的这两种情况下，我们还是要调用unBindService来解绑，否则就会阻止Framework销毁Service，造成资源的浪费。*
   - 还有一点就是，*unBindService不要调用多次，否则会报错。*
   - 如果unBindService里面是一个没有通过bindService的ServiceConnection，也会报错。
 - 上面的这两种情况，*系统都会抛出这个 ServiceConnection 没有被注册的异常。*
-- 对于生命周期的分析，我们现在还只局限在单纯的绑定服务的角度来分析，但开发中，更多的可能是混合的，也就是既被startService，又被bindService了。这个时候，即便所有的连接全断开了，Service也不会被系统回收，因为它还会做为后台服务继续运行，直到关闭为止。
+- 对于生命周期的分析，我们现在还*只局限在单纯的绑定服务的角度来分析，但开发中，更多的可能是混合的，也就是既被startService()，又被bindService()了。这个时候，即便所有的连接全断开了，Service也不会被系统回收，因为它还会做为后台服务继续运行，直到关闭为止。*
+** IBinder 相关
+- IBinder是远程对象的基本接口，是为高性能而设计的轻量级远程调用机制的核心部分。但它不仅用于远程调用，也可以用于进程内调用。这个接口定义了与远程对象交互的协议，一般不直接实现这个接口，而是从它的实现类Binder中继承。
+- 通过IBinder进行服务的交互一般有两种方式： 
+  - 一种方式是*使用IBinder.transact()方法向远端的IBinder对象发送一个发出调用，会回调远端的Binder.onTransact()方法，这个方法传递的数据是Parcel*。
+    - Parcel是一种缓冲区，除了数据外还有有一些描述它内容的元素，如果查看源码的话会发现，Parcel本质上是一个Serialize，只是它在内存中完成了序列化和反序列化，利用的是连续的内存空间，因此效率会更高，并且AIDL的数据也是通过Parcel来交互的。
+  - 另外一种方法就是*抛弃IBinder中原生的方法，使用自定义的接口方法进行数据交互*，这也是Android官方推荐绑定服务的一种数据交互方式。
+- *不管是使用transact()给远程服务交互，还是使用自定义的接口交互，都是同步执行的，直到远程服务执行完并返回结果才会继续向下执行。*
+** Messager
+- Messenger引用了一个Handler独享？，可以使用Messenger.send(Message msg)方法跨进程向服务发送消息，只需要在服务中使用Handler创建一个Messenger，宿主（客户端）持有这个Messenger就可以与服务进行通信。之前介绍的handler+Message的通信方式不同，那都是在同一个进程中的，从工作线程持有一个主线程的Handler对象，从而向主线程发送消息，这里不了解的可以看看之前的博客：Android--多线程之Handler（https://www.cnblogs.com/plokmju/p/android_Handler.html ）。
+- 上面介绍过了，*Android可以使用IBinder实现跨进程通信，并且也将Handler与IBinder结合起来实现跨进程发送消息。*
+- 当然这里提一下，Messenger管理的是一个消息队列，它会依据消息进入的先后次序予以执行（以串口的方式执行，不适应于大量大规模交互），所以也不需要把服务设计为线程安全是。
+- 实现Messenger实现进程通信，主要有以下几点注意：
+  - 在服务中实现一个Handler类，并实例化它，在handleMessage()方法中接收客户端的请求（这是*远程服务端*）。
+  - 在服务中使用这个Handler对象创建一个Messenger对象（这是*远程服务端*）。
+  - 使用Messenger对象的getBinder()方法返回一个IBinder对象作为onBind()的返回值返回给客户端（这是*远程服务端*）。
+  - 在客户端使用IBinder实例化一个Messenger对象，并使用它向服务端发送信息（这是*客户端*）。
+
 ** 二：IPC
 - 对于绑定服务，前面分析到，采用的是服务-客户端的交互模式，由服务向客户端提供接口来访问，而提供接口的方式还要根据具体情况来确定，具体有：
   - *创建Binder的子类：*要求/客户端和Service/ *在同一个进程里*
@@ -330,3 +393,999 @@ static final int TRANSACTION_error = (android.os.IBinder.FIRST_CALL_TRANSACTION 
 - 同时，任玉刚大神的《Android开发艺术探索》里也提到了AIDL的一些常见问题扩展，包括权限验证，死亡通知，回调接口注册和Binder连接池等等。回调接口注册用到了RemoteCallbackList，源码也不复杂，关键用到了Binder的唯一性。大家可以自己看一下，这里就不再多说了。其中Binder连接池，在Android系统里也有类似的概念。比如Activity Manager Service，这个AMS服务，归根结底也就是系统的服务进程给我们提供的一个接口对象，类型为IActivityManager，在获得这个接口对象的时候，就是通过ServiceManager的getService来查询到的，和连接池的概念很相似，具体的在后续的Activity的启动过程中会有详细描述。
 - 至此，我们把Service给客户端提供接口的方式之一AIDL 的细节分析完了。除此之外，Service还可以通过Messenger和Binder子类的方式来提供接口，由于篇幅原因，下一章节会在分析。
 - 参考：https://developer.android.google.cn/guide/components/aidl
+
+* 深入理解Android 之Service绑定流程：通过一个例子以及源码里必要的细节来理解这个过程
+** 服务绑定，使用AIDL进程间通信: 主要是相关的APIs接口设计 
+这里不会过多的深究AIDL进程通信底层原理，而是通过简单Demo开启一个新的进程远程服务与Activity绑定来简单回顾 bindService 方式Service绑定。
+** 编写AIDL文件，定义获取远程服务数据接口：主要是相关的APIs接口设计 
+*** 远程服务接口描述
+#+BEGIN_SRC csharp
+// IRemoteService.aidl
+package mao.com.testaidl;
+//注意引用的包名需要与 对应类路径一致
+import mao.com.testaidl.Data;
+// Declare any non-default types here with import statements
+interface IRemoteService {
+    /**
+     * Demonstrates some basic types that you can use as parameters
+     * and return values in AIDL.
+     */
+    int getPid();
+    Data getData();
+}
+#+END_SRC 
+- 传输的自定义数据AIDL文件
+#+BEGIN_SRC csharp
+// Data.aidl 注意包名路径
+package mao.com.testaidl;
+//定义 数据声明
+parcelable Data;
+#+END_SRC 
+** 远程服务：申明服务；提供跨进程远程IBinder实例的索引以及供客户端调用的公用APIs
+*** AndroidManifest中申明远程服务
+- 要开启一个进程运行，首先要在清单文件添加 process属性
+#+begin_SRC xml
+<!--服务在新的进程中启动-->
+        <service android:name=".RemoteService"
+            />
+#+END_SRC
+*** RemoteService 远程服务
+#+BEGIN_SRC csharp
+/**
+ * @Description: 远程服务
+ */
+public class RemoteService extends Service {
+    private static final String TAG = "RemoteService";
+    Data mData;
+
+// <<<<<<<<<<<<<<<<<<<<==================== 这些是作为远程服务端，必须提供给绑定后的各个客户端使用的，必须实现
+    @Nullable @Override
+        public IBinder onBind(Intent intent) {
+        Log.i(TAG, "[RemoteService] onBind");
+// <<<<<<<<<<========== 这个IBinder实例的引用，会返回给客户端，
+// 以便客户端能够与其（这个服务端IBinder实例的reference）为桥梁，调用其公用 APIs,实现调用与交互
+        return mBinder; 
+    }
+    
+    /**实现IRemoteService.aidl中定义的方法 */
+// <<<<<<<<<<<<<<<<<<<<==================== 这些是作为远程服务端，必须提供给绑定后的各个客户端使用的，必须实现
+    IRemoteService.Stub mBinder = new IRemoteService.Stub() {
+        @Override
+        public int getPid() throws RemoteException {
+            return android.os.Process.myPid();
+        }
+        // 返回客户端需要获取的数据: 提供给客户端调用的公用 APIs
+        @Override
+        public Data getData() throws RemoteException {
+            return mData;
+        }
+// <<<<<<<<<<<<<<<<<<<<==================== 这些是作为远程服务端，必须提供给绑定后的各个客户端使用的，必须实现 onTransact()
+        // 该实现可以设置权限
+        @Override
+        public boolean onTransact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
+            return super.onTransact(code, data, reply, flags);
+        }
+    };
+
+    @Override public boolean onUnbind(Intent intent) {
+        return super.onUnbind(intent);
+    }
+    @Override c void onCreate() {
+        super.onCreate();
+        Log.i(TAG, "[RemoteService] onCreate");
+        initData();
+    }
+    @Override public void onDestroy() {
+        super.onDestroy();
+        Log.i(TAG, "[RemoteService] onDestroy");
+    }
+    /** * 初始化Data数据 **/
+    private void initData() {
+        mData = new Data();
+        mData.setData1(10);
+        mData.setData2("远程服务返回数据");
+    }
+}
+#+END_SRC 
+*** Client 端绑定服务，实现ServiceConnection 接口
+- 实现ServiceConnection 接口
+#+BEGIN_SRC csharp
+// 监听服务连接状态
+private ServiceConnection serviceConnection =new ServiceConnection() {
+    @Override
+    public void onServiceConnected(ComponentName name, IBinder service) {
+// <<<<<<<<<<<<<<<<<<<<==================== 这里拿到了可以调用操控远程公用API的句柄或是引用或说是实例        
+        mRemoteService = IRemoteService.Stub.asInterface(service);
+        String pidInfo = null;
+        try {
+            Data data = mRemoteService.getData(); // <<<<<<<<<<==========
+            pidInfo = "pid="+ mRemoteService.getPid() +
+                ", data1 = "+ data.getData1() +
+                ", data2="+ data.getData2();
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+        Log.i(TAG, "[ClientActivity] ServiceConnection");
+        Log.i(TAG, "绑定服务组件获取的远程服务数据："+pidInfo);
+        mCallBackTv.setText(pidInfo); // <<<<<<<<<<========== 操作客户端本地UI相关
+    }
+    @Override
+    public void onServiceDisconnected(ComponentName name) {
+        Log.i(TAG, "[ClientActivity] onServiceDisconnected");
+        mCallBackTv.setText("onServiceDisconnected"); // <<<<<<<<<<========== 操作客户端本地UI相关
+        mRemoteService = null; // 置空远程服务端的引用，以免资源泄露
+    }
+};
+#+END_SRC 
+- 绑定服务
+#+BEGIN_SRC csharp
+Log.i(TAG, "[ClientActivity] bindRemoteService");
+Intent intent = new Intent(MainActivity.this, RemoteService.class);
+bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+#+END_SRC 
+- Demo 最终运行日志
+#+BEGIN_SRC text
+mao.com.testaidl I/ClientActivity: [ClientActivity] bindRemoteService
+? I/RemoteService: [RemoteService] onCreate
+? I/RemoteService: [RemoteService] onBind
+mao.com.testaidl I/ClientActivity: [ClientActivity] ServiceConnection
+mao.com.testaidl I/ClientActivity: 绑定服务组件获取的远程服务数据：pid=26575, data1 = 10, data2=远程服务返回数据
+#+END_SRC 
+** Android IPC 之服务端回调: 以一个小例子的方式帮助自己理解定义与回调数据给客户端的过程
+- 之前接触的都是最基础的，只需要绑定服务端就可以了；可是如果客户端想要拿服务端的数据要如何回调呢？这一节是这个最基础的实现原理逻辑
+- 以一个小例子的方式帮助自己理解定义与回调数据给客户端的过程
+*** 客户端通过IPC 从服务端获取学生信息，学生信息封装在IPC Parcelable 的子类Student类里：
+#+BEGIN_SRC csharp
+public class Student implements Parcelable {
+    private String name;
+    private int age;
+    private float score;
+}
+#+END_SRC
+*** IPC 接口：Parcelable 的子类IStudentInfo 学生信息，包括姓名、年龄、分数三个字段。
+- 我们定义AIDL接口如下：
+#+BEGIN_SRC csharp
+interface IStudentInfo {
+    // 主动获取
+    Student getStudentInfo();
+}
+#+END_SRC
+- 客户端通过调用 getStudentInfo() 方法即可获取从服务端返回的学生信息。
+*** 跨进程传递接口
+- 客户端想要获取学生信息，需要主动调用 getStudentInfo() 方法。考虑一种场景：
+  - 1、学生每一门考试，分数都在变化，客户端需要一直轮询去调用getStudentInfo() 方法才能获取最新的成绩。我们知道轮询是效率比较低的做法，要尽量避免。
+  - 2、我们就会想到学生成绩发生变化了，服务端就主动通知我们就好啦。
+- 现在的问题重点是：*服务端如何主动通知客户端。*
+- 依据以往的经验，有两种方式可以实现：
+  - 1、客户端通过绑定服务端的Service，进而与服务端通信，那么可以换种思路，客户端也可以定义Service，而后服务端通过绑定客户端，进而调用客户端的接口，主动给客户端传递消息。
+  - 2、客户端绑定了服务端的Service，两者之间就能够通信。实际上服务端传递了Binder给客户端，客户端拿到Binder之后就可以进行通信了，这就说明了Binder对象本身能够跨进程传输。
+- 于是改造之前的接口：
+  - 客户端调用服务端接口的时候将自己生成的Binder传递给服务端，那么服务端发生变化的时候就可以通过这个Binder来通知客户端了。(具体是这样的吗？还是说还可以有更优化的实现呢？)
+- 通过比对1、2两种方式：
+  - 第一种方式过于复杂，对于*客户端、服务端的角色容易搞混。*
+  - 第二种方式符合*我们认知的"回调"，也就是说跨进程的回调和同一个进程里的回调理解上是一致的。*
+*** AIDL 回调的使用：实现定义过的/服务端和客户端都认得识别的公认API交互逻辑
+**** 服务端声明回调接口
+- 定义AIDL 回调接口：
+#+BEGIN_SRC csharp
+import com.fish.ipcserver.Student;
+interface RemoteCallback {
+    // 回调
+// oneway：表示调用onCallback(xx) 方法的线程立即返回，不阻塞等待方法调用结果
+    oneway void onCallback(in Student student); 
+}
+#+END_SRC
+- Student 为学生信息类，该对象支持跨进程传输。
+- in 表示数据流方向，表示该Student 对象传递给客户端(*注意：这里仍然是之前曾经提醒过自己的，以客户端的眼光来看问题；对客户端来说，是数据进来*)。
+- *oneway 表示调用onCallback(xx) 方法的线程立即返回，不阻塞等待方法调用结果。*
+**** 服务端: 需要负责提供和暴露给客户端用来注册监听回调的公用API接口方法
+- 服务端定义了回调接口，客户端需要给服务端传递接口的实现（实现了接口实例的reference）。因此服务端还需要将注册回调的接口暴露给客户端。
+- 定义AIDL 文件如下：
+#+BEGIN_SRC csharp
+import com.fish.ipcserver.Student;
+import com.fish.ipcserver.RemoteCallback;
+interface IStudentInfo {
+    // 主动获取
+    Student getStudentInfo();
+    // 客户端注册监听回调: 观察者模式，只在第一次注册监听和数据发生变化的时候回调通知
+    oneway void register(in RemoteCallback callback);
+}
+#+END_SRC
+- 至此，服务端提供了两个方法：
+  - 1、getStudentInfo() 客户端调用此方法主动获取学生信息。
+  - 2、register(xx) 客户端调用此方法注册回调实例。
+**** 服务端编写回调逻辑
+#+BEGIN_SRC csharp
+public class StudentService extends Service {
+    private Student student;
+    private RemoteCallback remoteCallback;
+
+    // 声明了IStudentInfo 实例(子类实例)
+    private MyStudent myStudent;
+    
+    class MyStudent extends IStudentInfo.Stub { 
+// BinderProxy,这是一种写法；还有直接返回服务端IBinder references的 ？
+        @Override public Student getStudentInfo() throws RemoteException {
+            return student;
+        }
+        @Override
+            public void register(RemoteCallback callback) throws RemoteException {
+            // 客户端注册监听回调：客户端注册的回调实例保存到成员变量 remoteCallback
+            remoteCallback = callback;
+        }
+        public void changeScore() { // 公用 APIs
+            // 学生成绩发生改变
+            student.setScore((float)(Math.random() * 100));
+            try {
+                if (remoteCallback != null)
+                    // 调用回调实例方法，将变化后的学生信息传递给客户端
+                    remoteCallback.onCallback(student);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    @Nullable @Override public IBinder onBind(Intent intent) {
+        // 将Stub 返回给客户端; 还有直接返回服务端IBinder references的 ？
+        return myStudent.asBinder();
+    }
+
+    @Override public void onCreate() {
+        super.onCreate();
+        // <<<<<<<<<<========== 这些都只是初始化的占位符
+        student = new Student();
+        student.setAge(19);
+        student.setName("小明");
+        myStudent = new MyStudent();
+    }
+}
+#+END_SRC
+- 可以看出，声明了IStudentInfo 实例。
+- 小结上面的逻辑：
+  - 1、服务端声明了Stub(桩，实际上是*IBinder实例(的引用)*)，并将*Stub（IBinder实例的引用）*返回给客户端。
+  - 2、客户端收到Stub(实际上是BinderProxy)，然后转换为IStudentInfo 接口。而该接口里声明了两个方法，分别是getStudentInfo()和register(客户端监听回调函数)。
+  - 3、客户端调用register(RemoteCallback) 将监听回调注册(传递)给服务端。
+  - 4、服务端发生变化的时候通过RemoteCallback 通知客户端数据已经发生改变。
+**** 客户端编写调用逻辑
+- 分三步：
+  - (1)、客户端绑定服务端Service。
+  - (2)、建立连接后客户端将IBinder 转化为IStudentInfo 接口，并注册回调。
+  - (3)、客户端处理回调内容。
+- 来看看代码实现：
+**** (1)绑定服务
+#+BEGIN_SRC csharp
+// 参数1：运行远程服务的包名
+// 参数2：远程服务全限定类名
+ComponentName componentName = new ComponentName("com.fish.ipcserver", "com.fish.ipcserver.StudentService");
+Intent intent = new Intent();
+intent.setComponent(componentName);
+// 绑定远程服务
+v.getContext().bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
+#+END_SRC
+**** (2)IBinder 转换为IStudentInfo 接口
+#+BEGIN_SRC csharp
+ServiceConnection serviceConnection = new ServiceConnection() {
+    @Override
+    public void onServiceConnected(ComponentName name, IBinder service) {
+        isConnected = true;
+        // 转为对应接口
+        iStudentInfo = IStudentInfo.Stub.asInterface(service);
+        try {
+            // 注册回调
+            iStudentInfo.register(remoteCallback);
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+    }
+    @Override public void onServiceDisconnected(ComponentName name) {
+        isConnected = false;
+    }
+};
+#+END_SRC
+**** (3)客户端处理回调
+#+BEGIN_SRC csharp
+// 声明回调: RemoteCallback 类必须是跨进程IPC可以公认的类或是数据结构，以确保远程与客户端可以沟通(互相认得)
+RemoteCallback remoteCallback = new RemoteCallback.Stub() {
+    @Override public void onCallback(Student student) throws RemoteException {
+        Log.d("fish", "call back student:" + student);
+        runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    // <<<<<<<<<<========== 客户端接收到远程数据后，更新其UI相关的内容
+                    Toast.makeText(IPCActivity.this, "client receive change:" + student.toString(), Toast.LENGTH_SHORT).show();
+                }
+            });
+    }
+};
+#+END_SRC
+- 此处收到服务端的回调后，仅仅Toast 学生信息。
+*** 注意事项
+- 1、自定义类型Student.java 与Student.aidl 需要在同一个包名下。这样学生类（学生实例）才能被跨进程多个不同的进程认得识别。
+- 2、客户端与服务端定义的aidl 文件需要在同一个包名下。通常来说，一般先定义服务端aidl 接口，最后将这些aidl文件拷贝到客户端相同包名下。
+- 3、bindService Intent 需要指定ComponentName。
+*** 回调在四大组件里的应用
+- 以ContentProvider 为例：
+  - 想要获取相册数据，可以通过ContentProvider获取，而相册是公共的存储图片区域，其它App都可以往里面插入数据或者删除数据。
+  - 而系统也提供了监听相册变化的回调：
+#+BEGIN_SRC csharp
+Handler handler = new Handler(Looper.getMainLooper());
+    ContentObserver contentObserver = new ContentObserver(handler) {
+        @Override
+        public void onChange(boolean selfChange) {
+            // 数据变化回调
+            super.onChange(selfChange);
+        }
+    };
+getContentResolver().registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, contentObserver);
+#+END_SRC
+- 如上，通过registerContentObserver(xx)向系统(服务端)注册了回调接口，当有数据变化的时候服务端会调用onChange(xx)通知客户端。
+- 不仅ContentProvider 运用到了回调，Service、Activity、Broadcast也用到了。
+
+** Activity 绑定服务到 ActivityManagerService 过程, 所有相关源码位于frameworks/base/ 目录下
+- 经过上一小节的例子，根据打印结果，通过源码探究服务绑定过程。还是从Activity的 bindService 方法开始
+*** ./core/java/android/content/ContextWrapper.java
+#+BEGIN_SRC csharp
+@Override
+  public boolean bindService(Intent service, ServiceConnection conn, int flags) {
+      return mBase.bindService(service, conn, flags);//1
+  }
+#+END_SRC
+- 由以上源码注释1，通过上一篇文章深入理解Android 之Service启动流程第一小节分析，mBase指向的就是 ContextImpl 对象，接着看到它的bindService方法
+*** ./core/java/android/app/ContextImpl.java
+#+BEGIN_SRC csharp
+@Override
+    public boolean bindService(Intent service, ServiceConnection conn, int flags) {
+        warnIfCallingFromSystemProcess();
+        return bindServiceCommon(service, conn, flags, null, mMainThread.getHandler(), null,
+                getUser());//1
+    }
+    private boolean bindServiceCommon(Intent service, ServiceConnection conn, int flags,
+            String instanceName, Handler handler, Executor executor, UserHandle user) {
+        // Keep this in sync with DevicePolicyManager.bindDeviceAdminServiceAsUser.
+        IServiceConnection sd; //2
+        if (mPackageInfo != null) {
+            if (executor != null) {
+                sd = mPackageInfo.getServiceDispatcher(conn, getOuterContext(), executor, flags); 
+            } else {
+                sd = mPackageInfo.getServiceDispatcher(conn, getOuterContext(), handler, flags);//3
+            }
+        } else { }
+        validateServiceIntent(service);
+        try {
+            service.prepareToLeaveProcess(this);
+            int res = ActivityManager.getService().bindIsolatedService(
+                mMainThread.getApplicationThread(), getActivityToken(), service,
+                service.resolveTypeIfNeeded(getContentResolver()),
+                sd, flags, instanceName, getOpPackageName(), user.getIdentifier());//4
+            return res != 0;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+#+END_SRC 
+- 由以上源码注释2和注释3，分为以下几点
+  - 首先声明了IServiceConnection对象，通过ContextImpl的LoadApk类型的mPackageInfo对象来封装获取IServiceConnection对象，由前面注释1处得知executor对象传入为null，所以调用的是注释2；
+  - 在构造IServiceConnection时，首先传入了开始绑定服务的ServiceConnection接口引用，其次是ContextImpl的mOuterContext，它是Context类型，指向的就是当前需要绑定服务的Activity组件；
+  - 其次第三个参数为Handler对象，它指向就是ActivityThread中代表应用程序主线程的H对象，方便后续将服务绑定完成回调到主线程中的ServiceConnection接口回调方法
+  - 第四个参数则是绑定服务的flag参数 BIND_AUTO_CREATE
+- 接着看到LoadApk的getServiceDispatcher方法
+*** ./core/java/android/app/LoadedApk.java
+#+BEGIN_SRC csharp
+@UnsupportedAppUsage
+public final IServiceConnection getServiceDispatcher(
+    ServiceConnection c, Context context, Handler handler, int flags) {
+    return getServiceDispatcherCommon(c, context, handler, null, flags);
+}
+private IServiceConnection getServiceDispatcherCommon(
+    ServiceConnection c, Context context, Handler handler, Executor executor, int flags) {
+    synchronized (mServices) {
+        LoadedApk.ServiceDispatcher sd = null;
+// <<<<<<<<<<========== 这里借助图表，来保存所有不同ServiceConnection, 以及他们所对应的 oadedApk.ServiceDispatcher
+        // 有点儿类似（不是同一个）：自己先前有所接触的同一个远程服务，对应多个不同的客户端连接监听的情况
+        ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher> map = mServices.get(context); // 1：每种绑定连接，和建立连接的客户端信息 ？
+        if (map != null) {
+            sd = map.get(c);
+        }
+        if (sd == null) { // map 中还没有这样的数据
+            if (executor != null) {
+                sd = new ServiceDispatcher(c, context, executor, flags);
+            } else {
+                sd = new ServiceDispatcher(c, context, handler, flags);// 2 不存在则注释2处新建ServiceDispatcher对象
+            }
+            if (map == null) {
+                map = new ArrayMap<>();
+// 这里对于mService来说：它是站在更高的天空，它负责管理着各种不同的远程服务端服务（这里是CONTEXT?），以及它们各自的各个如上初始化的服务连接字典                
+                mServices.put(context, map);
+            }
+            map.put(c, sd); // 3：
+        } else {
+            sd.validate(context, handler, executor);
+        }
+        return sd.getIServiceConnection(); // 最终通过ServiceDispatcher对象来获取IServiceConnection
+    }
+}
+#+END_SRC
+- 由以上源码，
+  - 注释1处通过ArrayMap（类似HashMap）类型的mServices获取*与对应服务绑定ServiceConnectoin c 的 Activity组件的ServiceDispatcher对象*，
+  - 不存在则注释2处新建ServiceDispatcher对象，并将刚刚传入的数据作为构造方法参数，
+  - 最终通过ServiceDispatcher对象来获取IServiceConnection，
+- 继续看到LoadApk的内部静态类ServiceDispatcher
+*** ./core/java/android/app/LoadedApk.java
+#+BEGIN_SRC csharp
+static final class ServiceDispatcher {
+    private final ServiceDispatcher.InnerConnection mIServiceConnection;
+    
+    @UnsupportedAppUsage
+    private final ServiceConnection mConnection;
+    // @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
+    // private final Context mContext;
+    // private final Handler mActivityThread;
+    // private final Executor mActivityExecutor;
+    // private final ServiceConnectionLeaked mLocation;
+    // private final int mFlags;
+    private static class InnerConnection extends IServiceConnection.Stub {
+        @UnsupportedAppUsage
+            final WeakReference<LoadedApk.ServiceDispatcher> mDispatcher;
+        
+        InnerConnection(LoadedApk.ServiceDispatcher sd) {
+            mDispatcher = new WeakReference<LoadedApk.ServiceDispatcher>(sd);
+        }
+    }
+    
+    @UnsupportedAppUsage
+    ServiceDispatcher(ServiceConnection conn,
+// 最终将ServiceConnection，指向Activity组件主线程Handlerd对象和Context包装到ServiceDispatcher对象中                      
+                      Context context, Handler activityThread,
+                      int flags) {
+        // 在内部实现了IServiceConnection接口的InnerConnection
+        mIServiceConnection = new InnerConnection(this);
+        
+        // mConnection = conn;
+        // mContext = context;
+        // mActivityThread = activityThread;
+        // mActivityExecutor = null;
+        // mLocation = new ServiceConnectionLeaked(null);
+        // mLocation.fillInStackTrace();
+        // mFlags = flags;
+    }
+// 通过getIServiceConnection方法返回将其赋值给最开始创建的sd对象
+// 也就是可以和远程服务端进行IBinder通信的本地引用
+    @UnsupportedAppUsage
+    IServiceConnection getIServiceConnection() {
+        return mIServiceConnection;
+    }
+}
+#+END_SRC
+- 由以上源码，最终将ServiceConnection，指向Activity组件主线程Handler对象和Context包装到ServiceDispatcher对象中，并在内部实现了IServiceConnection接口的InnerConnection，最终通过getIServiceConnection方法返回将其赋值给最开始创建的sd对象，也就是可以和远程服务进行Binder通信的本地引用
+- 接着我们回到bindServiceCommon方法的注释4，获取当前进程的IApplicationThread对象等，和刚刚封装获取的IServiceConnection 一并作为参数请求到AMS的bindIsolatedService方法来绑定Service。
+- Activity绑定服务调用到AMS过程时序图
+** AMS 到 ActivityThread 启动绑定 Service 过程
+*** 服务与Activity组件建立绑定关系：理解起来相对复杂，今天暂时不根了，改天头脑清醒的时候再回来看这个
+- 原文链接： https://juejin.cn/post/6844904153043451917
+- 接着上一小节，分析到ActivityManagerService方法，接着跟进
+- ./services/core/java/com/android/server/am/ActivityManagerService.java
+#+BEGIN_SRC csharp
+public int bindIsolatedService(IApplicationThread caller, IBinder token, Intent service,
+            String resolvedType, IServiceConnection connection, int flags, String instanceName,
+            String callingPackage, int userId) throws TransactionTooLargeException {
+        enforceNotIsolatedCaller("bindService");
+        ......
+        synchronized(this) {
+            return mServices.bindServiceLocked(caller, token, service,
+                    resolvedType, connection, flags, instanceName, callingPackage, userId);//1
+        }
+    }
+#+END_SRC
+- 由以上源码注释1，同样是调用了用来管理Service的ActiveServices类的bindServiceLocked方法，
+*** ./services/core/java/com/android/server/am/ActiveServices.java
+#+BEGIN_SRC csharp
+int bindServiceLocked(IApplicationThread caller, IBinder token, Intent service,
+            String resolvedType, final IServiceConnection connection, int flags,
+            String instanceName, String callingPackage, final int userId)
+            throws TransactionTooLargeException {
+        .....
+        final ProcessRecord callerApp = mAm.getRecordForAppLocked(caller);//1
+        
+        ActivityServiceConnectionsHolder<ConnectionRecord> activity = null;
+        if (token != null) {
+            activity = mAm.mAtmInternal.getServiceConnectionsHolder(token);//2
+            .....
+        }
+        .....
+        ServiceLookupResult res =
+            retrieveServiceLocked(service, instanceName, resolvedType, callingPackage,
+                    Binder.getCallingPid(), Binder.getCallingUid(), userId, true,
+                    callerFg, isBindExternal, allowInstant);//3
+        
+        ServiceRecord s = res.record;//4
+        ......
+            AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);//5
+            ConnectionRecord c = new ConnectionRecord(b, activity,
+                    connection, flags, clientLabel, clientIntent,
+                    callerApp.uid, callerApp.processName, callingPackage); //6 
+            IBinder binder = connection.asBinder();
+            s.addConnection(binder, c); 
+            b.connections.add(c);
+            if (activity != null) {
+                activity.addConnection(c);
+            }
+            b.client.connections.add(c);
+            c.startAssociationIfNeeded();
+            .......
+            ArrayList<ConnectionRecord> clist = mServiceConnections.get(binder);
+            if (clist == null) {
+                clist = new ArrayList<>();
+                mServiceConnections.put(binder, clist);
+            }
+            clist.add(c);//7
+            
+            /**
+             * 8
+             **/
+            if ((flags&Context.BIND_AUTO_CREATE) != 0) {
+                s.lastActivity = SystemClock.uptimeMillis();
+                if (bringUpServiceLocked(s, service.getFlags(), callerFg, false,
+                        permissionsReviewRequired) != null) {
+                    return 0;
+                }
+            }
+            .....
+            if (s.app != null && b.intent.received) {
+                // Service is already running, so we can immediately
+                // publish the connection.
+                try {
+                    c.conn.connected(s.name, b.intent.binder, false);//9
+                } catch (Exception e) {
+                   .....
+                }
+                // If this is the first app connected back to this binding,
+                // and the service had previously asked to be told when
+                // rebound, then do so.
+                if (b.intent.apps.size() == 1 && b.intent.doRebind) {
+                    requestServiceBindingLocked(s, b.intent, callerFg, true);
+                }
+            } else if (!b.intent.requested) {
+                requestServiceBindingLocked(s, b.intent, callerFg, false); //10
+            }
+            getServiceMapLocked(s.userId).ensureNotStartingBackgroundLocked(s);
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+        return 1;
+    }
+#+END_SRC
+- 由以上源码，
+- 注释1处，通过上一小节获取的IApplicationThread对象得到正在请求绑定服务的Activity组件所在的应用程序进程
+- 注释2处根据token 也就是 binder引用获取对应的ActivityServiceConnectionsHolder，也就是需要绑定服务的Activity组件
+- 注释3和4处通过Intent类型的service参数最终获取了描述需要绑定的Service对象描述 ServiceRecord
+- 注释5处则调用了ServiceRecord的retrieveAppBindingLocked方法
+- 接着看到retrieveAppBindingLocked方法
+*** ./services/core/java/com/android/server/am/ServiceRecord.java
+#+BEGIN_SRC csharp
+final ArrayMap<Intent.FilterComparison, IntentBindRecord> bindings
+            = new ArrayMap<Intent.FilterComparison, IntentBindRecord>();
+public AppBindRecord retrieveAppBindingLocked(Intent intent,
+            ProcessRecord app) {
+        Intent.FilterComparison filter = new Intent.FilterComparison(intent);
+        IntentBindRecord i = bindings.get(filter);
+        if (i == null) { //1
+            i = new IntentBindRecord(this, filter);
+            bindings.put(filter, i);
+        }
+        AppBindRecord a = i.apps.get(app);//2
+        if (a != null) {
+            return a;
+        }
+        a = new AppBindRecord(this, i, app);
+        i.apps.put(app, a);
+        return a;
+    }
+#+END_SRC
+- 远程服务是一对多的关系，可以和多个应用程序进程绑定的，所以，每个绑定服务的应该程序进程ProcessRecord在服务ServiceRecord中被描述成了IntentBindRecord，并保存在ArrayMap类型的bindings的map中，
+- 由以上源码注释1，通过的Intent.FilterComparison来查看当前应用程序进程是否绑定了服务，没有绑定则新建IntentBindRecord并保存
+- 源码注释2处获取IntentBindRecord中是否存在AppBindRecord，它服务与其应用程序进程之间的关联对象，如果存在也说明之前就绑定过，否则新建AppBindRecord并返回。
+- 接着回看前一个步骤ActiveServices的bindServiceLocked方法注释6，此时又把AppBindRecord、描述Activity组件的ActivityServiceConnectionsHolder和IServiceConnection封装成了代表Activity组件与远程服务ServiceRecord建立了连接，描述对象为ConnectionRecord，前面也说过服务绑定是一对多关系，所以服务也能被多个Activity绑定，也就是会有多个ConnectionRecord对象，这里就将它们全部放入ArrayList保存，也就是注释7处的clist，并且以IServiceConnection引用为key，值为ArrayList保存到AMS的ArrayMap中保存，也就是mServiceConnections，以待后续服务启动回调绑定
+- 远程 Service 进程fork
+- 接着前一个步骤ActiveServices的bindServiceLocked方法注释8，根据之前的分析，绑定服务设置的flag为BIND_AUTO_CREATE，所以该判断条件成立，则调用bringUpServiceLocked方法。(ActiveServices的bindServiceLocked方法注释10将在下一小节继续分析)
+*** ./services/core/java/com/android/server/am/ActiveServices.java
+#+BEGIN_SRC csharp
+private String bringUpServiceLocked(ServiceRecord r, int intentFlags, boolean execInFg,
+            boolean whileRestarting, boolean permissionsReviewRequired)
+            throws TransactionTooLargeException {
+        
+        .......
+        ProcessRecord app;
+        HostingRecord hostingRecord = new HostingRecord("service", r.instanceName);
+        if (!isolated) {
+            app = mAm.getProcessRecordLocked(procName, r.appInfo.uid, false);
+            .........
+            if (app != null && app.thread != null) {
+                try {
+                    app.addPackage(r.appInfo.packageName, r.appInfo.longVersionCode, mAm.mProcessStats);
+                    realStartServiceLocked(r, app, execInFg);//1
+                    return null;
+                } 
+                ......
+        } else {
+            // If this service runs in an isolated process, then each time
+            // we call startProcessLocked() we will get a new isolated
+            // process, starting another process if we are currently waiting
+            // for a previous process to come up.  To deal with this, we store
+            // in the service any current isolated process it is running in or
+            // waiting to have come up.
+            app = r.isolatedProc;
+            if (WebViewZygote.isMultiprocessEnabled()
+                    && r.serviceInfo.packageName.equals(WebViewZygote.getPackageName())) {
+                hostingRecord = HostingRecord.byWebviewZygote(r.instanceName);
+            }
+            if ((r.serviceInfo.flags & ServiceInfo.FLAG_USE_APP_ZYGOTE) != 0) {
+                hostingRecord = HostingRecord.byAppZygote(r.instanceName, r.definingPackageName,
+                        r.definingUid);//2
+            }
+        }
+        
+        // Not running -- get it started, and enqueue this service record
+        // to be executed when the app comes up.
+        if (app == null && !permissionsReviewRequired) {
+            if ((app=mAm.startProcessLocked(procName, r.appInfo, true, intentFlags,
+                    hostingRecord, false, isolated, false)) == null) { //3
+                ......
+              
+        }
+        .......
+        if (!mPendingServices.contains(r)) {
+            mPendingServices.add(r);
+        } //4
+    }
+#+END_SRC
+- 如以上源码，文章开头例子使用的远程服务，也就是服务启动进程与Activity进程不同，所以会在注释2处获取启动进程描述对象HostingRecord，如果没有启动，则通过注释3处调用ActivitManagerService.startProcessLocked启动Service 进程，并在注释4处保存需要启动的服务描述ServiceRecord，进程启动fork Zygote进程可查看前面文章（深入理解Android之应用程序进程启动），应用进程fork成功后会调用应用程序进程的ActivityThread的main方法，最后注释4会把待启动的Service描述ServiceRecord保存到mPendingServices(ArrayList)，以便后续应用进程启动后使用，接着看到ActivityThread的main方法。
+*** ./core/java/android/app/ActivityThread.java
+#+BEGIN_SRC csharp
+public static void main(String[] args) {
+      ........
+        ActivityThread thread = new ActivityThread();
+        thread.attach(false, startSeq);//1
+      .......
+    }
+    
+private void attach(boolean system, long startSeq) {
+        sCurrentActivityThread = this;
+        mSystemThread = system;
+        if (!system) {
+            android.ddm.DdmHandleAppName.setAppName("<pre-initialized>",
+                                                    UserHandle.myUserId());
+            RuntimeInit.setApplicationObject(mAppThread.asBinder());
+            final IActivityManager mgr = ActivityManager.getService(); //2
+            try {
+                mgr.attachApplication(mAppThread, startSeq); //3
+            } catch (RemoteException ex) {
+                throw ex.rethrowFromSystemServer();
+            }
+           .......
+    }    
+#+END_SRC
+- 由以上源码1，首先创建了ActivityThread对象，并调用了ActivityThread的私有方法attach，在该方法中注释2应该很熟悉，获取了与AMS进行binder通信的本地引用，然后注释3处调用AMS的attachApplication与AMS进行通信，接着往下看到AMS的attachApplication方法。
+*** ./services/core/java/com/android/server/am/ActivityManagerService.java
+#+BEGIN_SRC csharp
+@Override
+    public final void attachApplication(IApplicationThread thread, long startSeq) {
+        synchronized (this) {
+            attachApplicationLocked(thread, callingPid, callingUid, startSeq);//1
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+#+END_SRC
+- 由以上源码注释1处ActivityManagerService继续调用了attachApplicationLocked，接着往下看
+*** ./services/core/java/com/android/server/am/ActivityManagerService.java
+#+BEGIN_SRC csharp
+ @GuardedBy("this")
+    private final boolean attachApplicationLocked(IApplicationThread thread,
+            int pid, int callingUid, long startSeq) {
+        
+        .....
+         // Find any services that should be running in this process...
+        if (!badApp) {
+            try {
+                didSomething |= mServices.attachApplicationLocked(app, processName);
+                checkTime(startTime, "attachApplicationLocked: after mServices.attachApplicationLocked");
+            } catch (Exception e) {
+                ....
+            }
+        }
+        ......
+}
+#+END_SRC
+- 由以上源码，attachApplicationLocked方法本身逻辑是很多的，这里先忽略大部分不是本文分析的代码，直接看到注释1处，从因为注释也可以看出是找到应该在此进程中运行的任何服务，从而调用了ActiveServices的attachApplicationLocked方法，接着往下看。
+- 远程Service组件创建
+*** ./services/core/java/com/android/server/am/ActiveServices.java
+#+BEGIN_SRC csharp
+boolean attachApplicationLocked(ProcessRecord proc, String processName)
+            throws RemoteException {
+        boolean didSomething = false;
+        // Collect any services that are waiting for this process to come up.
+        if (mPendingServices.size() > 0) {
+            ServiceRecord sr = null;
+            try {
+                for (int i=0; i<mPendingServices.size(); i++) {
+                    sr = mPendingServices.get(i); //1
+                    if (proc != sr.isolatedProc && (proc.uid != sr.appInfo.uid
+                            || !processName.equals(sr.processName))) {
+                        continue;
+                    }
+                    mPendingServices.remove(i);
+                    i--;
+                    proc.addPackage(sr.appInfo.packageName, sr.appInfo.longVersionCode,
+                            mAm.mProcessStats);
+                    realStartServiceLocked(sr, proc, sr.createdFromFg);//2
+                    didSomething = true;
+                    .........
+                }
+            } catch (RemoteException e) {
+               ......
+            }
+        }
+        .....
+    }
+#+END_SRC
+- 由以上源码注释1，遍历之前保存待启动Service组件的**mPendingServices(ArrayList)**集合，获取ServiceRecord，注释2处调用realStartServiceLocked方法，之后启动Service 过程和上一篇文章深入理解Android 之Service启动流程基本相同，最终调用到 Service 的 OnCreate方法完成Service组件启动创建，这里不再进行展开。
+- AMS 到 ActivityThread 启动绑定 Service 过程时序图
+- 绑定Service组件的Activity组件的ServiceConnection回调
+- 本小节接着回到上一节ActiveServices注释10 的 bindServiceLocked 方法
+*** ./services/core/java/com/android/server/am/ActiveServices.java
+#+BEGIN_SRC csharp
+ int bindServiceLocked(IApplicationThread caller, IBinder token, Intent service,
+            String resolvedType, final IServiceConnection connection, int flags,
+            String instanceName, String callingPackage, final int userId)
+            throws TransactionTooLargeException {
+          
+          .......
+            if (s.app != null && b.intent.received) {
+                // Service is already running, so we can immediately
+                // publish the connection.
+                try {
+                    c.conn.connected(s.name, b.intent.binder, false);//1
+                } catch (Exception e) {
+                    Slog.w(TAG, "Failure sending service " + s.shortInstanceName
+                            + " to connection " + c.conn.asBinder()
+                            + " (in " + c.binding.client.processName + ")", e);
+                }
+                // If this is the first app connected back to this binding,
+                // and the service had previously asked to be told when
+                // rebound, then do so.
+                if (b.intent.apps.size() == 1 && b.intent.doRebind) {
+                    requestServiceBindingLocked(s, b.intent, callerFg, true);
+                }
+            } else if (!b.intent.requested) {
+                requestServiceBindingLocked(s, b.intent, callerFg, false);//2
+            }
+            getServiceMapLocked(s.userId).ensureNotStartingBackgroundLocked(s);
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+        return 1;
+    }
+#+END_SRC
+- 如上代码所示，注释1处如果服务已经启动，则可以直接发布链接。否则调用注释2处的方法，接着看ActiveServices的requestServiceBindingLocked方法
+*** ./services/core/java/com/android/server/am/ActiveServices.java
+#+BEGIN_SRC csharp
+private final boolean requestServiceBindingLocked(ServiceRecord r, IntentBindRecord i,
+            boolean execInFg, boolean rebind) throws TransactionTooLargeException {
+        .......
+        if ((!i.requested || rebind) && i.apps.size() > 0) {
+            try {
+                bumpServiceExecutingLocked(r, execInFg, "bind");
+                r.app.forceProcessStateUpTo(ActivityManager.PROCESS_STATE_SERVICE);
+                r.app.thread.scheduleBindService(r, i.intent.getIntent(), rebind,
+                        r.app.getReportedProcState());//1
+                if (!rebind) {
+                    i.requested = true;
+                }
+                i.hasBound = true;
+                i.doRebind = false;
+            } catch (TransactionTooLargeException e) {
+                ....
+            } catch (RemoteException e) {
+               ....
+            }
+        }
+        return true;
+    }
+#+END_SRC
+- 由以上代码注释1，ServiceRecord中保存的就是Activity组件所在应用程序进程的ActivityThread内部类IApplicationThread的实现类ApplicationThread引用，我们接着看到ApplicationThread的scheduleBindService方法
+*** ./core/java/android/app/ActivityThread.java
+#+BEGIN_SRC csharp
+ public final void scheduleBindService(IBinder token, Intent intent,
+                boolean rebind, int processState) {
+            updateProcessState(processState, false);
+            BindServiceData s = new BindServiceData();
+            s.token = token;
+            s.intent = intent;
+            s.rebind = rebind;
+            if (DEBUG_SERVICE)
+                Slog.v(TAG, "scheduleBindService token=" + token + " intent=" + intent + " uid="
+                        + Binder.getCallingUid() + " pid=" + Binder.getCallingPid());
+            sendMessage(H.BIND_SERVICE, s);//1
+        }
+#+END_SRC
+- 由以上代码，还是熟悉的操作，这里调用了ActivityThread 中代表Android主线程处理的内部Handler类H发送了BIND_SERVICE消息，将ServcieRecord等数据封装成了BindServiceData对象，继续往下看
+*** ./core/java/android/app/ActivityThread.java
+#+BEGIN_SRC csharp
+class H extends Handler {
+       .....
+    public void handleMessage(Message msg) {
+            .....
+            switch (msg.what) {
+                case BIND_SERVICE:
+                   Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "serviceBind");
+                    handleBindService((BindServiceData)msg.obj); //1
+                    Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                    break;
+            }
+}
+#+END_SRC
+- 由以上代码注释1，很清晰，Handler在主线程处理消息调用了ActivityThread的handleBindService方法
+*** ./core/java/android/app/ActivityThread.java
+#+BEGIN_SRC csharp
+private void handleBindService(BindServiceData data) {
+        Service s = mServices.get(data.token);//1
+        ........
+        if (s != null) {
+            try {
+                data.intent.setExtrasClassLoader(s.getClassLoader());
+                data.intent.prepareToEnterProcess();
+                try {
+                    if (!data.rebind) {
+                        IBinder binder = s.onBind(data.intent);//2
+                        ActivityManager.getService().publishService(
+                                data.token, data.intent, binder); //3
+                    } else {
+                        s.onRebind(data.intent);
+                     ActivityManager.getService().serviceDoneExecuting(
+                                data.token, SERVICE_DONE_EXECUTING_ANON, 0, 0);
+                    }
+                } catch (RemoteException ex) {
+                    throw ex.rethrowFromSystemServer();
+                }
+            } catch (Exception e) {
+               ......
+            }
+        }
+    }
+#+END_SRC
+- 前面已经讨论了远程Service组件目前已经启动，并且在ActivityThread的创建启动Service方法handleCreateService中将启动的Service实例加入到了ArrayMap类型的mServices中，
+- 注释1处则根据ServiceRecord获取对应的Service组件
+- 注释2处回调了Servcie组件的onBind方法，将Service远程服务的IBinder引用获取返回，也就是文章开始Demo中的IRemoteService.Stub类型的mBinder
+- 注释3处再次调用AMS服务的publishService方法传递刚刚获取的mBinder引用数据
+- 接着看AMS的publishService方法，如下所示
+*** ./services/core/java/com/android/server/am/ActivityManagerService.java
+#+BEGIN_SRC csharp
+public void publishService(IBinder token, Intent intent, IBinder service) {
+        // Refuse possible leaked file descriptors
+        ......
+        synchronized(this) {
+            if (!(token instanceof ServiceRecord)) {
+                throw new IllegalArgumentException("Invalid service token");
+            }
+            mServices.publishServiceLocked((ServiceRecord)token, intent, service);//1
+        }
+    }
+#+END_SRC
+- 由以上源码，还是老样子继续调用了ActiveServices的publishServiceLocked方法
+*** ./services/core/java/com/android/server/am/ActiveServices.java
+#+BEGIN_SRC csharp
+void publishServiceLocked(ServiceRecord r, Intent intent, IBinder service) {
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            ......
+            if (r != null) {
+                Intent.FilterComparison filter
+                        = new Intent.FilterComparison(intent);//1
+                IntentBindRecord b = r.bindings.get(filter);//2
+                if (b != null && !b.received) {
+                    b.binder = service;//3
+                    b.requested = true;//4
+                    b.received = true;//5
+                    ArrayMap<IBinder, ArrayList<ConnectionRecord>> connections = r.getConnections();//6
+                    for (int conni = connections.size() - 1; conni >= 0; conni--) {
+                        ArrayList<ConnectionRecord> clist = connections.valueAt(conni);
+                        for (int i=0; i<clist.size(); i++) {
+                            ConnectionRecord c = clist.get(i);
+                            ......
+                            try {
+                                c.conn.connected(r.name, service, false); //7
+                            } catch (Exception e) {
+                               .......
+                            }
+                        }
+                    }
+                }
+                ........
+            }
+        } finally {
+           .......
+        }
+    }
+#+END_SRC
+- 由以上源码，看完似乎又找到了豁然开朗的感觉，结合前面第二小节服务与Activity组件建立绑定关系的分析
+- 注释1处还是根据Intentl来获取Intent.FilterComparison
+- 注释2处根据第一步中获取的Intent.FilterComparison从ServiceRecord的bindings获取IntentBindRecord，这都是在前面第二小节分析中创建的，接着注释3将刚刚通过Service的OnBind方法获取的 IBinder引用赋值给IntentBindRecord，并在注释4和注释5处将值设置为true，避免后续的AMS重复请求
+- 前面说过Service绑定的一对多属性，所以他们都是使用了同一个key也就是InnerConnection，之前我们分析中是将其封装在了描述Actiivty组件与Service组件之间联系的描述类ConnectionRecord中
+- 接着从泛型为ConnectionRecord的ArrayList结合最后一个开始遍历获取ConnectionRecord对象，然后获取与之对应的InnerConnection，然后注释7处调用它的connected方法，接着我们再次看回LoadedApk类的InnerConnection
+*** ./core/java/android/app/LoadedApk.java
+#+BEGIN_SRC csharp
+static final class ServiceDispatcher {
+private final ServiceDispatcher.InnerConnection mIServiceConnection;//1
+        
+ private static class InnerConnection extends IServiceConnection.Stub {
+            @UnsupportedAppUsage
+            final WeakReference<LoadedApk.ServiceDispatcher> mDispatcher;
+            InnerConnection(LoadedApk.ServiceDispatcher sd) {
+                mDispatcher = new WeakReference<LoadedApk.ServiceDispatcher>(sd);
+            }
+            public void connected(ComponentName name, IBinder service, boolean dead)
+                    throws RemoteException {
+                LoadedApk.ServiceDispatcher sd = mDispatcher.get();
+                if (sd != null) {
+                    sd.connected(name, service, dead); //2
+                }
+            }
+        }
+}        
+#+END_SRC
+- 在文章第一小节分析ContextImpl的bindServiceCommon方法就已经创建了IServiceConnection的实现类InnerConnection并封装到了LoadedApk的ServiceDispatcher，以上源码注释2实际调用的是ServiceDispatcher的connected，接着往下看
+*** ./core/java/android/app/LoadedApk.java
+#+BEGIN_SRC csharp
+static final class ServiceDispatcher {
+......
+ public void connected(ComponentName name, IBinder service, boolean dead) {
+            if (mActivityExecutor != null) {
+                mActivityExecutor.execute(new RunConnection(name, service, 0, dead));
+            } else if (mActivityThread != null) {
+                mActivityThread.post(new RunConnection(name, service, 0, dead));//2
+            } else {
+                doConnected(name, service, dead);
+            }
+            .....
+        }
+ ......        
+}
+#+END_SRC
+- 根据前面的分析，mActivityThread指向的 ActivityThread的handler成员H，也就是说这里可以给Activity组件所在应用程序进程的主线程发送消息，让其运行Runnable类型的RunConnection，也就是说run方法在主线程运行，接着看run方法逻辑
+*** ./core/java/android/app/LoadedApk.java
+#+BEGIN_SRC csharp
+private final ServiceConnection mConnection;
+private final class RunConnection implements Runnable {
+            RunConnection(ComponentName name, IBinder service, int command, boolean dead) {
+                mName = name;
+                mService = service;
+                mCommand = command;
+                mDead = dead;
+            }
+            public void run() {
+                if (mCommand == 0) {
+                    doConnected(mName, mService, mDead);//1
+                } ....
+            }
+           ...
+        }
+        
+ public void doConnected(ComponentName name, IBinder service, boolean dead) {
+            ServiceDispatcher.ConnectionInfo old;
+            ServiceDispatcher.ConnectionInfo info;
+            .....
+            // If there is a new viable service, it is now connected.
+            if (service != null) {
+                mConnection.onServiceConnected(name, service);//2
+            } else {
+                // The binding machinery worked, but the remote returned null from onBind().
+                mConnection.onNullBinding(name);
+            }
+        }        
+#+END_SRC
+- 如以上源码，注释1处调用了doConnected方法，它传入了一个mService对象，经前面分析已经很清晰，它就是指向远程Service组件中组件的Binder对象，也可以理解成Demo例子中的IRemoteService.Stub类型mBinder，接着在注释2处调用之前在Activity组件创建的ServiceConnection实现类引用，并调用onServiceConnected将远程服务mBinder回调给Activity组件。
+- 绑定Service组件的Activity组件的ServiceConnection回调时序图
+** 总结: 
+- 和应用程序进程启动一样，服务绑定过程也涉及了四个进程，其中最核心的就是AMS所在的SystemServer进程
+- 涉及进程间通信方式有两种，一种是socket方式fork Zygote进程，另一种是Binder，线程间通信方式为Handler
+- 组件与服务绑定关系被描述成ConnectionRecord，它包含的IServiceConnection指向与服务绑定的组件，InnerConnection实现了IServiceConnection，ServiceDispatcher包含InnerConnection、ConnectionRecord、ServiceConnection，最终通过绑定组件的主线程Handler.post将onServiceConnected回调方法运行在绑定服务组件的主线程。
+- ContextImpl 和 ContextWrapper 之间联系使用的是静态代理模式，ContextWrapper和 ContextThemeWrapper 使用了装饰模式
+- 最后: 经过分析，服务绑定过程还是步骤比较多的，需要一些耐心，在阅读源码的过程中也能清晰看到服务绑定流程方法调用顺序和文章开头Demo执行顺序是一样的。
