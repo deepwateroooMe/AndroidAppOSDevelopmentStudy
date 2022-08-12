@@ -1,0 +1,502 @@
+#+latex_class: cn-article
+#+title: Android Coding Assessment Test Prepare
+#+author: deepwaterooo
+
+* 启动模式与任务栈
+- 安卓有四种启动模式：standard、singleTop、singleTask和singleInstance，想要更改模式可以在AndroidManifest.xml中activity标签下添加launchMode标签。下面是各种模式的详细介绍(下文中所有的栈，均指任务栈)：
+  - Activity所需的任务栈？
+    - 这要从一个参数说起：TaskAffinity(任务相关性)。这个参数标识了一个activity所需的任务栈的名字，默认情况下，所有activity所需的任务栈的名字为应用的包名。
+    - TaskAffinity 参数标识着Activity所需要的任务栈的名称，默认情况下，一个应用中所有Activity所需要的任务栈名称都为该应用的包名。
+    - TaskAffinity 属性一般跟singleTask模式或者跟allowTaskReparenting属性结合使用，在其他情况下没有实际意义。
+ 
+* standard：标准模式
+- 这也是系统的默认模式。每次启动一个Activity都会重新创建一个新的实例，不管实例是否已经存在。被创建的实例的生命周期符合典型的Activity的生命周期。在这种模式下，谁启动了这个Activity，那么这个Activity就运行在启动它的那个Activity所在的栈中。比如ActivityA 启动了ActivityB（B也是standard模式），那么B就会进入到A所在的栈中。
+    - 如果我们用ApplicationContext去启动standard模式的时候Activity的时候会报错，错误的原因是因为standard模式的Activity默认会进入启动它的Activity所属的任务栈中，但是由于非Activity类型的Context（如ApplicationContext）并没有所谓的任务栈，所有这就有问题了。解决这个问题的方法是为待启动Activity指定FLAG_ACTIVITY_NEW_TASK标记位，这样启动的时候就会为它创建一个新的任务栈，这时候待启动Activity实际上是一singleTask模式启动的。后文会再次强调一下
+
+* singleTop：栈顶复用模式
+- 在这种模式下，如果新Activity已经位于任务栈的栈顶（处于完全可见状态），那么此Activity不会被重新创建。但是如果新的Activity不是位于栈顶（处于不完全可见状态），那么新Activity仍然会重新创建。在singleTop（栈顶复用模式）下，如果Activity位于栈顶，我们再次启动该方法，那么该方法会回调onNewIntent()方法(不会创建新的instance)，而onCreate、onStart方法不会被调用。
+- 也允许出现重复的活动实例，分为两种情况，页面不在栈顶和页面已经在栈顶的情况。
+  - （1）页面不在栈顶。此时还是和standard一样重新生成一个新的activity实例。
+  - （2）页面在栈顶。此时直接使用栈顶的这个活动实例，不会重新生成新的。
+- 如果当前任务的顶部已存在 Activity 的一个实例，则系统会通过调用该实例的 onNewIntent() 方法向其传送 Intent，通过此方法的参数我们可以取出当前请求的信息；而不是创建 Activity 的新实例。需要注意的是，这个Activity 的onCreate 、onStart 不会被系统调用，因为它井没有发生改变。
+- *Activity 可以多次实例化，而每个实例均可属于不同的任务，并且一个任务可以拥有多个实例；*这句话是正确的，但*前提*是位于返回栈顶部的 Activity 并不是 Activity 的现有实例，如果是Activity 的现有实例，而且启动模式是singleTop，则不会多次实例化。
+- 例如，假设任务的返回栈包含根 Activity A 以及 Activity B、C 和位于顶部的 D（堆栈是 A-B-C-D；D 位于顶部）。收到针对 D 类 Activity 的 Intent。如果 D 具有默认的 "standard" 启动模式，则会启动该类的新实例，且堆栈会变成 A-B-C-D-D。但是，如果 D 的启动模式是 "singleTop"，则 D 的现有实例会通过 onNewIntent() 接收 Intent，因为它位于堆栈的顶部；而堆栈仍为 A-B-C-D。但是，*如果收到针对 B 类 Activity 的 Intent，则会向堆栈添加 B 的新实例，即便其启动模式为 "singleTop" 也是如此，也就是说，如果B没有位于栈顶，即便B的启动模式是"singleTop"，在收到针对 B 类 Activity 的 Intent时，也会向堆栈添加 B 的新实例。*
+- 注：*为某个 Activity 创建新实例时，用户可以按“返回”按钮返回到前一个 Activity。 但是，当 Activity 的现有实例处理新 Intent 时，则在新 Intent 到达 onNewIntent() 之前，用户无法按“返回”按钮返回到 Activity 的状态。*
+- 总结：这种模式通常适用于就收到消息后现实的界面，比如QQ接收到消息后弹出Activity，如果一次来了10条消息，总不能一次弹10个Activity。
+
+* singleTask：栈内复用模式
+- 系统创建新任务并实例化位于新任务底部的 Activity。但是，如果该 Activity 的一个实例已存在于一个单独的任务中，则系统会通过调用现有实例的 onNewIntent() 方法向其传送 Intent，而不是创建新实例。一次只能存在 Activity 的一个实例。
+- 注：*尽管 Activity 在新任务中启动，但是用户按“返回”按钮仍会返回到前一个 Activity。*
+- singleTask 模式与singlTop 模式类似，只不过*singleTop* 是*检测栈顶元素是否是需要启动的Activity* ，而*singleTask* 是*检测整个Activity 栈中是否存在当前需要启动的Activity*。如果存在， 则将该Activity 置于栈顶，并将该Activity 以上的Activity 都销毁（由于singleTask 默认具有clearTop 的效果）。
+- 不过上面的这一条，是指*在同一个App 中启动这个singleTask 的Activity*，如果是*其他程序以singleTask 模式来启动这个Activity* ，那么它将创建一个新的任务栈。不过这里有一点需要注意的是，如果启动的模式为singleTask 的Activity 巳经在后台一个任务栈中了，那么启动后，而后台的这个任务栈将一起被切换到到前台。
+- 举例如下：
+  - 比如目前任务栈S1 中的情况为ABC，这个时候Activity D 以singleTask 模式请求启动，其所需要的任务栈为S2 ，由于S2 和D 的实例均不存在，所以系统会先创建任务栈S2 ，然后再创建D 的实例井将其入栈到S2 。
+  - 另外一种情况，假设D 所需的任务栈为S1，其他情况如上面例子l 所示，那么由于S1 已经存在，所以系统会直接创建D的实例井将其入栈到S1。
+  - 如果D 所需的任务栈为S1，并且当前任务栈S1 的情况为ADBC ，根据栈内复用的原则，此时D 不会重新创建，系统会把D 切换到栈顶并调用其onNewlntent 方法，同时由于singleTask 默认具有clearTop 的效果，会导致栈内所有在D 上面的Activity全部出栈，于是最终S1中的情况为AD。这一点比较特殊。
+- 总结：使用这个模式创建的Activity不是在新的任务栈中被打开， 就是将已经打开的Activity切换到前台，所以*这种启动模式通常可以用来退出整个应用： 将主Activity 设为singleTask 模式，然后在要退出的Activity 中转到主Activity，从而将主Activity之上的Activity 都清除，然后重写主Activity 的onNewIntent()方法，在方法中加上一行代码finish()，将最后一个Activity 结束掉。*
+- 这是一种单实例模式，在这种模式下，一个Activity在一个栈中只能有一个实例，类似单例模式。详细讲解，当一个具有singleTask模式的Activity请求启动后，例如Activity A，系统首先会寻找是否存在A想要的任务栈，如果不存在，就重新创建一个新的任务栈，然后创建A的实例后把A 放到栈中。如果存在A所需要的任务栈，再看Activity A 是否在栈中有实例存在，如果有实例存在，那么系统就会把A调到栈顶并调用onNewIntent方法，如果实例不存在，就创建A的实例并把A压入栈中。 
+    - 小例子：活动启动的顺序是A→B→C→D→B，第一次启动B的时候栈内没有实例，系统会创建新的B的实例，但第二次启动B的时候，系统查询任务栈，发现有实例，系统就会把活动B移到栈顶，并且把B之上的所有活动出栈。
+- 不会出现重复的活动实例，这种模式下有两种情形，栈内有这个活动的实例的情形和栈内没有这个实例的情形。
+  - （1）假设栈内原来有A、B两个实例，此时跳转到A页面，不管A页面位不位于栈顶，只要栈内存在A活动的实例，那么就把A以上的实例全部销毁出栈，总之让A位于栈顶得到用户观看。
+  - （2）假设栈内没有C，此时跳转到C页面，会创建新的C活动实例。
+
+* singleInstance：单实例模式
+- 这是一种加强的singleTask模式，它除了具有singleTask模式所具有的所有特性外，还加强一点，那就是具有此种模式的Activity只能单独的位于一个任务栈中(具有独占性：独占一个任务栈)。简单而言，如果一个活动是singleInstance的启动模式，那么该活动就只能单独位于一个栈中。
+    - 小例子：如果一个活动是singleInstance模式，那么活动C会单独创建一个新的任务栈，而返回栈（应该是安卓多任务管理中的多个任务时，不同任务的前后返回顺序）中，活动C处于的任务栈会先压入返回栈的栈低，再把另外一个活动栈放入返回栈中（这句话仍然是没有看懂，感觉是写错了，先压B任务栈，再压入新开启的任务C，下图中的ABC更像是以singleInstance 启动的三个活动，分别独占一个各自的任务栈）。
+- 不会出现重复的活动实例，此时比较特殊，持有这种模式的活动实例单独有一个栈来存储它，栈内只有它一个实例，如果多个应用启动这个活动，那么他们共同享用这个栈内的唯一实例，不会生成新的。这个模式的应用比如说*手机的锁屏页面。*
+  
+[[./pic/singleInstance.jpg]]
+  - 这种模式的返回模式，出栈顺序是C-B-A,入栈顺序是A-B-C,最先出现，最后死亡
+- 下面是另一种的表达方式，但是有引导思考的地方，也需要去学习这种*通过对比加强理解的思维模式。*
+- 与 "singleTask" 相同，只是系统不会将任何其他 Activity 启动到包含实例的任务中。该 Activity 始终是其任务唯一仅有的成员；由此 Activity 启动的任何 Activity 均在单独的任务中打开。而且*代码中不能实现相同的启动模式效果。*
+- 这是一种加强的singleTask模式，它除了具有singleTask模式的所有特性外，还加强了一点，那就是具有此种模式的Activity 只能单独地位于一个任务栈中，换句话说，比如Activity A 是singlelnstance 模式， 当A 启动后，系统会为它创建一个新的任务栈，然后A 独自在这个新的任务找中，由于栈内复用的特性，后续的请求均不会创建新的Activity，除非这个独特的任务栈被系统销毁了。
+- singleInstance 这种启动模式和使用的浏览器工作原理类似。在多个程序中访问浏览器时 ,如果当前浏览器没有打开，则打开浏览器，否则会在当前打开的浏览器中访问。申明为singleInstance 的Activity 会出现在一个新的任务栈中，而该任务栈中只存在这一个Activity 。举个例子米说，如果应用A 的任务栈中创建了MainActivity 实例，且启动模式为singleInstance,如果应用B 也要激活MainActivity ， 则不需要创建，两个应用共享该Activity实例。这种启动模式常用于需要与程序分离的界面，如在SetupWizard中调用紧急呼叫，就是使用这种启动模式。
+- 比较一下：不同于以上3 种启动模式，*指定为singlelnstance 模式的活动会启用一个新的返回找来管理这个活动*（其实*如果singleTask 模式指定了不同的taskAftinity ，也会启动一个新的返回栈*）。那么*这样做有什么意义呢？*
+- *特别适用的场景*: 想象以下场景，假设我们的*程序中有一个活动是允许其他程序调用的，如果我们想实现其他一个或是多个不同的应用程序和我们的程序可以共享这个活动的实例，应该如何实现呢？*
+- 使用前面3 种启动模式肯定是做不到的，因为每个应用程序都会有自己的返回栈，同一个活动在不同的返回栈中入栈时必然是创建了新的实例。而使用singlelnstance 模式就可以解决这个问题，在这种模式下会有一个单独的返回栈来管理这个活动，不管是哪个应用程序来访问这个活动，都共用的同一个返回栈，也就解决了共享活动实例的问题。（具体事例可参考郭霖的第一行代码中例子）
+
+* 综合比较与汇总
+
+[[./pic/launchmode.png]]
+
+* 设定方法
+- 怎么设定这四种模式，有两种方法，
+** manifest.xml文件中设置。
+  #+BEGIN_SRC xml
+<activity android:name=".Activity1" 
+          android:launchMode="standard" 
+          android:label="@string/app_name"> 
+  <intent-filter> 
+    <action android:name="android.intent.action.MAIN" /> 
+    <category android:name="android.intent.category.LAUNCHER" /> 
+  </intent-filter> 
+</activity>
+  #+END_SRC
+** Intent设置标记位
+- Intent设置标记位方式的优先级高于manifest中指定launchMode的方式.
+*** FLAG_ACTIVITY_NEW_TASK：
+- 效果和在manifest中设置launchMode为singleTask相同。
+- 该标志位表示使用一个新的Task来启动一个Activity，相当于在清单文件中给Activity指定“singleTask”启动模式。通常我们在Service启动Activity时，由于Service中并没有Activity任务栈，所以必须使用该Flag来创建一个新的Task。
+*** FLAG_ACTIVITY_SINGLE_TOP：
+  - 这个FLAG就相当于加载模式中的singletop，比如说原来栈中情况是A,B,C,D在D中启动D，栈中的情况还是A,B,C,D
+*** FLAG_ACTIVITY_CLEAR_TOP：
+- 具有此标记的activity启动时，在同一任务栈中所有位于它上面的activity都要出栈。一般和FLAG_ACTIVITY_NEW_TASK配合使用。这种情况下，被启动的activity的实例如果已经存在，那么会调用它的onNewIntent方法。
+- 这个FLAG就相当于加载模式中的SingleTask，这种FLAG启动的Activity会把要启动的Activity之上的Activity全部弹出栈空间。类如：原来栈中的情况是A,B,C,D这个时候从D中跳转到B，这个时候栈中的情况就是A,B了.
+*** FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS：
+- 具有此标记的activity不会出现在历史activity列表中。
+- 使用该标识位启动的Activity不添加到最近应用列表，也即我们从最近应用里面查看不到我们启动的这个activity。
+- 等同于在manifest中设置activity属性
+#+BEGIN_SRC xml
+<android:excludeFromRecents="true"/>
+#+END_SRC
+*** Intent.FLAG_ACTIVITY_NO_HISTORY
+- 使用该模式来启动Activity，当该Activity启动其他Activity后，该Activity就被销毁了，不会保留在任务栈中。如A-B,B中以这种模式启动C，C再启动D，则任务栈只有ABD。
+*** FLAG_ACTIVITY_CLEAR_TASK
+- 如果在传递给Context.startActivity()的意图中设置了该标志，则会导致在启动activity 之前清除与该activity关联的任何现有任务。也就是说，activity成为一个空任务的新根，任何旧activity都finish了。
+- 这只能与FLAG_ACTIVITY_NEW_TASK一起使用。
+
+*** 注意事项： 
+- 当通过非activity的context来启动一个activity时，需要增加intent flag FLAG_ACTIVITY_NEW_TASK
+#+BEGIN_SRC java
+Intent i = new Intent(this, Wakeup.class);
+i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+#+END_SRC
+**** 对 Intent.FLAG_ACTIVITY_NEW_TASK 这个属性，是不是一定新开一个栈？
+- 这个问题的答案是 ：不一定
+- 假设现在有一个栈1，里面是A,B,C。此时，在C中启动D的时候，设置FLAG_ACTIVITY_NEW_TASK标记，此时会有两种情况：
+  - 1.如果D这个Activity在Manifest.xml中的声明中添加了Task Affinity，系统首先会查找有没有和D的Task Affinity相同的Task栈存在，如果有存在，将D压入那个栈
+  - 2.如果D这个Activity在Manifest.xml中的Task Affinity默认没有设置，则会把其压入栈1，变成：A B C D，这样就和标准模式效果是一样的了。
+- _我想，这篇里的部分结论，很大一部分结论，还是需要小项目代码再验证一下其正确性的_ 不敢轻信、没有确信！！！
+  - 也就是说，设置了这个标志后，新启动的Activity并非就一定在新的Task中创建，如果A和B在属于同一个package，而且都是使用默认的Task Affinity，那B还是会在A的task中被创建。 所以，只有A和B的Task Affinity不同时，设置了这个标志才会使B被创建到新的Task。
+  - ！注意如果试图从非Activity的非正常途径启动一个Activity，比如从一个Receiver中启动一个Activity，则Intent必须要添加FLAG_ACTIVITY_NEW_TASK标记。
+  - 我们这里之所以会新建一个栈，因为我们的APP和系统Activity的Task Affinity不同
+
+** Intent flag标记位进阶: （这个难度比较高一点儿，改天脑袋清醒的时候再好好理解消化一下)
+- https://blog.csdn.net/vshuang/article/details/66472338?spm=1001.2101.3001.6661.1&utm_medium=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7ECTRLIST%7Edefault-1.no_search_link&depth_1-utm_source=distribute.pc_relevant_t0.none-task-blog-2%7Edefault%7ECTRLIST%7Edefault-1.no_search_link
+*** FLAG_ACTIVITY_CLEAR_TOP    
+　　如果设置，并且这个Activity已经在当前的Task中运行，因此，不再是重新启动一个这个Activity的实例，而是在这个Activity上方的所有Activity都将关闭，然后这个Intent会作为一个新的Intent投递到老的Activity（现在位于顶端）中。      例如，假设一个Task中包含这些Activity：A，B，C，D。如果D调用了startActivity()，并且包含一个指向Activity B的Intent，那么，C和D都将结束，然后B接收到这个Intent，因此，目前stack的状况是：A，B。      上例中正在运行的Activity B既可以在onNewIntent()中接收到这个新的Intent，也可以把自己关闭然后重新启动来接收这个Intent。如果它的启动模式声明为“multiple”(默认值)，并且你没有在这个Intent中设置FLAG_ACTIVITY_SINGLE_TOP标志，那么它将关闭然后重新创建；对于其它的启动模式，或者在这个Intent中设置FLAG_ACTIVITY_SINGLE_TOP标志，都将把这个Intent投递到当前这个实例的onNewIntent()中。      这个启动模式还可以与FLAG_ACTIVITY_NEW_TASK结合起来使用：用于启动一个Task中的根Activity，它会把那个Task中任何运行的实例带入前台，然后清除它直到根Activity。这非常有用，例如，当从Notification Manager处启动一个Activity
+*** FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET    
+　　如果设置，这将在Task的Activity stack中设置一个还原点，当Task恢复时，需要清理Activity。也就是说，下一次Task带着FLAG_ACTIVITY_RESET_TASK_IF_NEEDED标记进入前台时（典型的操作是用户在主画面重启它），这个Activity和它之上的都将关闭，以至于用户不能再返回到它们，但是可以回到之前的Activity。      这在你的程序有分割点的时候很有用。例如，一个e-mail应用程序可能有一个操作是查看一个附件，需要启动图片浏览Activity来显示。这个Activity应该作为e-mail应用程序Task的一部分，因为这是用户在这个Task中触发的操作。然而，当用户离开这个Task，然后从主画面选择e-mail app，我们可能希望回到查看的会话中，但不是查看图片附件，因为这让人困惑。通过在启动图片浏览时设定这个标志，浏览及其它启动的Activity在下次用户返回到mail程序时都将全部清除。
+*** FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+　　If set, and this activity is either being started in a new task or bringing to the top an existing task, then it will be launched as the front door of the task. This will result in the application of any affinities needed to have that task in the proper state (either moving activities to or from it), or simply resetting that task to its initial state if needed.
+*** FLAG_ACTIVITY_NEW_TASK     
+　　 如果设置，这个Activity会成为历史stack中一个新Task的开始。一个Task（从启动它的Activity到下一个Task中的Activity）定义了用户可以迁移的Activity原子组。Task可以移动到前台和后台；在某个特定Task中的所有Activity总是保持相同的次序。      这个标志一般用于呈现“启动”类型的行为：它们提供用户一系列可以单独完成的事情，与启动它们的Activity完全无关。      使用这个标志，如果正在启动的Activity的Task已经在运行的话，那么，新的Activity将不会启动；代替的，当前Task会简单的移入前台。参考FLAG_ACTIVITY_MULTIPLE_TASK标志，可以禁用这一行为。      这个标志不能用于调用方对已经启动的Activity请求结果。
+*** FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS    
+- 如果设置，新的Activity不会在最近启动的Activity的列表中保存。
+-  参考一个stackoverflow的问答 https://stackoverflow.com/questions/7759556/flag-activity-exclude-from-recents-excludes-whole-application-not-only-the-acti
+- I have a Notification which starts an Activity. After a long press on home button and selecting my app, I want to start my main Activity again, and not this Activity started by the Notification. I tried with FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS, but this removed my whole application from the recents, and that's not what I want to achieve. How can I have my app in the recents, but have the main Activity started?
+- Okay, I found the solution to my problem. I started an Activity from a Notification with FLAG_ACTIVITY_NEW_TASK. But it seems to me that this Activity only gets started in an own task if affinity is different from the default affinity. So I had to add a different affinity in the manifest.
+- And it seems that FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS does not (as documented) exlucde the Activity from the recents, rather it excludes the whole task (not the whole application) in which the Activity gets started from the recents. And as I hadn't set a different affinity the Activity which I wanted to exclude was started in the same task (although I had set FLAG_ACTIVITY_NEW_TASK) and so my whole application (as it was running in only one task) was excluded from the recents.
+- Now I've set a different affinity for the Activity that gets started from the Notification and I start it with FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS. When I leave this Activity and long-press the HOME button I can choose my app and the default task is started or brought to the front.
+*** FLAG_ACTIVITY_FORWARD_RESULT     
+- 如果设置，并且这个Intent用于从一个存在的Activity启动一个新的Activity，那么，这个作为答复目标的Activity将会传到这个新的Activity中。这种方式下，新的Activity可以调用setResult(int)，并且这个结果值将发送给那个作为答复目标的Activity。
+
+* 启动模式与startActivityForResult
+** LaunchMode与StartActivityForResult
+- 我们在开发过程中经常会用到StartActivityForResult方法启动一个Activity，然后在onActivityResult()方法中可以接收到上个页面的回传值，但你有可能遇到过拿不到返回值的情况，那有可能是因为Activity的LaunchMode设置为了singleTask。5.0之后，android的LaunchMode与StartActivityForResult的关系发生了一些改变。两个Activity，A和B，现在由A页面跳转到B页面，看一下LaunchMode与StartActivityForResult之间的关系：
+- 这是为什么呢？
+- 这是因为ActivityStackSupervisor类中的startActivityUncheckedLocked方法在5.0中进行了修改。
+- 在5.0之前，当启动一个Activity时，系统将首先检查Activity的launchMode，如果为A页面设置为SingleInstance或者B页面设置为singleTask或者singleInstance,则会在LaunchFlags中加入FLAG_ACTIVITY_NEW_TASK标志，而如果含有FLAG_ACTIVITY_NEW_TASK标志的话，onActivityResult将会立即接收到一个cancle的信息。
+#+BEGIN_SRC java
+final boolean launchSingleTop = r.launchMode == ActivityInfo.LAUNCH_SINGLE_TOP;
+final boolean launchSingleInstance = r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE;
+final boolean launchSingleTask = r.launchMode == ActivityInfo.LAUNCH_SINGLE_TASK;
+int launchFlags = intent.getFlags();
+if ((launchFlags & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0 &&
+        (launchSingleInstance || launchSingleTask)) {
+    // We have a conflict between the Intent and the Activity manifest, manifest wins.
+    Slog.i(TAG, "Ignoring FLAG_ACTIVITY_NEW_DOCUMENT, launchMode is " +
+            "\"singleInstance\" or \"singleTask\"");
+    launchFlags &=
+            ~(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+} else {
+    switch (r.info.documentLaunchMode) {
+        case ActivityInfo.DOCUMENT_LAUNCH_NONE:
+            break;
+        case ActivityInfo.DOCUMENT_LAUNCH_INTO_EXISTING:
+            launchFlags |= Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+            break;
+        case ActivityInfo.DOCUMENT_LAUNCH_ALWAYS:
+            launchFlags |= Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+            break;
+        case ActivityInfo.DOCUMENT_LAUNCH_NEVER:
+            launchFlags &= ~Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
+            break;
+    }
+}
+final boolean launchTaskBehind = r.mLaunchTaskBehind
+        && !launchSingleTask && !launchSingleInstance
+        && (launchFlags & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0;
+if (r.resultTo != null && (launchFlags & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+    // For whatever reason this activity is being launched into a new
+    // task...  yet the caller has requested a result back.  Well, that
+    // is pretty messed up, so instead immediately send back a cancel
+    // and let the new task continue launched as normal without a
+    // dependency on its originator.
+    Slog.w(TAG, "Activity is launching as a new task, so cancelling activity result.");
+    r.resultTo.task.stack.sendActivityResultLocked(-1,
+            r.resultTo, r.resultWho, r.requestCode,
+            Activity.RESULT_CANCELED, null);
+    r.resultTo = null;
+}
+#+END_SRC
+- 而5.0之后这个方法做了修改，修改之后即便启动的页面设置launchMode为singleTask或singleInstance，onActivityResult依旧可以正常工作，也就是说无论设置哪种启动方式，StartActivityForResult和onActivityResult()这一组合都是有效的。所以如果你目前正好基于5.0做相关开发，不要忘了向下兼容，这里有个坑请注意避让。
+- _所以下面的结论可能不对，需要改天代码再好好验证一下_
+   #+BEGIN_SRC java
+if (sourceRecord == null) {
+    // This activity is not being started from another...  
+    // in this case we -ALWAYS- start a new task.
+    if ((launchFlags & Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {
+        Slog.w(TAG, "startActivity called from non-Activity context; forcing Intent.FLAG_ACTIVITY_NEW_TASK for: "
+              + intent);
+        launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;
+    }
+} else if (sourceRecord.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE) {
+    // The original activity who is starting us is running as a single
+    // instance...  this new activity it is starting must go on its
+    // own task.
+    launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;
+} else if (r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE
+        || r.launchMode == ActivityInfo.LAUNCH_SINGLE_TASK) {
+    // The activity being started is a single instance...  it always
+    // gets launched into its own task.
+    launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;
+}
+if (r.resultTo != null && (launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+    // For whatever reason this activity is being launched into a new
+    // task...  yet the caller has requested a result back.  Well, that
+    // is pretty messed up, so instead immediately send back a cancel
+    // and let the new task continue launched as normal without a
+    // dependency on its originator.
+    Slog.w(TAG, "Activity is launching as a new task, so cancelling activity result.");
+    sendActivityResultLocked(-1,
+            r.resultTo, r.resultWho, r.requestCode,
+        Activity.RESULT_CANCELED, null);
+    r.resultTo = null;
+}
+   #+END_SRC
+- 也就是说startActivityForResult启动的activity有FLAG_ACTIVITY_NEW_TASK，那么就不能返回结果。( _这个结论可能太古老了吧？！！！_ )
+** 启动任务（Task）： 这里要再消化一下！
+- Intent filter中有”android.intent.action.MAIN ” action和”android.intent.category.LAUNCHER ” category的activity将被标记为task的入口。带有这两个标记的activity将会显示在应用程序启动器（application launcher）中。
+- 第二个比较重要的点是， _用户必须能够离开task并在之后返回_ 。因为这个原因，singleTask和singleInstance这两种运行模式只能应用于含有MAIN和LAUNCHER过滤器的 activity 。打个比方，如果不包含带MAIN和LAUNCHER过滤器，某个activity运行了一个singleTask模式的 activity，初始化了一个新的task，当用户按下HOME键时，那个activity就被主屏幕“挡住”了，用户再也无法返回到那个 activity。 (这里读得昏昏乎乎！！！)
+- 类似的情况在FLAG_ACTIVITY_NEW_TASK标记上也会出现。如果这个标记会新建一个task，当用户按下HOME键时，必须有一种 方式能够让用户返回到那个activity。有些东西（比如notification manager）总是要求在外部task中启动activity，在传递给startActivity的intent中总是包含 FLAG_ACTIVITY_NEW_TASK标记。
+- 对于那种不希望用户离开之后再返回activity的情况，可将finishOnTaskLaunch属性设置为true。
+** Activity Stack
+- 可以通过 adb shell dumpsys | grep ActivityRecord 来查看 TASKS的ActivityStacks
+- 可以通过 adb shell dumpsys activity activities | grep packageName| grep Run 来查看某个packageName的ActivityStatcks
+
+* onNewIntent
+- 当通过singleTop/singleTask启动activity时，如果满足复用条件，则不会创建新的activity实例，生命周期就变为onNewIntent()---->onResart()------>onStart()----->onResume()。
+  - Activity第一启动的时候执行onCreate()---->onStart()---->onResume()等后续生命周期函数，也就时说第一次启动Activity并不会执行到onNewIntent().；
+  - 而后面如果再有想启动Activity的时候，那就是执行onNewIntent()---->onResart()------>onStart()----->onResume()；
+  - 如果android系统由于内存不足把已存在Activity释放掉了，那么再次调用的时候会重新启动Activity即执行onCreate()---->onStart()---->onResume()等。
+- 注意：当调用到onNewIntent(intent)的时候，需要在onNewIntent() 中使用setIntent(intent)赋值给Activity的Intent.否则，后续的getIntent()都是得到老的Intent。
+
+* Activity所需的任务栈与TaskAffinity
+- 这要从一个参数说起：TaskAffinity(任务相关性)。这个参数标识了一个activity所需的任务栈的名字，默认情况下，所有activity所需的任务栈的名字为应用的包名。
+- TaskAffinity 参数标识着Activity所需要的任务栈的名称，默认情况下，一个应用中所有Activity所需要的任务栈名称都为该应用的包名。
+- TaskAffinity 属性一般跟singleTask模式或者跟allowTaskReparenting属性结合使用，在其他情况下没有实际意义。
+** TaskAffinity和singleTask启动模式结合使用
+- 当TaskAffinity和singleTask启动模式结合使用时，当前Activity的任务栈名称将与TaskAffinity属性指定的值相同，下面我们通过代码来验证,我们同过MainActivity来启动ActivityA，其中MainActivity启动模式为默认模式，ActivityA启动模式为singleTask，而TaskAffinity属性值为android:taskAffinity="com.zejian.singleTask.affinity"
+#+BEGIN_SRC xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="comzejian.myapplication">
+  <application
+      android:allowBackup="true"
+      android:icon="@mipmap/ic_launcher"
+      android:label="@string/app_name"
+      android:supportsRtl="true"
+      android:theme="@style/AppTheme">
+
+    <activity android:name=".MainActivity">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+
+    <activity android:name=".ActivityA"
+              android:launchMode="singleTask"
+              android:taskAffinity="com.zejian.singleTask.affinity"
+              />
+    
+  </application>
+</manifest>
+#+END_SRC
+- 可以通过singleTask与android:taskAffinity属性相结合的方式来指定我们Activity所需要的栈名称，使相应的Activity存在于不同的栈中
+** 当TaskAffinity和allowTaskReparenting结合使用
+*** allowTaskReparenting属性
+- 它的主要作用是activity的迁移，即从一个task迁移到另一个task，这个迁移跟activity的taskAffinity有关。
+  - 当allowTaskReparenting的值为“true”时，则表示Activity能从启动的Task移动到有着affinity的Task（当这个Task进入到前台时），
+  - 当allowTaskReparenting的值为“false”，表示它必须呆在启动时呆在的那个Task里。如果这个特性没有被设定，元素(当然也可以作用在每次activity元素上)上的allowTaskReparenting属性的值会应用到Activity上。默认值为“false”。
+    
+[[./pic/reparenting.png]]
+
+  - 举个例子，比如现在有两个应用A和B，A启动了B的一个ActivityC，然后按Home键回到桌面，再单击B应用时，如果此时，allowTaskReparenting的值为“true”，那么这个时候并不会启动B的主Activity，而是直接显示已被应用A启动的ActivityC，我们也可以认为ActivityC从A的任务栈转移到了B的任务栈中。
+**** 用代码来码证一下
+- ActivityA
+#+BEGIN_SRC java
+public class ActivityA extends Activity {
+    private Button btnC;
+    @Override
+        protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_a);
+        btnC = (Button) findViewById(R.id.mainC);
+        btnC.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    Intent intent = new Intent(Intent.ACTION_MAIN);
+                    intent.addCategory(Intent.CATEGORY_LAUNCHER); // 去打开B应用中的activity 
+                    ComponentName cn = new ComponentName("com.cmcm.activitytask2", "com.cmcm.activitytask2.ActivityC");
+                    intent.setComponent(cn);
+                    startActivity(intent);
+                }
+            });
+    }
+}
+#+END_SRC
+- A 应用的 manifest.xml
+#+BEGIN_SRC xml
+<activity android:name=".ActivityA">
+     <intent-filter>
+           <action android:name="android.intent.action.MAIN" />
+           <category android:name="android.intent.category.LAUNCHER" />
+     </intent-filter>
+</activity>
+#+END_SRC
+- B应用中的启动模式以及标志位的设置
+#+BEGIN_SRC java
+public class ActivityC extends Activity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_c);
+    }
+}
+#+END_SRC
+- B应用的manifest.xml
+#+BEGIN_SRC xml
+<activity android:name=".ActivityC" android:exported="true"    
+      android:allowTaskReparenting="true">
+</activity>
+#+END_SRC
+**** 查看Activity的返回栈
+- adb shell dumpsys activity // 找
+- ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+- ACTIVITY MANAGER ACTIVITIES (dumpsys activity activities)
+*** 注意点
+- 有点需要说明的是allowTaskReparenting仅限于singleTop和standard模式，这是因为一个activity的affinity属性由它的taskAffinity属性定义（代表栈名），而一个task的affinity由它的root activity定义。所以，一个task的root activity总是拥有和它所在task相同的affinity。
+- 由于以singleTask和singleInstance启动的activity只能是一个task的root activity，因此allowTaskReparenting仅限于以standard 和singleTop启动的activity
+- 列一下清单文件中 <activity>元素的几个关键属性
+  - launchMode
+  - taskAffinity
+  - allowTaskReparenting
+  - clearTaskOnLaunch
+  - alwaysRetainTaskState
+  - finishOnTaskLaunch
+*** taskAffinity在两种情况下起作用：
+**** 当启动Activity的Intent中带有FLAG_ACTIVITY_NEW_TASK标志时。
+- 在默认情况下，目标Activity将与startActivity的调用者处于同一task中。但如果用户特别指定了FLAG_ACTIVITY_NEW_TASK，表明它希望为Activity重新开设一个Task。这时就有两种情况：
+  - 假如当前已经有一个Task，它的affinity与新Activity是一样的，那么系统会直接用此Task来完成操作，而不是另外创建一个Task；
+  - 否则系统需要创建一个Task。
+**** 当Activity中的allowTaskReparenting属性设置为true时。
+- 在这种情况下，Activity具有"动态转移"的能力。举个前面的"短信"例子，在默认情况下，该应用程序中的所有Activity具有相同的affinity。
+- 当另一个程序启动了"短信编辑"时，一开始这个Activity和启动它的Activity处于同样的Task中。但如果"短信编辑"Activity指定了allowTaskReparenting，且后期"短信"程序的Task转为前台，此时"短信编辑"这一Activity会被"挪"到与它更亲近的"短信"Task中。
+
+** 清空任务栈
+- Android系统除了给我提供了TaskAffinity来指定任务栈名称外，还给我提供了清空任务栈的方法，在一般情况下我们只需要在<activity>标签中指明相应的属性值即可。
+- 如果用户将任务切换到后台之后过了很长一段时间，系统会将这个任务中除了最底层的那个Activity之外的其它所有Activity全部清除掉。当用户重新回到这个任务的时候，最底层的那个Activity将得到恢复。这个是系统默认的行为，因为既然过了这么长的一段时间，用户很有可能早就忘记了当时正在做什么，那么重新回到这个任务的时候，基本上应该是要去做点新的事情了。
+- 当然，既然说是默认的行为，那就说明我们肯定是有办法来改变的，在元素中设置以下几种属性就可以改变系统这一默认行为：
+*** android:alwaysRetainTaskState
+- *alwaysRetainTaskState实际上是给了当前Activity所在的任务栈一个“免死金牌”*，如果当前Activity的android:alwaysRetainTaskState设置为true时，那么该Activity所在的任务栈将不会受到任何清理命令的影响，一直保持当前任务栈的状态。
+- 如果将最底层的那个Activity的这个属性设置为true，那么上面所描述的默认行为就将不会发生，任务中所有的Activity即使过了很长一段时间之后仍然会被继续保留。
+*** clearTaskOnLaunch
+- 如果将最底层的那个Activity的这个属性设置为true，那么只要用户离开了当前任务，再次返回的时候就会将最底层Activity之上的所有其它Activity全部清除掉。简单来讲，*就是一种和alwaysRetainTaskState完全相反的工作模式，它保证每次返回任务的时候都会是一种初始化状态，即使用户仅仅离开了很短的一段时间*。
+- 这个属性用来标记是否从task清除除根Activity之外的所有的Activity，“true”表示清除，“false”表示不清除，默认为“false”。这里有点我们必须要注意的，这个属性只对任务栈内的root Activity起作用，任务栈内其他的Activity都会被忽略。如果android:clearTaskOnLaunch属性为“true”，每次我们重新进入这个应用时，我们只会看到根Activity，任务栈中的其他Activity都会被清除出栈。
+- 比如一个应用的Activity A,B,C，其中clearTaskOnLaunch设置为true，C为默认值，我们依次启动A,B,C，点击HOME,再在桌面点击图标。启动的是A，而B，C将都被移除当前任务栈。也就是说，当Activity的属性clearTaskOnLaunch为true时将被优先启动，其余的Activity(B、C)都被移除任务栈并销毁，除非前面A已经finish销毁，后面的已注册clearTaskOnLaunch为true的activity(B)才会生效。
+- 特别地，如果我们的应用中引用到了其他应用的Activity，这些Activity设置了android:allowTaskReparenting属性为“true”，则它们会被重新宿主到有共同affinity的task中。
+*** android:finishOnTaskLaunch
+- *这个属性和clearTaskOnLaunch是比较类似的，不过它不是作用于整个任务上的，而是作用于单个Activity上。*如果某个Activity将这个属性设置成true，那么用户一旦离开了当前任务，再次返回时这个Activity就会被清除掉。
+- finishOnTaskLaunch属性与clearTaskOnLaunch 有些类似，它们的区别是finishOnTaskLaunch是作用在自己身上(把自己移除任务栈，不影响别的Activity)，而clearTaskOnLaunch则是作用在别人身上(把别的Activity移除任务栈)，如果我们把Activity的android:finishOnTaskLaunch属性值设置为true时，离开这个Activity所依赖的任务栈后，当我们重新返回时，该Activity将会被finish掉，而且其他Activity不会受到影响。
+
+* 启动模式的应用场景
+** SingleTask模式的运用场景
+- 最常见的应用场景就是保持我们应用开启后仅仅有一个Activity的实例。最典型的样例就是应用中展示的主页(Home页)。
+- 假设用户在主页跳转到其他页面，运行多次操作后想返回到主页，假设不使用SingleTask模式，在点击返回的过程中会多次看到主页，这明显就是设计不合理了。
+** SingleTop模式的运用场景
+- 假设你在当前的Activity中又要启动同类型的Activity，此时建议将此类型Activity的启动模式指定为SingleTop，能够降低Activity的创建，节省内存!
+** SingleInstance模式的运用场景
+- SingleInstance是activity启动的一种模式，一般做应用层开发很少用到，我一般用到的app定时提醒会用到这个模式吧。这个模式使用起来有很多坑，假设有activityA，activityB，activityC这三个activity，我们将activityB设置为SingleInstance
+*** 第一种情况
+- A开启B，B开启C，如果finish activityC，那么activityA会显示而不是我们想要的activityB，这是因为activityB和activityA、activityC所处的栈不同，C关闭了，就要显示C所处栈的下一个activity，解决这个问题办法很多，我自己用的方法是通过记录开启activity，在被关闭的activity的finish方法中重新开启activityB。
+*** 第二种情况
+A开启B，然后按home键，再从左面点开应用，显示的是A，这是因为launch启动我们应用的时候 会从默认的栈找到栈顶的activity显示，这个解决办法的思路跟第一种差不多，也就不献丑了
+*** 第三种情况
+- A开启C，C开启B，B开启A，结果显示的是C，这还是两个栈造成的，B开启A的时候，其实是到达A所处的栈，栈顶是C，所以就显示C了，解决办法是用flag把默认栈activity清理了，重新开启A，或者回退到C时再开启A。
+*** 总结
+- 三种情况的解决方法都是基于页面少的情况，如果页面多了会产生更多的问题
+- 为了必避免这个问题，最好不用在中间层使用SingleInstance
+- TIPS:  
+  - (1)如果想让C和B同一个栈，那就使用taskinfinity，给他俩设置同样的栈名
+  - (2)onActivityResult不能与SingleInstance不能一起使用，因为不同栈
+** standard 运用场景
+- Activity 的启动默认就是这种模式。在 standard 模式下，每次启动一个 Activity 都会创建一个新的实例;
+- 在正常应用中正常打开和关闭页面就可以了，退出整个app就关闭所有的页面
+* Activity时的生命周期不同
+-  由于当一个Activity设置了SingleTop或者SingleTask模式或者SingleInstance模式后，跳转此Activity出现复用原有Activity的情况时，此Activity的onCreate方法将不会再次运行。onCreate方法仅仅会在第一次创建Activity时被运行。
+- 而一般onCreate方法中会进行该页面的数据初始化、UI初始化，假设页面的展示数据无关页面跳转传递的參数，则不必操心此问题，若页面展示的数据就是通过getInten() 方法来获取，那么问题就会出现：getInten()获取的一直都是老数据，根本无法接收跳转时传送的新数据!
+- 这时我们须要另外一个回调 onNewIntent(Intent intent)方法。此方法会传入最新的intent，这样我们就能够解决上述问题。这里建议的方法是又一次去setIntent。然后又一次去初始化数据和UI
+#+BEGIN_SRC java
+/** 复用Activity时的生命周期回调*/
+@Override     
+protected void onNewIntent(Intent intent) {         
+    super.onNewIntent(intent);         
+    setIntent(intent);         
+    initData();         
+    initView();     
+} 
+#+END_SRC
+* 实际中的栈管理类
+- 管理Activity的类，一般在BaseActivity会调用这个类，然后所有的Activity继承BaseActivity，这样管理好整个项目的Activity
+#+BEGIN_SRC java
+public class ActivityStackManager { // activity堆栈管理 
+    private static ActivityStackManager mInstance; 
+    private static Stack<Activity> mActivityStack; 
+    public static ActivityStackManager getInstance() { 
+        if (null == mInstance) 
+            mInstance = new ActivityStackManager(); 
+        return mInstance; 
+    } 
+    private ActivityStackManager() { 
+        mActivityStack = new Stack<Activity>(); 
+    } 
+    public void addActivity(Activity activity) {  // 入栈 
+        mActivityStack.push(activity); 
+    } 
+    public void removeActivity(Activity activity) {  // 出栈 
+        mActivityStack.remove(activity); 
+    } 
+    public void finishAllActivity() {  // 彻底退出 
+        Activity activity; 
+        while (!mActivityStack.empty()) { 
+            activity = mActivityStack.pop(); 
+            if (activity != null) 
+                activity.finish(); 
+        } 
+    } 
+    public void finishActivity(Class<?> cls) {  // 结束指定类名的Activity 
+        for (Activity activity : mActivityStack) { 
+            if (activity.getClass().equals(cls)) { 
+                finishActivity(activity); 
+            } 
+        } 
+    } 
+    public boolean checkActivity(Class<?> cls) {  // 查找栈中是否存在指定的activity 
+        for (Activity activity : mActivityStack) { 
+            if (activity.getClass().equals(cls)) { 
+                return true; 
+            } 
+        } 
+        return false; 
+    } 
+    public void finishActivity(Activity activity) {  // 结束指定的Activity 
+        if (activity != null) { 
+            mActivityStack.remove(activity); 
+            activity.finish(); 
+            activity = null; 
+        } 
+    } 
+    public boolean finishToActivity(Class<? extends Activity> actCls, boolean isIncludeSelf) { // finish指定的activity之上所有的activity 
+        List<Activity> buf = new ArrayList<Activity>(); 
+        int size = mActivityStack.size(); 
+        Activity activity = null; 
+        for (int i = size - 1; i >= 0; i--) { 
+            activity = mActivityStack.get(i); 
+            if (activity.getClass().isAssignableFrom(actCls)) { 
+                for (Activity a : buf) 
+                    a.finish(); 
+                return true; 
+            } else if (i == size - 1 && isIncludeSelf) 
+                buf.add(activity); 
+            else if (i != size - 1) 
+                buf.add(activity); 
+        } 
+        return false; 
+    }
+} 
+#+END_SRC
+
+* AndroidManifest 配置相关参数的说明详解
+** android:allowEmbedded
+- 表示该 activity 可作为其他 activity 的嵌入式子项启动。此属性尤其适用于子项位于其他 Activity 所拥有容器（如 Display）中的情况。
+- 比如CarLauncher中三个应用：车控/Hvaa/CarSettings都分别设置了这个属性
+** android:stateNotNeeded="true"的作用
+- 这个属性默认情况为false，若设为true，则当Activity重新启动时不会调用onSaveInstanceState（）方法，同样，onCreate（）方法中的Bundle参数将会用null值传进去，也就是说，Activity每次启动都跟第一次启动一样。这样，在某种特殊场合下，由于用户按了Home键，该属性设置为true时，可以保证不用保存原先的状态引用，节省了空间资源，从而可以让Activity不会像默认设置那样Crash掉。
+
+* ActivityStack
+- 任务是一个Activity的集合，它使用栈的方式来管理其中的Activity，这个栈又被称为返回栈(back stack)，栈中Activity的顺序就是按照它们被打开的顺序依次存放的。
+
+* 安卓如何管理多个任务(没被称谓多个任务栈，虽然本质上仍是多个任务栈，每个任务都是一个栈结构)
+** Android 多任务运行机制
+- 任务（Task1）是一个有机整体，当用户开始新任务（Task2）或通过“主页”按钮（Home键）转到主屏幕时，可以将该任务（Task1）移动到“后台”。 尽管在后台时，该任务（Task1）中的所有 Activity 全部停止，但是任务（Task1）的返回栈仍旧不变，也就是说，当另一个任务（Task2）发生时，该任务（Task1）仅仅失去焦点而已，如图 2 中所示。然后，任务（Task1）可以返回到“前台”，用户就能够回到离开时的状态。
+- 例如，假设当前任务（任务 A）的堆栈中有三个 Activity，即当前 Activity 下方还有两个 Activity。 用户先按“主页”按钮（Home键），然后从应用启动器启动新应用。 显示主屏幕时，任务 A 进入后台。新应用启动时，系统会使用自己的 Activity 堆栈为该应用启动一个任务（任务 B）。与该应用交互之后，用户再次返回主屏幕并选择最初启动任务 A 的应用。现在，任务 A 出现在前台，其堆栈中的所有三个 Activity 保持不变，而位于堆栈顶部的 Activity 则会恢复执行。 此时，用户还可以通过转到主屏幕并选择启动该任务的应用图标（或者，通过从概览屏幕选择该应用的任务）切换回任务 B。这是 Android 系统中的一个多任务示例。
+- 注意：后台可以同时运行多个任务。但是，如果用户同时运行多个后台任务，则系统可能会开始销毁后台 Activity，以回收内存资源，从而导致 Activity 状态丢失。请参阅下面有关 Activity 状态的部分。
+- Activity 和任务的默认行为总结如下：
+  - 当 Activity A 启动 Activity B 时，Activity A 将会停止，但系统会保留其状态（例如，滚动位置和已输入表单中的文本）。如果用户在处于 Activity B 时按“返回”按钮，则 Activity A 将恢复其状态，继续执行。
+  - 用户通过按“主页”按钮（Home键）离开任务时，当前 Activity 将停止且其任务会进入后台。 系统将保留任务中每个 Activity 的状态。如果用户稍后通过选择开始任务的启动器图标来恢复任务，则任务将出现在前台并恢复执行堆栈顶部的 Activity。
+  - 如果用户按“返回”按钮，则当前 Activity（处于栈顶的那个Activity即上面1中的ActivityB） 会从堆栈弹出并被销毁。 堆栈中的前一个 Activity（Activity A） 恢复执行。销毁 Activity 时，系统不会保留该 Activity 的状态。
+  - 即使来自其他任务，Activity 也可以多次实例化。（但是多次实例化，会造成内存资源浪费，具体可参考下面）
+- 一个 Activity 将多次实例化
+  - 由于返回栈中的 Activity 永远不会重新排列，因此如果应用允许用户从多个 Activity 中启动特定 Activity，则会创建该 Activity 的新实例并推入堆栈中（而不是将 Activity 的任一先前实例置于顶部）。 因此，应用中的一个 Activity 可能会多次实例化（即使 Activity 来自不同的任务），如图 3 所示。因此，如果用户使用“返回”按钮向后导航，则会按 Activity 每个实例的打开顺序显示这些实例（每个实例的 UI 状态各不相同）。 但是，如果您不希望 Activity 多次实例化，则可修改此行为。 具体操作方法将在后面的管理任务部分中讨论。
+- 保存 Activity 状态
+  - 正如上文所述，当 Activity 停止时，系统的默认行为会保留其状态。 这样一来，当用户导航回到上一个 Activity 时，其用户界面与用户离开时一样。但是，在 Activity 被销毁且必须重建时，您可以而且应当主动使用回调方法保留 Activity 的状态。
+  - 系统停止您的一个 Activity 时（例如，新 Activity 启动或任务转到前台（即重新开始一个新的任务）），如果系统需要回收系统内存资源，则可能会完全销毁该 Activity。 发生这种情况时，有关该 Activity 状态的信息将会丢失。如果发生这种情况，系统仍会知道该 Activity 存在于返回栈中，但是当该 Activity 被置于堆栈顶部时，系统一定会重建 Activity（而不是恢复 Activity）。 为了避免用户的工作丢失，您应主动通过在 Activity 中实现 onSaveInstanceState() 回调方法来保留工作。
+** 定义启动模式
+- 启动模式允许您定义 Activity 的新实例如何与当前任务关联。 您可以通过两种方法定义不同的启动模式：
+  - 使用清单文件
+    - 在清单文件中声明 Activity 时，您可以指定 Activity 在启动时应该如何与任务关联。
+  - 使用 Intent 标志
+    - 调用 startActivity() 时，可以在 Intent 中加入一个标志（上面管理任务章节中的3种Intent的flag），用于声明新 Activity 如何（或是否）与当前任务关联。
+- 注：某些适用于清单文件的启动模式不可用作 Intent 标志，同样，某些可用作 Intent 标志的启动模式无法在清单文件中定义。
+- 因此，如果 Activity A 启动 Activity B，则 Activity B 可以在其清单文件中定义它应该如何与当前任务关联（如果可能），并且 Activity A 还可以请求 Activity B 应该如何与当前任务关联。如果这两个 Activity（Activity A和Activity B） 均定义 Activity B 应该如何与任务关联（可以一个在intent中，一个在清单文件中），*则 Activity A 的请求（如 Intent 中所定义）优先级要高于 Activity B 的请求（如其清单文件中所定义）。*

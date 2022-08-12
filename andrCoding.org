@@ -1,4 +1,4 @@
-#+latex_class: book
+#+latex_class: cn-article
 #+title: Android Coding Assessment Test Prepare
 #+author: deepwaterooo
 
@@ -12,7 +12,7 @@
 - (3) onStart()的时候，activity才可见，但是没有出现在前台，无法与用户交互
 - (4) onResume()的时候，activity已经可见，并且出现在前台开始活动，与onStart()相比，activity都已经可见，但是onStart()的时候activity还在后台，onResume()才显示在前台
 - (5) onPause()主要注意的是：此时的activity正在被停止，接下来马上调用onStop()。特殊情况下快速回到该activity，onStop()不会执行，会去执行onResume()。
-  - _一般在这个生命周期内做存储数据、停止动画工作，但不能太耗时。_
+  - 一般在这个生命周期内做存储数据、停止动画工作，但不能太耗时。
   - 为什么特殊强调呢，因为该activity的onPause()执行完了，才回去执行新的activity的onResume()，一旦耗时，必然会拖慢新的activity的显示。
 - (6) onStop()：此时的activity即将停止。在这里可以做稍微重量级的操作，同样也不能耗时。
 - (7) onDestroy()：此时的activity即将被回收，在这里会做一些回收工作和最终资源释放。
@@ -38,7 +38,7 @@ activity四个状态所在的生命周期：
 
 [[./pic/two.png]]
 
-  [[./pic/activityLifecyleCallbacks.png]]
+[[./pic/activityLifecycleCallbacks.png]]
 
 - 在这里我会特别提出一个point，就是异常情况下activity被杀死，而后被重新创建的情况。
   
@@ -80,7 +80,7 @@ public void onRestoreInstanceState(Bundle savedInstanceState) {
 }
   #+END_SRC
 
-** 一些特殊的方法
+** 一些比较重要的回调方法
 *** onWindowFocusChanged()
 - 在Activity窗口获得或失去焦点时被调用并且当Activity被创建时是在onResume之后被调用，当Activity被覆盖或者退居后台或者当前Activity退出时，它是在onPause之后被调用（在这个方法中可以view已经绘制完成，可以获取view的宽高等属性）
 *** onSaveInstanceState()
@@ -91,6 +91,21 @@ public void onRestoreInstanceState(Bundle savedInstanceState) {
 - 第二种是屏幕翻转方向时，系统先销毁当前的Activity，然后再重建一个新的，调用此方法时，我们可以保存一些临时数据；
 - 第三种情况系统调用此方法是为了保存当前窗口各个View组件的状态。
 - onSaveInstanceStat()e的调用顺序是在onStop()之前。（android3.0之前：在onPause之前调用，在3.0之后，在onPause之后调用）
+- 下面是其它版本的更为详细一点儿的分析与总结
+*** 保存Activity的状态
+- 当系统为了恢复内存而销毁某项 Activity 时，Activity 对象也会被销毁，因此系统在继续 Activity 时根本无法让其状态保持完好，而是必须在用户返回Activity时重建 Activity 对象。但用户并不知道系统销毁 Activity 后又对其进行了重建，因此他们很可能认为 Activity 状态毫无变化。 在这种情况下，您可以实现另一个回调方法对有关 Activity 状态的信息进行保存，以确保有关 Activity 状态的重要信息得到保留：*onSaveInstanceState()。*
+- 系统会先调用 onSaveInstanceState()，然后再使 Activity 变得易于销毁。
+  - 系统会向该方法传递一个 Bundle，您可以在其中使用 putString() 和 putInt() 等方法以名称-值对形式保存有关 Activity 状态的信息。
+  - 然后，如果系统终止您的应用进程，并且当用户返回您的 Activity，则系统会重建该 Activity，并将 Bundle 同时传递给 onCreate() 和 onRestoreInstanceState()。
+  - 您可以使用上述任一方法从 Bundle 提取您保存的状态并恢复该 Activity 状态。如果没有状态信息需要恢复，则传递给您的 Bundle 是空值（如果是首次创建该 Activity，就会出现这种情况）。
+
+[[/Users/jennyhuang/myandr/pic/andrCoding_20220811_215912.png]]
+- 在两种情况下，Activity 重获用户焦点时可保持状态完好：系统在销毁 Activity 后重建 Activity，Activity 必须恢复之前保存的状态；系统停止 Activity 后继续执行 Activity，并且 Activity 状态保持完好。
+  - 注：无法保证系统会在销毁您的 Activity 前调用 onSaveInstanceState()，因为存在不需要保存状态的情况（例如用户使用“返回” 按钮离开您的 Activity 时，因为用户的行为是在显式关闭 Activity）。 如果系统调用 onSaveInstanceState()，它会在调用 onStop() 之前，并且可能会在调用 onPause() 之前进行调用。
+- 不过，即使您什么都不做，也不实现 onSaveInstanceState()，Activity 类的 onSaveInstanceState() 默认实现也会恢复部分 Activity 状态。具体地讲，默认实现会为布局中的每个 View 调用相应的 onSaveInstanceState() 方法，让每个视图都能提供有关自身的应保存信息。Android 框架中几乎每个小工具都会根据需要实现此方法，以便在重建 Activity 时自动保存和恢复对 UI 所做的任何可见更改。例如，EditText 小工具保存用户输入的任何文本，CheckBox 小工具保存复选框的选中或未选中状态。您只需为想要保存其状态的每个小工具提供一个唯一的 ID（通过 android:id 属性）。如果小工具没有 ID，则系统无法保存其状态。
+- 您还可以通过将android:saveEnabled 属性设置为”false” 或通过调用setSaveEnabled() 方法显式阻止布局内的视图保存其状态。您通常不应将该属性禁用，但如果您想以不同方式恢复 Activity UI 的状态，就可能需要这样做。
+  - 注：由于无法保证系统会调用 onSaveInstanceState()，因此您只应利用它来记录 Activity 的瞬态（UI 的状态）—— 切勿使用它来存储持久性数据，而应使用 onPause() 在用户离开 Activity 后存储持久性数据（例如应保存到数据库的数据）。
+
 *** onRestoreInstanceState()
 - 有的人说这个方法和onSaveInstanceState是一对，其实不然，
 - (1)在Activity被覆盖或退居后台之后，系统资源不足将其杀死，然后用户又回到了此Activity，此方法会被调用；
