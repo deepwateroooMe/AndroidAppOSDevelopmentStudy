@@ -356,6 +356,8 @@ public class ActivityC extends Activity {
 - 这个属性用来标记是否从task清除除根Activity之外的所有的Activity，“true”表示清除，“false”表示不清除，默认为“false”。这里有点我们必须要注意的，这个属性只对任务栈内的root Activity起作用，任务栈内其他的Activity都会被忽略。如果android:clearTaskOnLaunch属性为“true”，每次我们重新进入这个应用时，我们只会看到根Activity，任务栈中的其他Activity都会被清除出栈。
 - 比如一个应用的Activity A,B,C，其中clearTaskOnLaunch设置为true，C为默认值，我们依次启动A,B,C，点击HOME,再在桌面点击图标。启动的是A，而B，C将都被移除当前任务栈。也就是说，当Activity的属性clearTaskOnLaunch为true时将被优先启动，其余的Activity(B、C)都被移除任务栈并销毁，除非前面A已经finish销毁，后面的已注册clearTaskOnLaunch为true的activity(B)才会生效。
 - 特别地，如果我们的应用中引用到了其他应用的Activity，这些Activity设置了android:allowTaskReparenting属性为“true”，则它们会被重新宿主到有共同affinity的task中。
+- 特别地，如果一个activity的allowTaskReparenting属性为true，那么它可以从一个task（TASK1）移到另外一个有相同affinity的task（TASK2）中（TASK2带到前台时）。
+如果一个.apk文件从用户角度来看包含了多个“应用程序”，你可能需要对那些activity赋不同的affinity值。
 *** android:finishOnTaskLaunch
 - *这个属性和clearTaskOnLaunch是比较类似的，不过它不是作用于整个任务上的，而是作用于单个Activity上。*如果某个Activity将这个属性设置成true，那么用户一旦离开了当前任务，再次返回时这个Activity就会被清除掉。
 - finishOnTaskLaunch属性与clearTaskOnLaunch 有些类似，它们的区别是finishOnTaskLaunch是作用在自己身上(把自己移除任务栈，不影响别的Activity)，而clearTaskOnLaunch则是作用在别人身上(把别的Activity移除任务栈)，如果我们把Activity的android:finishOnTaskLaunch属性值设置为true时，离开这个Activity所依赖的任务栈后，当我们重新返回时，该Activity将会被finish掉，而且其他Activity不会受到影响。
