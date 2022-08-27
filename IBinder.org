@@ -1,17 +1,38 @@
 #+latex_class: cn-article
-#+title: Android IPC 机制
+#+title: Android IPC 机制 (机制里的死角圈圈点点的细节)
 #+author: deepwaterooo
 
 * Android IPC 机制
 - 自从准备第一轮technical认真实现了content provider（server and client）的项目之后，我终于进阶到了安卓四大组件的content provider，并对后来的jetpack libraries, app startup ultimate以及（IPC，Messenger, aidl, socket）等进程间通讯，以及启动优化、布局优化等 的底层原理，能清楚地感觉到自己被暴露和引及到一个更深的学习阶段。但还需要通过项目、消化理解得更深入一些（Binder以及content provider底层原理内存映射等需要深入理解）。 
 - 此文进程间通讯纪录源自于https://blog.sweetm.top/2019/03/22/android-ipc-%E6%9C%BA%E5%88%B6/ ，写得很好，终于自己实现了一个socket相关的帮助理解的项目
 ** Android IPC 简介
-- IPC是Inter-Process Communication的缩写，含义为进程间通信或者跨进程通信，是指两个进程之间进行数据交换的过程。说起进程间通信，我们首先要理解什么是进程，什么是线程，进程和线程是截然不同的概念。按照操作系统中的描述，线程是CPU调度的最小单元，同时线程是一种有限的系统资源。而进程一般指一个执行单元，在PC和移动设备上指一个程序或者一个应用。一个进程可以包含多个线程，因此进程和线程是包含与被包含的关系。最简单的情况下，一个进程中可以只有一个线程，即主线程，在Android里面主线程也叫UI线程，在UI线程里才能操作界面元素。很多时候，一个进程中需要执行大量耗时的任务，如果这些任务放在主线程中去执行就会造成界面无法响应，严重影响用户体验，这种情况在PC系统和移动系统中都存在，在Android中有一个特殊的名字叫做ANR（Application Not Responding），即应用无响应。解决这个问题就需要用到线程，把一些耗时的任务放在线程中即可。
-- IPC不是Android中所独有的，任何一个操作系统都需要有相应的IPC机制，比如Windows上可以通过剪贴板、管道和邮槽等来进行进程间通信；Linux上可以通过命名管道、共享内容、信号量等来进行进程间通信。可以看到不同的操作系统平台有着不同的进程间通信方式，对于Android来说，它是一种基于Linux内核的移动操作系统，它的进程间通信方式并不能完全继承自Linux，相反，它有自己的进程间通信方式。在Android中最有特色的进程间通信方式就是Binder了，通过Binder可以轻松地实现进程间通信。除了Binder，Android还支持Socket，通过Socket也可以实现任意两个终端之间的通信，当然同一个设备上的两个进程通过Socket通信自然也是可以的。
-- 说到IPC的使用场景就必须提到多进程，只有面对多进程这种场景下，才需要考虑进程间通信。这个是很好理解的，如果只有一个进程在运行，又何谈多进程呢？多进程的情况分为两种。第一种情况是一个应用因为某些原因自身需要采用多进程模式来实现，至于原因，可能有很多，比如有些模块由于特殊原因需要运行在单独的进程中，又或者为了加大一个应用可使用的内存所以需要通过多进程来获取多份内存空间。Android对单个应用所使用的最大内存做了限制，早期的一些版本可能是16MB，不同设备有不同的大小。另一种情况是当前应用需要向其他应用获取数据，由于是两个应用，所以必须采用跨进程的方式来获取所需的数据，甚至我们通过系统提供的ContentProvider去查询数据的时候，其实也是一种进程间通信，只不过通信细节被系统内部屏蔽了，我们无法感知而已。后续章节会详细介绍ContentProvider的底层实现，这里就先不做详细介绍了。总之，不管由于何种原因，我们采用了多进程的设计方法，那么应用中就必须妥善地处理进程间通信的各种问题。
+- IPC是 *Inter-Process Communication* 的缩写，含义为进程间通信或者跨进程通信，是指两个进程之间进行数据交换的过程。说起进程间通信，我们首先要理解什么是进程，什么是线程，进程和线程是截然不同的概念。
+- 按照操作系统中的描述，1 *线程是CPU调度的最小单元* ，同时线程是一种有限的系统资源。
+- 而进程一般指一个执行单元，在PC和移动设备上指一个程序或者一个应用。一个进程可以包含多个线程，因此进程和线程是包含与被包含的关系。最简单的情况下，一个进程中可以只有一个线程，即主线程，在Android里面主线程也叫UI线程，在UI线程里才能操作界面元素。很多时候，一个进程中需要执行大量耗时的任务，如果这些任务放在主线程中去执行就会造成界面无法响应，严重影响用户体验，这种情况在PC系统和移动系统中都存在，在Android中有一个特殊的名字叫做ANR（Application Not Responding），即应用无响应。解决这个问题就需要用到线程，把一些耗时的任务放在线程中即可。
+- IPC不是Android中所独有的， *任何一个操作系统都需要有相应的IPC机制* ，比如Windows上可以通过剪贴板、管道和邮槽等来进行进程间通信；Linux上可以通过命名管道、共享内容、信号量等来进行进程间通信。可以看到不同的操作系统平台有着不同的进程间通信方式，
+- 对于Android来说，它是 *一种基于Linux内核的移动操作系统* ，它的进程间通信方式 *并不能完全继承自Linux* ，相反，它有自己的进程间通信方式。
+- 在Android中最有特色的进程间通信方式就是Binder了，通过Binder可以轻松地实现进程间通信。除了Binder，Android还支持Socket，通过Socket也可以实现任意两个终端之间的通信，当然同一个设备上的两个进程通过Socket通信自然也是可以的。
+- 说到IPC的使用场景就必须提到多进程，只有面对多进程这种场景下，才需要考虑进程间通信。这个是很好理解的，如果只有一个进程在运行，又何谈多进程呢？多进程的情况分为两种。
+  - 第一种情况是一个应用因为某些原因自身需要采用多进程模式来实现，至于原因，可能有很多，比如有些模块由于特殊原因需要运行在单独的进程中，又或者为了加大一个应用可使用的内存所以需要通过多进程来获取多份内存空间。Android对单个应用所使用的最大内存做了限制，早期的一些版本可能是16MB，不同设备有不同的大小。
+  - 另一种情况是当前应用需要向其他应用获取数据，由于是两个应用，所以必须采用跨进程的方式来获取所需的数据，甚至我们通过系统提供的ContentProvider去查询数据的时候，其实也是一种进程间通信，只不过通信细节被系统内部屏蔽了，我们无法感知而已。后续章节会详细介绍ContentProvider的底层实现，这里就先不做详细介绍了。总之，不管由于何种原因，我们采用了多进程的设计方法，那么应用中就必须妥善地处理进程间通信的各种问题。
 ** Android 中的多进程模式
 - 在正式介绍进程间通信之前，我们必须先要理解Android中的多进程模式。通过给四大组件指定
-- android:process属性，我们可以轻易地开启多进程模式，这看起来很简单，但是实际使用过程中却暗藏杀机，多进程远远没有我们想的那么简单，有时候我们通过多进程得到的好处甚至都不足以弥补使用多进程所带来的代码层面的负面影响。下面会详细分析这些问题。
+- *android:process属性* ，我们可以轻易地开启多进程模式，这看起来很简单，但是实际使用过程中却暗藏杀机，多进程远远没有我们想的那么简单，有时候我们通过多进程得到的好处甚至都不足以弥补使用多进程所带来的代码层面的负面影响。下面会详细分析这些问题。
+- 其实还有一种非常规的多进程方法，那就是通过JNI在native层去fork一个新的进程(5.0之前，我们 进程保活常用的 伎俩)，但是这种方法比较特殊，也不是常用的创建多进程方式
+#+BEGIN_SRC csharp
+<activity
+android:name="com.test.process.demo.TestActivity1"
+android:process=":process_test1"
+android:screenOrientation="portrait" />
+<activity
+android:name="com.test.process.demo.TestActivity2"
+android:process="com.test.demo.process_test2"
+android:screenOrientation="portrait" />
+#+END_SRC 
+- Android系统会为每一个应用分配一个唯一的UID，具有相同的UID应用才能共享数据。
+- 两个应用通过ShareUID跑在同一个进程中是有要求的，需要这两个应用具有相同的ShareUID并且签名相同才可以。
+- 在这种情况下，它们可以相互访问对它们跑在同一个进程中，那么除了能共享data目录、组件信息，还可以共享内存数据，或者说它们看来就像是一个应用的两个部分。
+
 *** 开启多进程模式
 - 正常情况下，在Android中多进程是指一个应用中存在多个进程的情况，因此这里不讨论两个应用之间的多进程情况。首先，在Android中使用多进程只有一种方法，那就是给四大组件（Activity、Service、Receiver、ContentProvider）在AndroidMenifest 中指定android:process属性，除此之外没有其他办法，也就是说我们无法给一个线程或者一个实体类指定其运行时所在的进程。其实还有另一种非常规的多进程方法，那就是通过JNI在native层去fork一个新的进程，但是这种方法属于特殊情况，也不是常用的创建多进程的方式，因此我们暂时不考虑这种方式。下面是一个示例，描述了如何在Android中创建多进程：
 #+BEGIN_SRC xml
@@ -54,7 +75,7 @@ u0_a65    3098  249   836072 82460    ep_poll e8b89bb9 S com.ryg.chapter_2.remot
 - 如果用一句话来形容多进程，那笔者只能这样说：“当应用开启了多进程以后，各种奇怪的现象都出现了”。为什么这么说呢？这是有原因的。大部分人都认为开启多进程是很简单的事情，只需要给四大组件指定androidprocess属性即可。比如说在实际的产品开发中，可能会有多进程的需求，需要把某些组件放在单独的进程中去运行，很多人都会觉得这不很简单吗？
 - 然后迅速地给那些组件指定了android:process属性，然后编译运行，发现“正常地运行起来了”。
 - 这里笔者想说的是，那是真的正常地运行起来了吗？现在先不置可否，下面先给举个例子，然后引入本节的话题。还是本章刚开始说的那个例子，其中SecondActivity通过指定android:process属性从而使其运行在一个独立的进程中，这里做了一些改动，我们新建了一个类，叫做UserManager，这个类中有一个public的静态成员变量，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class UserManager {
     public static int sUserId = 1;
 }
@@ -64,17 +85,20 @@ public class UserManager {
 2019-03-21 20:53:47.451 1682-1682/com.ryg.chapter_2 D/MainActivity: UserManage.sUserId=2
 2019-03-21 20:56:03.063 1852-1852/com.ryg.chapter_2:remote D/SecondActivity: UserManage.sUserId=1
 #+END_SRC
-- 上述问题出现的原因是SecondActivity运行在一个单独的进程中，我们知道Android为每一个应用分配了一个独立的虚拟机，或者说为每个进程都分配一个独立的虚拟机，不同的虚拟机在内存分配上有不同的地址空间，这就导致在不同的虚拟机中访问同一个类的对象会产生多份副本。拿我们这个例子来说，在进程com.ryg.chapter_2和进程com.ryg.chapter_2：remote中都存在一个UserManager类，并且这两个类是互不干扰的，在一个进程中修改sUserld的值只会影响当前进程，对其他进程不会造成任何影响，这样我们就可以理解为什么在MainActivity中修改了sUserld的值，但是在SecondActivity中sUserld的值却没有发生改变这个现象。
+- 上述问题出现的原因是SecondActivity运行在一个单独的进程中，
+- 我们知道 *Android为每一个应用分配了一个独立的虚拟机，或者说为每个进程都分配一个独立的虚拟机，不同的虚拟机在内存分配上有不同的地址空间，这就导致在不同的虚拟机中访问同一个类的对象会产生多份副本。* 
+- 拿我们这个例子来说，在进程com.ryg.chapter_2和进程com.ryg.chapter_2：remote中都存在一个UserManager类，并且这两个类是互不干扰的，在一个进程中修改sUserld的值只会影响当前进程，对其他进程不会造成任何影响，这样我们就可以理解为什么在MainActivity中修改了sUserld的值，但是在SecondActivity中sUserld的值却没有发生改变这个现象。
 - 所有运行在不同进程中的四大组件，只要它们之间需要通过内存来共享数据，都会共享失败，这也是多进程所带来的主要影响。正常情况下，四大组件中间不可能不通过一些中间层来共享数据，那么通过简单地指定进程名来开启多进程都会无法正确运行。当然，特殊情况下，某些组件之间不需要共享数据，这个时候可以直接指定android:process属性来开启多进程，但是这种场景是不常见的，几乎所有情况都需要共享数据。
-- 一般来说，使用多进程会造成如下几方面的问题：
+*** 一般来说，使用多进程会造成如下几方面的问题：
   - （1）静态成员和单例模式完全失效。
   - （2）线程同步机制完全失效。
   - （3）SharedPreferences的可靠性下降。
   - （4）Application会多次创建。
 - 第1个问题在上面已经进行了分析。
-- 第2个问题本质上和第一个问题是类似的，既然都不是一块内存了，那么不管是锁对象还是锁全局类都无法保证线程同步，因为不同进程锁的不是同一个对象。
-- 第3个问题是因为SharedPreferences不支持两个进程同时去执行写操作，否则会导致一定几率的数据丢失，这是因为SharedPreferences底层是通过读/写XML文件来实现的，并发写显然是可能出问题的，甚至并发读/写都有可能出问题。
-- 第4个问题也是显而易见的，当一个组件跑在一个新的进程中的时候，由于系统要在创建新的进程同时分配独立的虚拟机，所以这个过程其实就是启动一个应用的过程。因此，相当于系统又把这个应用重新启动了一遍，既然重新启动了，那么自然会创建新的Application。这个问题其实可以这么理解，运行在同一个进程中的组件是属于同一个虚拟机和同一个Application的，同理，运行在不同进程中的组件是属于两个不同的虚拟机和Application的。为了更加清晰地展示这一点，下面我们来做一个测试，首先在Application的onCreate方法中打印出当前进程的名字，然后连续启动三个同一个应用内但属于不同进程的Activity，按照期望，Application的onCreate应该执行三次并打印出三次进程名不同的log，代码如下所示。
+- 第2个问题本质上和第一个问题是类似的， *既然都不是一块内存了，那么不管是锁对象还是锁全局类都无法保证线程同步，因为不同进程锁的不是同一个对象。*
+- 第3个问题是因为 *SharedPreferences不支持两个进程同时去执行写操作，否则会导致一定几率的数据丢失* ，这是因为SharedPreferences底层是通过读/写XML文件来实现的，并发写显然是可能出问题的，甚至并发读/写都有可能出问题。()
+  - Android中的IPC方式之一是： *使用文件共享：这种方式简单，适合在对数据同步要求不高的进程之间进行通信，并且要妥善处理并发读写的问题。* SharedPreferences是一个特例，虽然它也是文件的一种，但是 *由于系统对它的读写有一定的缓存策略，即在内存中会有一份SharedPreferences文件的缓存，因此在多进程模式下，系统对它的读写就变得不可靠，当面对高并发读写访问的时候，有很大几率会丢失数据，因此，不建议在进程间通信中使用SharedPreferences* 。
+- 第4个问题也是显而易见的， *当一个组件跑在一个新的进程中的时候，由于系统要在创建新的进程同时分配独立的虚拟机，所以这个过程其实就是启动一个应用的过程* 。因此，相当于 *系统又把这个应用重新启动了一遍* ，既然重新启动了，那么自然会创建新的Application。这个问题其实可以这么理解，运行在同一个进程中的组件是属于同一个虚拟机和同一个Application的，同理，运行在不同进程中的组件是属于两个不同的虚拟机和Application的。为了更加清晰地展示这一点，下面我们来做一个测试，首先在Application的onCreate方法中打印出当前进程的名字，然后连续启动三个同一个应用内但属于不同进程的Activity，按照期望，Application的onCreate应该执行三次并打印出三次进程名不同的log，代码如下所示。
 #+BEGIN_SRC kotlin
 2019-03-21 21:06:47.581 2024-2024/com.ryg.chapter_2 D/MyApplication: application start, process name:com.ryg.chapter_2
 2019-03-21 21:06:47.702 2041-2041/com.ryg.chapter_2:remote D/MyApplication: application start, process name:com.ryg.chapter_2:remote
@@ -84,10 +108,16 @@ public class UserManager {
 - 主要介绍IPC中的一些基础概念，主要包含三方面内容：Serializable接口、Parcelable 接口以及Binder，只有熟悉这三方面的内容后，我们才能更好地理解跨进程通信的各种方式。Serializable和Parcelable接口可以完成对象的序列化过程，当我们需要通过Intent和Binder传输数据时就需要使用Parcelable 或者Serializable。还有的时候我们需要把对象持久化到存储设备上或者通过网络传输给其他客户端，这个时候也需要使用Serializable 来完成对象的持久化，下面先介绍如何使用Serializable来完成对象的序列化。
 *** Serializable 接口
 - Serializable是Java所提供的一个序列化接口，它是一个空接口，为对象提供标准的序列化和反序列化操作。使用Serializable来实现序列化相当简单，只需要在类的声明中指定一个类似下面的标识即可自动实现默认的序列化过程。
-- private static final long serialVersionUID = 519067123721295773L;
-- 在Android中也提供了新的序列化方式，那就是Parcelable接口，使用Parcelable来实现对象的序列号，其过程要稍微复杂一些，本节先介绍Serializable接口。上面提到，想让一个对象实现序列化，只需要这个类实现Serializable接口并声明一个serial VersionUID即可，实际上，甚至这个serialVersionUID也不是必需的，我们不声明这个serialVersionUID同样也可以实现序列化，但是这将会对反序列化过程产生影响，具体什么影响后面再介绍。
+#+BEGIN_SRC csharp
+private static final long serialVersionUID = 519067123721295773L;
+#+END_SRC 
+- 在Android中也提供了新的序列化方式，那就是Parcelable接口，使用Parcelable来实现对象的序列号，其过程要稍微复杂一些，本节先介绍Serializable接口。上面提到，想让一个对象实现序列化，只需要这个类实现Serializable接口并声明一个serialVersionUID即可，实际上，甚至这个serialVersionUID也不是必需的，我们不声明这个serialVersionUID同样也可以实现序列化，但是这将会对反序列化过程产生影响，具体什么影响后面再介绍。
+- serialVersionUId是一串long型数字，主要是用来辅助序列化和反序列化的，原则上序列化后的数据中的serialVersionUId只有和当前类的serialVersionUId相同才能够正常地被反序列化。
+- serialVersionUId的详细工作机制：序列化的时候系统会把当前类的serialVersionUId写入序列化的文件中，当反序列化的时候系统会去检测文件中的serialVersionUId，看它是否和当前类的serialVersionUId一致，如果一致就说明序列化的类的版本和当前类的版本是相同的，这个时候可以成功反序列化；否则说明版本不一致无法正常反序列化。一般来说，我们应该手动指定serialVersionUId的值。
+  - 1.静态成员变量属于类不属于对象，所以不参与序列化过程；
+  - 2.声明为transient的成员变量不参与序列化过程。
 - User类就是一个实现了Serializable接口的类，它是可以被序列化和反序列化的，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class User implements Serializable {
     private static final long serialVersionUID = 519067123721295773L;
     public int userId;
@@ -97,7 +127,7 @@ public class User implements Serializable {
 }
 #+END_SRC 
 - 通过Serializable方式来实现对象的序列化，实现起来非常简单，几乎所有工作都被系统自动完成了。如何进行对象的序列化和反序列化也非常简单，只需要采用ObjectOutputStream和ObjectinputStream即可轻松实现。下面举个简单的例子。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 //序列化
 User user = new User(0, "jake", true);
 ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream("cache.txt"));
@@ -110,16 +140,16 @@ in.close();
 #+END_SRC 
 - 上述代码演示了采用Serializable方式序列化对象的典型过程，很简单，只需要把实现了Serializable接口的User对象写到文件中就可以快速恢复了，恢复后的对象newUser和user的内容完全一样，但是两者并不是同一个对象。
 - 刚开始提到，即使不指定serialVersionUID也可以实现序列化，那到底要不要指定呢？如果指定的话，serialVersionUID后面那一长串数字又是什么含义呢？我们要明白，系统既然提供了这个serialVersionUID，那么它必须是有用的。这个serialVersionUID是用来辅助序列化和反序列化过程的，原则上序列化后的数据中的serialVersionUID只有和当前类的serialVersionUID相同才能够正常地被反序列化。。serialVersionUID的详细工作机制是这样的：序列化的时候系统会把当前类的serialVersionUID写入序列化的文件中（也可能是其他中介），当反序列化的时候系统会去检测文件中的serialVersionUID，看它是否和当前类的serialVersionUID一致，如果一致就说明序列化的类的版本和当前类的版本是相同的，这个时候可以成功反序列化；否则就说明当前类和序列化的类相比发生了某些变换，比如成员变量的数量、类型可能发生了改变，这个时候是无法正常反序列化的，因此会报如下错误：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 java.io.InvalidClassException: Main; local class incompatible: streamclassdesc serialVersionUID=8711368828010083044, local class serial-VersionUID=8711368828010083043.
 #+END_SRC 
 - 一般来说，我们应该手动指定serialVersionUID的值，比如1L，也可以让Eclipse根据当前类的结构自动去生成它的hash值，这样序列化和反序列化时两者的serialVersionUID是相同的，因此可以正常进行反序列化。如果不手动指定serialVersionUID的值，反序列化时当前类有所改变，比如增加或者删除了某些成员变量，那么系统就会重新计算当前类的hash 值并把它赋值给serialVersionUID，这个时候当前类的serialVersionUID就和序列化的数据中的serialVersionUID不一致，于是反序列化失败，程序就会出现crash。所以，我们可以明显感觉到serialVersionUID的作用，当我们手动指定了它以后，就可以在很大程度上避免反序列化过程的失败。比如当版本升级后，我们可能删除了某个成员变量也可能增加了一些新的成员变量，这个时候我们的反向序列化过程仍然能够成功，程序仍然能够最大限度地恢复数据，相反，如果不指定serialVersionUID的话，程序则会挂掉。当然我们还要考虑另外一种情况，如果类结构发生了非常规性改变，比如修改了类名，修改了成员变量的类型，这个时候尽管serialVersionUID验证通过了，但是反序列化过程还是会失败，因为类结构有了毁灭性的改变，根本无法从老版本的数据中还原出一个新的类结构的对象。
 - 根据上面的分析，我们可以知道，给serialVersionUID指定为1L或者采用Eclipse根据当前类结构去生成的hash值，这两者并没有本质区别，效果完全一样。以下两点需要特别提一下，首先静态成员变量属于类不属于对象，所以不会参与序列化过程；其次用transient关键字标记的成员变量不参与序列化过程。
 *** Parcelable接口
 - 通过Serializable方式来实现序列化的方法，本节接着介绍另一种序列化方式：Parcelable。Parcelable也是一个接口，只要实现这个接口，一个类的对象就可以实现序列化并可以通过Intent和Binder传递。下面的示例是一个典型的用法。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 package com.ryg.chapter_2.model;
-import java.io.Serializable;
+import csharp.io.Serializable;
 import com.ryg.chapter_2.aidl.Book;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -192,7 +222,7 @@ public class User implements Parcelable, Serializable {
 - Binder是一个很深入的话题，笔者也看过一些别人写的Binder相关的文章，发现很少有人能把它介绍清楚，不是深入代码细节不能自拔，就是长篇大论不知所云，看完后都是晕晕的感觉。所以，本节笔者不打算深入探讨Binder的底层细节，因为Binder太复杂了。
 - 直观来说，Binder是Android中的一个类，它实现了IBinder接口。从IPC角度来说，Binder是Android中的一种跨进程通信方式，Binder还可以理解为一种虚拟的物理设备，它的设备驱动是/dev/binder，该通信方式在Linux中没有；从Android Framework角度来说，Binder 是ServiceManager连接各种Manager（ActivityManager、WindowManager，等等）和相应ManagerService的桥梁；从Android应用层来说，Binder是客户端和服务端进行通信的媒介，当bindService的时候，服务端会返回一个包含了服务端业务调用的Binder对象，通过这个Binder对象，客户端就可以获取服务端提供的服务或者数据，这里的服务包括普通服务和基于AIDL的服务。
 - Android 开发中，Binder主要用在Service中，包括AIDL和Messenger，其中普通 Service中的Binder不涉及进程间通信，所以较为简单，无法触及Binder的核心，而Messenger的底层其实是AIDL，所以这里选择用AIDL来分析Binder的工作机制。为了分析Binder的工作机制，我们需要新建一个AIDL示例，SDK会自动为我们生产AIDL所对应的Binder类，然后我们就可以分析Binder的工作过程。还是采用本章开始时用的例子，新建Java包com.ryg.chapter_2.aidl，然后新建三个文件Book.java、Book.aidl和IBookManager.aidl，代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class Book implements Parcelable {
     public int bookId;
     public String bookName;
@@ -227,7 +257,7 @@ public class Book implements Parcelable {
 }
 #+END_SRC 
 **** AIDL 文件
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 //Book.aidl
 package com.ryg.chapter_2.aidl;
 parcelable Book;
@@ -242,7 +272,7 @@ interface IBookManager {
 #+END_SRC 
 - 上面三个文件中，Book.java是一个表示图书信息的类，它实现了Parcelable接口。Book.aidl 是Book类在AIDL中的声明。IBookManageraidl是我们定义的一个接口，里面有两个方法：getBookList和addBook，其getBookList用于从远程服务端获取图书列表，而addBook用于往图书列表中添加一本书，当然这两个方法主要是示例用，不一定要有实际意义。我们可以看到，尽管Book类已经和IBookManager位于相同的包中，但是在IBookManager 中仍然要导入Book类，这就是AIDL的特殊之处。下面我们先看一下系统为IBookManageraidl生产的Binder类，在gen目录下的com.ryg.chapter_2.aidl包中有一个IBookManager.java的类，这就是我们要找的类。接下来我们需要根据这个系统生成的Binder类来分析Binder的工作原理，代码如下：
 - aidl 编译生成的代码：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 package com.me.ipc;
 // Declare any non-default types here with import statements
 public interface IGameManager extends android.os.IInterface {
@@ -250,7 +280,7 @@ public interface IGameManager extends android.os.IInterface {
     /** Default implementation for IGameManager. */
     public static class Default implements com.me.ipc.IGameManager {
         // 首先，它声明了两个方法getBookList和addBook，显然这就是我们在IBookManageraidl中所声明的方法
-        @Override public java.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException {
+        @Override public csharp.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException {
             return null;
         }
         @Override public void addGame(com.me.ipc.Game game) throws android.os.RemoteException {}
@@ -264,7 +294,7 @@ public interface IGameManager extends android.os.IInterface {
     // 当客户端和服务端都位于同一个进程时，方法调用不会走跨进程的transact过程
     public static abstract class Stub extends android.os.Binder implements com.me.ipc.IGameManager {
 
-        private static final java.lang.String DESCRIPTOR = "com.me.ipc.IGameManager"; // Binder的唯一标识，一般用当前Binder的类名表示
+        private static final csharp.lang.String DESCRIPTOR = "com.me.ipc.IGameManager"; // Binder的唯一标识，一般用当前Binder的类名表示
 
         /** Construct the stub at attach it to the interface. */
         public Stub() {
@@ -289,7 +319,7 @@ public interface IGameManager extends android.os.IInterface {
         }
         // 而当两者位于不同进程时，方法调用需要走transact过程，这个逻辑由Stub的内部代理类Proxy来完成
         @Override public boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) throws android.os.RemoteException {
-            java.lang.String descriptor = DESCRIPTOR;
+            csharp.lang.String descriptor = DESCRIPTOR;
             switch (code) {
                 case INTERFACE_TRANSACTION: {
                     reply.writeString(descriptor);
@@ -297,7 +327,7 @@ public interface IGameManager extends android.os.IInterface {
                 }
                 case TRANSACTION_getGameList: {
                     data.enforceInterface(descriptor);
-                    java.util.List<com.me.ipc.Game> _result = this.getGameList();
+                    csharp.util.List<com.me.ipc.Game> _result = this.getGameList();
                     reply.writeNoException();
                     reply.writeTypedList(_result);
                     return true;
@@ -327,15 +357,15 @@ public interface IGameManager extends android.os.IInterface {
             @Override public android.os.IBinder asBinder() {
                 return mRemote;
             }
-            public java.lang.String getInterfaceDescriptor() {
+            public csharp.lang.String getInterfaceDescriptor() {
                 return DESCRIPTOR;
             }
 
-            @Override public java.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException { // 这个方法运行在客户端
+            @Override public csharp.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException { // 这个方法运行在客户端
                 // 首先创建该方法所需要的输入型Parcel对象_data、输出型Parcel对象_reply和返回值对象List
                 android.os.Parcel _data = android.os.Parcel.obtain();
                 android.os.Parcel _reply = android.os.Parcel.obtain();
-                java.util.List<com.me.ipc.Game> _result;
+                csharp.util.List<com.me.ipc.Game> _result;
                 try {
                     _data.writeInterfaceToken(DESCRIPTOR); // 把该方法的参数信息写入_data中（如果有参数的话）
                     // 接着调用transact方法来发起RPC（远程过程调用）请求，同时当前线程挂起
@@ -401,7 +431,7 @@ public interface IGameManager extends android.os.IInterface {
         }
     }
     
-    public java.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException;
+    public csharp.util.List<com.me.ipc.Game> getGameList() throws android.os.RemoteException;
     public void addGame(com.me.ipc.Game game) throws android.os.RemoteException;
 }
 #+END_SRC 
@@ -419,7 +449,7 @@ public interface IGameManager extends android.os.IInterface {
   - 此方法用于返回当前Binder对象。
 - onTransact
   - 这个方法运行在服务端中的Binder线程池中，当客户端发起跨进程请求时，远程请求会通过系统底层封装后交由此方法来处理。该方法的原型为
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public Boolean onTransact(int code，android.os.Parcel data，android.os.Parcel reply，int flags)
 #+END_SRC 
   - 服务端通过code可以确定客户端所请求的目标方法是什么，接着从data中取出目标方法所需的参数（如果目标方法有参数的话），然后执行目标方法。当目标方法执行完毕后，就向reply中写入返回值（如果目标方法有返回值的话），onTransact方法的执行过程就是这样的。需要注意的是，如果此方法返回false，那么客户端的请求会失败，因此我们可以利用这个特性来做权限验证，毕竟我们也不希望随便一个进程都能远程调用我们的服务。
@@ -433,7 +463,7 @@ public Boolean onTransact(int code，android.os.Parcel data，android.os.Parcel 
 
 **** 手写Binder
 - 从上述分析过程来看，我们完全可以不提供AIDL文件即可实现Binder，之所以提供AIDL文件，是为了方便系统为我们生成代码。系统根据AIDL文件生成Java文件的格式是固定的，我们可以抛开AIDL文件直接写一个Binder出来，接下来我们就介绍如何手动写一个Binder。还是上面的例子，但是这次我们不提供AIDL文件。参考上面系统自动生成的IBookManager.java这个类的代码，可以发现这个类是相当有规律的，根据它的特点，我们完全可以自己写一个和它一模一样的类出来，然后这个不借助AIDL文件的Binder就完成了。但是我们发现系统生成的类看起来结构不清晰，我们想试着对它进行结构上的调整，可以发现这个类主要由两部分组成，首先它本身是一个Binder的接口（继承了IInterface），其次它的内部由个Stub类，这个类就是个Binder。还记得我们怎么写一个Binder的服务端吗？代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private Binder mBinder = new IBookManager.Stub() {
     @Override
     public List<Book> getBookList() throws RemoteException {
@@ -448,7 +478,7 @@ private Binder mBinder = new IBookManager.Stub() {
 - 首先我们会实现一个创建了一个Stub对象并在内部实现IBookManager的接口方法，然后在Service的onBind中返回这个Stub对象。因此，从这一点来看，我们完全可以把Stub类提取出来直接作为一个独立的Binder类来实现，这样IBookManager中就只剩接口本身了，通过这种分离的方式可以让它的结构变得清晰点。
 - 根据上面的思想，手动实现一个Binder可以通过如下步骤来完成：
 - （1）声明一个AIDL性质的接口，只需要继承IInterface 接口即可，IInterface接口中只有一个asBinder方法。这个接口的实现如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public interface IBookManager extends IInterface {
     static final String DESCRIPTOR = "com.ryg.chapter_2.manualbinder.IBookManager";
     static final int TRANSACTION_getBookList = (IBinder.FIRST_CALL_TRANSACTION + 0);
@@ -459,7 +489,7 @@ public interface IBookManager extends IInterface {
 #+END_SRC 
 - 可以看到，在接口中声明了一个Binder描述符和另外两个id，这两个id分别表示的是getBookList和addBook方法，这段代码原本也是系统生成的，我们仿照系统生成的规则去手动书写这部分代码。如果我们有三个方法，应该怎么做呢？很显然，我们要再声明一个id，然后按照固定模式声明这个新方法即可，这个比较好理解，不再多说。
 - （2）实现Stub类和Stub类中的Proxy代理类，这段代码我们可以自己写，但是写出来后会发现和系统自动生成的代码是一样的，因此这个Stub类我们只需要参考系统生成的代码即可，只是结构上需要做一下调整，调整后的代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class BookManagerImpl extends Binder implements IBookManager {
     /** Construct the stub at attach it to the interface. */
     public BookManagerImpl() {
@@ -531,7 +561,7 @@ public class BookManagerImpl extends Binder implements IBookManager {
         public IBinder asBinder() {
             return mRemote;
         }
-        public java.lang.String getInterfaceDescriptor() {
+        public csharp.lang.String getInterfaceDescriptor() {
             return DESCRIPTOR;
         }
         @Override
@@ -576,7 +606,7 @@ public class BookManagerImpl extends Binder implements IBookManager {
 **** 设置死亡代理
 - 接下来，我们介绍Binder的两个很重要的方法linkToDeath和unlinkToDeath。我们知道，Binder运行在服务端进程，如果服务端进程由于某种原因异常终止，这个时候我们到服务端的Binder连接断裂（称之为Binder死亡），会导致我们的远程调用失败。更为关键的是，如果我们不知道Binder连接已经断裂，那么客户端的功能就会受到影响。为了解决这个问题，Binder中提供了两个配对的方法linkToDeath和unlinkToDeath，通过linkToDeath我们可以给Binder设置一个死亡代理，当Binder死亡时，我们就会收到通知，这个时候我们就可以重新发起连接请求从而恢复连接。那么到底如何给Binder设置死亡代理呢？也很简单。
 - 首先，声明一个DeathRecipient对象。DeathRecipient是一个接口，其内部只有一个方法binderDied，我们需要实现这个方法，当Binder死亡的时候，系统就会回调binderDied方法，然后我们就可以移出之前绑定的binder代理并重新绑定远程服务：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private IBinder.DeathRecipient mDeathRecipient = new IBinder.DeathRecipient() {
     @Override
     public void binderDied() {
@@ -589,13 +619,46 @@ private IBinder.DeathRecipient mDeathRecipient = new IBinder.DeathRecipient() {
 };
 #+END_SRC 
 - 其次，在客户端绑定远程服务成功后，给binder设置死亡代理：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
    IBookManager bookManager = IBookManager.Stub.asInterface(service);
 //绑定链接断开的对象
    bookManager.asBinder().linkToDeath(mDeathRecipient, 0);
 #+END_SRC 
 - 其中linkToDeath的第二个参数是个标记位，我们直接设为0即可。经过上面两个步骤，就给我们的Binder设置了死亡代理，当Binder死亡的时候我们就可以收到通知了。另外，通过Binder的方法isBinderAlive也可以判断Binder是否死亡。
 - 到这里，IPC的基础知识就介绍完毕了，下面开始进入正题，直面形形色色的进程间通信方式。
+*** 上面的例子改天再看，先把概念再理一遍
+- Binder是Android中的一个类，它实现了IBinder接口。从IPC角度看，Binder是Android中一种跨进程通信的方式；Binder还可以理解为虚拟的物理设备，它的设备驱动是/dev/binder；从Framework层角度看，Binder是ServiceManager连接各种Manager和相应的ManagerService的桥梁；从Android应用层来说，Binder是客户端和服务端进行通信的媒介，当bindService的时候，服务端会返回一个包含了服务端业务调用的Binder对象，通过这个Binder对象，客户端就可以获取服务端提供的服务或者数据，这里的服务包括普通服务和基于AIDL的服务。
+- 在Android开发中，Binder主要用在Service中，包括AIDL和Messenger，其中普通Service中的Binder不涉及进程间通信，较为简单；而Messenger的底层其实是AIDL，正是Binder的核心工作机制。
+- (5)aidl工具根据aidl文件自动生成的java接口的解析：首先，它声明了几个接口方法，同时还声明了几个整型的id用于标识这些方法，id用于标识在transact过程中客户端所请求的到底是哪个方法；接着，它声明了一个内部类Stub，这个Stub就是一个Binder类，当客户端和服务端都位于同一个进程时，方法调用不会走跨进程的transact过程，而当两者位于不同进程时，方法调用需要走transact过程，这个逻辑由Stub内部的代理类Proxy来完成。
+- 所以，这个接口的核心就是它的内部类Stub和Stub内部的代理类Proxy。 下面分析其中的方法：
+  - 1. *asInterface(android.os.IBinder obj)* ：用于将服务端的Binder对象转换成客户端所需的AIDL接口类型的对象，这种转换过程是区分进程的，如果客户端和服务端是在同一个进程中，那么这个方法返回的是服务端的Stub对象本身，否则返回的是系统封装的Stub.Proxy对象。
+  - 2. *asBinder()* ：返回当前Binder对象。
+  - 3. *onTransact()* ：这个方法运行在服务端中的Binder线程池中，当客户端发起跨进程请求时，远程请求会通过系统底层封装后交由此方法来处理。
+    - 这个方法的原型是public Boolean onTransact(int code, Parcelable data, Parcelable reply, int flags)
+    - 服务端通过code可以知道客户端请求的目标方法，接着从data中取出所需的参数，然后执行目标方法，执行完毕之后，将结果写入到reply中。如果此方法返回false，说明客户端的请求失败，利用这个特性可以做权限验证(即验证是否有权限调用该服务)。
+  - 4. *Proxy#[Method]* ：代理类中的接口方法，这些方法运行在客户端，当客户端远程调用此方法时，它的内部实现是：首先创建该方法所需要的参数，然后把方法的参数信息写入到_data中，接着调用transact方法来发起RPC请求，同时当前线程挂起；然后服务端的onTransact方法会被调用，直到RPC过程返回后，当前线程继续执行，并从_reply中取出RPC过程的返回结果，最后返回_reply中的数据。
+
+如果搞清楚了自动生成的接口文件的结构和作用之后，其实是可以不用通过AIDL而直接实现Binder的，主席写的示例代码
+
+(6)Binder的两个重要方法 *linkToDeath和unlinkToDeath*
+Binder运行在服务端，如果由于某种原因服务端异常终止了的话会导致客户端的远程调用失败，所以Binder提供了两个配对的方法linkToDeath和unlinkToDeath，通过linkToDeath方法可以给Binder设置一个死亡代理，当Binder死亡的时候客户端就会收到通知，然后就可以重新发起连接请求从而恢复连接了。
+如何给Binder设置死亡代理呢？
+1.声明一个DeathRecipient对象，DeathRecipient是一个接口，其内部只有一个方法bindeDied，实现这个方法就可以在Binder死亡的时候收到通知了。
+#+BEGIN_SRC csharp
+private IBinder.DeathRecipient mDeathRecipient = new IBinder.DeathRecipient() {
+    @Override
+    public void binderDied() {
+        if (mRemoteBookManager == null) return;
+        mRemoteBookManager.asBinder().unlinkToDeath(mDeathRecipient, 0);
+        mRemoteBookManager = null;
+        // TODO:这里重新绑定远程Service
+    }
+};
+#+END_SRC 
+2.在客户端绑定远程服务成功之后，给binder设置死亡代理
+#+BEGIN_SRC csharp
+mRemoteBookManager.asBinder().linkToDeath(mDeathRecipient, 0);
+#+END_SRC 
 ** Android中的IPC方式
 *** 使用Bundle
 - 我们知道，四大组件中的三大组件（Activity、Service、Receiver）都是支持在Intent中传递Bundle数据的，由于Bundle实现了Parcelable接口，所以它可以方便地在不同的进程间传输。基于这一点，当我们在一个进程中启动了另一个进程的Activity、Service和Receiver，我们就可以在Bundle中附加我们需要传输给远程进程的信息并通过Intent发送出去。当然，我们传输的数据必须能够被序列化，比如基本类型、实现了Parcellable接口的对象、实现了Serializable接口的对象以及一些Android支持的特殊对象，具体内容可以看Bundle这个类，就可以看到所有它支持的类型。Bundle不支持的类型我们无法通过它在进程间传递数据，这个很简单，就不再详细介绍了。这是一种最简单的进程间通信方式。
@@ -603,7 +666,7 @@ private IBinder.DeathRecipient mDeathRecipient = new IBinder.DeathRecipient() {
 *** 使用文件共享
 - 共享文件也是一种不错的进程间通信方式，两个进程通过读/写同一个文件来交换数据，比如A进程把数据写入文件，B进程通过读取这个文件来获取数据。我们知道，在Windows上，一个文件如果被加了排斥锁将会导致其他线程无法对其进行访问，包括读和写，而由于Android系统基于Linux，使得其并发读/写文件可以没有限制地进行，甚至两个线程同时对同一个文件进行写操作都是允许的，尽管这可能出问题。通过文件交换数据很好使用，除了可以交换一些文本信息外，我们还可以序列化一个对象到文件系统中的同时从另一个进程中恢复这个对象，下面就展示这种使用方法。
 - 这次我们在MainActivity的onResume中序列化一个User对象到sd卡上的一个文件里，然后在SecondActivity的onResume中去反序列化，我们期望在SecondActivity中能够正确地恢复User对象的值。关键代码如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 // MainActivity代码
     private void persistToFile() {
         new Thread(new Runnable() {
@@ -659,7 +722,7 @@ private IBinder.DeathRecipient mDeathRecipient = new IBinder.DeathRecipient() {
 - 当然，SharedPreferences是个特例，众所周知，SharedPreferences是Android中提供的轻量级存储方案，它通过键值对的方式来存储数据，在底层实现上它采用XML文件来存储键值对，每个应用的SharedPreferences文件都可以在当前包所在的data目录下查看到。一般来说，它的目录位于/data/data/package name/sharedprefs 目录下，其中package name表示的是当前应用的包名。从本质上来说，SharedPreferences也属于文件的一种，但是由于系统对它的读/写有一定的缓存策略，即在内存中会有一份SharedPreferences文件的缓存，因此在多进程模式下，系统对它的读/写就变得不可靠，当面对高并发的读/写访问，Sharedpreferences有很大几率会丢失数据，因此，不建议在进程间通信中使用SharedPreferences。
 *** 使用Messenger
 - Messenger可以翻译为信使，顾名思义，通过它可以在不同进程中传递Message对象，在Message中放入我们需要传递的数据，就可以轻松地实现数据的进程间传递了。Messenger是一种轻量级的IPC方案，它的底层实现是AIDL，为什么这么说呢，我们大致看一下Messenger这个类的构造方法就明白了。下面是Messenger的两个构造方法，从构造方法的实现上我们可以明显看出AIDL的痕迹，不管是IMessenger还是Stub.aslnterface，这种使用方法都表明它的底层是AIDL。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public Messenger(Handler target) {
     mTarget = target.getIMessenger();
 }
@@ -673,7 +736,7 @@ public Messenger(IBinder target) {
 - 2.客户端进程
   - 客户端进程中，首先要绑定服务端的Service，绑定成功后用服务端返回的IBinder对象创建一个Messenger，通过这个Messenger就可以向服务端发送消息了，发消息类型为Message对象。如果需要服务端能够回应客户端，就和服务端一样，我们还需要创建一个Handler并创建一个新的Messenger，并把这个Messenger对象通过Message的replyTo参数传递给服务端，服务端通过这个replyTo参数就可以回应客户端。这听起来可能还是有点抽象，不过看了下面的两个例子，读者肯定就都明白了。首先，我们来看一个简单点的例子，在这个例子中服务端无法回应客户端。
 - 首先看服务端的代码，这是服务端的典型代码，可以看到MessengerHandler用来处理客户端发送的消息，并从消息中取出客户端发来的文本信息。而mMessenger是一个Messenger对象，它和MessengerHandler相关联，并在onBind方法中返回它里面的Binder对象，可以看出，这里Mesenger的作用是将客户端发送的消息传递给MessengerHandler处理。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class MessengerService extends Service {
     private static final String TAG = "MessengerService";
     private static class MessengerHandler extends Handler {
@@ -702,7 +765,7 @@ public class MessengerService extends Service {
 </service>
 #+END_SRC
 - 接下来再看看客户端的实现，客户端的实现也比较简单，首先需要绑定远程进程的MessengerService，绑定成功后，根据服务端返回的binder对象创建Messenger对象并使用此对象向服务端发送消息。下面的代码在Bundle中向服务端发送了一句话，在上面的服务端代码中会打印出这句话。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class MessengerActivity extends Activity {
     private static final String TAG = "MessengerActivity";
     private Messenger mService;
@@ -744,7 +807,7 @@ public class MessengerActivity extends Activity {
 - 通过上面的例子可以看出，在Mesenger中进行数据传递必须将数据放入Message中，而Messenger和Message都实现了Parcelable接口，因此可以跨进程传输。简单来说，Message中所支持的数据类型就是Messenger所支持的传输类型。实际上，通过Messenger来传输Message，Message中能使用的载体只有what、arg1、arg2、Bundle以及replyTo。Message中的另一个字段object在同一个进程中是很实用的，但是在进程间通信的时候，在Android2.2以前object字段不支持跨进程传输，即便是2.2以后，也仅仅是系统提供的实现了Parcelable接口的对象才能通过它来传输。这就意味着我们自定义的Parcelable对象是无法通过object字段来传输的，读者可以试一下。非系统的Parcelable对象的确无法通过object字段来传输，这也导致了object字段的实用性大大降低，所幸我们还有Bundle，Bundle中可以支持大量的数据类型。
 - 上面的例子演示了如何在服务端接收客户端中发送的消息，但是有时候我们还需要能回应客户端，下面就介绍如何实现这种效果。还是采用上面的例子，但是稍微做一下修改，每当客户端发来一条消息，服务端就会自动回复一条“嗯，你的消息我已经收到，稍后会回复你。”，这很类似邮箱的自动回复功能。
 - 首先看服务端的修改，服务端只需要修改MessengerHandler，当收到消息后，会立即回复一条消息给客户端。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private static class MessengerHandler extends Handler {
      @Override
      public void handleMessage(Message msg) {
@@ -769,7 +832,7 @@ private static class MessengerHandler extends Handler {
  }
 #+END_SRC 
 - 接着再看客户端的修改，为了接收服务端的回复，客户端也需要准备一个接收消息的Messenger和Handler，.如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private static class MessengerHandler extends Handler {
     @Override
     public void handleMessage(Message msg) {
@@ -799,7 +862,7 @@ private static class MessengerHandler extends Handler {
 - 上面描述的只是一个感性的过程，AIDL的实现过程远不止这么简单，接下来会对其中的细节和难点进行详细介绍，并完善我们在Binder那一节所提供的的实例。
 **** 3.AlDL接口的创建
 - 首先看AIDL接口的创建，如下所示，我们创建了一个后缀为AIDL的文件，在里面声明了一个接口和两个接口方法。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 interface IBookManager {
     public List<Book> getBookList() throws RemoteException;
     public void addBook(Book book) throws RemoteException;
@@ -814,13 +877,13 @@ interface IBookManager {
   - AIDL：所有的AIDL接口本身也可以在AIDL文件中使用。
 - 以上6种数据类型就是AIDL所支持的所有类型，其中自定义的Parcelable对象和AIDL对象必须要显式import进来，不管它们是否和当前的AIDL文件位于同一个包内。比如IBookManager.aidl这个文件，里面用到了Book这个类，这个类实现了Parcelable接口并且和IBookManager.aidl位于同一个包中，但是遵守AIDL的规范，我们仍然需要显式地import进来：import com.ryg.chapter_2.aidl.Book。AIDL中会大量使用到Parcelable，至于如何使用Parcelable接口来序列化对象，在本章的前面已经介绍过，这里就不再赘述。
 - 另外一个需要注意的地方是，如果AIDL文件中用到了自定义的Parcelable对象，那么必须新建一个和它同名的AIDL文件，并在其中声明它为Parcelable类型。在上面的IBookManager.aidl中，我们用到了Book这个类，所以，我们必须要创建Book.aidl，然后在里面添加如下内容：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 parcelable Book;
 #+END_SRC 
 - 我们需要注意，AIDL中每个实现了Parcelable接口的类都需要按照上面那种方式去创建相应的AIDL文件并声明那个类为parcelable。除此之外，AIDL中除了基本数据类型，其他类型的参数必须标上方向：in、out或者inout，in表示输入型参数，out表示输出型参数，inout表示输入输出型参数，至于它们具体的区别，这个就不说了。我们要根据实际需要去指定参数类型，不能一概使用out或者inout，因为这在底层实现是有开销的。最后，AIDL接口中只支持方法，不支持声明静态常量，这一点区别于传统的接口。
 - 为了方便AIDL的开发，建议把所有和AIDL相关的类和文件全部放入同一个包中，这样做的好处是，当客户端是另外一个应用时，我们可以直接把整个包复制到客户端工程中，对于本例来说，就是要把com.ryg.chapter 2.aidl这个包和包中的文件原封不动地复制到客户端中。如果AIDL相关的文件位于不同的包中时，那么就需要把这些包一一复制到客户端工程中，这样操作起来比较麻烦而且也容易出错。需要注意的是，AIDL的包结构在服务端和客户端要保持一致，否则运行会出错，这是因为客户端需要反序列化服务端中和AIDL接口相关的所有类，如果类的完整路径不一样的话，就无法成功反序列化，程序也就无法正常运行。为了方便演示，本章的所有示例都是在同一个工程中进行的，但是读者要理解，一个工程和两个工程的多进程本质是一样的，两个工程的情况，除了需要复制AIDL接口所相关的包到客户端，其他完全一样，读者可以自行试验。
 **** 4.服务端的实现
-     #+BEGIN_SRC java
+     #+BEGIN_SRC csharp
 public class BookManagerService extends Service {
     private static final String TAG = "BMS";
     private AtomicBoolean mIsServiceDestoryed = new AtomicBoolean(false);
@@ -858,7 +921,7 @@ public class BookManagerService extends Service {
 **** 5.客户端的实现
 - 查询书籍
 - 客户端的实现就比较简单了，首先要绑定远程服务，绑定成功后将服务端返回的Binder对象转换成AIDL接口，然后就可以通过这个接口去调用服务端的远程方法了，代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private ServiceConnection mConnection = new ServiceConnection() {
     //bind Service 后获取到对象
     public void onServiceConnected(ComponentName className, IBinder service) {
@@ -898,7 +961,7 @@ protected void onCreate(Bundle savedInstanceState) {
 - 这就是一次完完整整的使用AIDL进行IPC的过程，到这里相信读者对AIDL应该有了一个整体的认识了，但是还没完，AIDL的复杂性远不止这些，下面继续介绍AIDL中常见的一些难点。
 - 添加书籍
 - 我们接着再调用一下另外一个接口addBook，我们在客户端给服务端添加一本书，然后再获取一次，看程序是否能够正常工作。还是上面的代码，客户端在服务连接后，在onServiceConnected中做如下改动：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public void onServiceConnected(ComponentName className, IBinder service) {
     IBookManager bookManager = IBookManager.Stub.asInterface(service);
     mRemoteBookManager = bookManager;
@@ -928,13 +991,13 @@ public void onServiceConnected(ComponentName className, IBinder service) {
 #+END_SRC
 - 动态监听添加的书籍
   - 现在我们考虑一种情况，假设有一种需求：用户不想时不时地去查询图书列表了，太累了，于是，他去问图书馆，“当有新书时能不能把书的信息告诉我呢？”。大家应该明白了，这就是一种典型的观察者模式，每个感兴趣的用户都观察新书，当新书到的时候，图书馆就通知每一个对这本书感兴趣的用户，这种模式在实际开发中用得很多，下面我们就来模拟这种情形。首先，我们需要提供一个AIDL接口，每个用户都需要实现这个接口并且向图书馆申请新书的提醒功能，当然用户也可以随时取消这种提醒。之所以选择AIDL接口而不是普通接口，是因为AIDL中无法使用普通接口。这里我们创建一个IOnNewBookArrivedListener.aidl 文件，我们所期望的情况是：当服务端有新书到来时，就会通知每一个已经申请提醒功能的用户。从程序上来说就是调用所有IOnNew BookArrivedListener对象中的onNewBookArrived方法，并把新书的对象通过参数传递给客户端，内容如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 interface IOnNewBookArrivedListener {
     void onNewBookArrived(in Book newBook);
 }
 #+END_SRC 
 - 除了要新加一个AIDL接口，还需要在原有的接口中添加两个新方法，代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 interface IBookManager {
      List<Book> getBookList();
      void addBook(in Book book);
@@ -943,7 +1006,7 @@ interface IBookManager {
 }
 #+END_SRC 
 - 接着，服务端中Service的实现也要稍微修改一下，主要是Service中IBookManager.Stub的实现，因为我们在IBookManager新加了两个方法，所以在IBookManager.Stub中也要实现这两个方法。同时，在BookManagerService中还开启了一个线程，每隔5s就向书库中增加一本新书并通知所有感兴趣的用户，整个代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class BookManagerService extends Service {
     private static final String TAG = "BMS";
     private AtomicBoolean mIsServiceDestoryed = new AtomicBoolean(false);
@@ -1030,7 +1093,7 @@ public class BookManagerService extends Service {
 }
 #+END_SRC 
 - 最后，我们还需要修改一下客户端的代码，主要有两方面：首先客户端要注册IOnNewBookArrivedListener 到远程服务端，这样当有新书时服务端才能通知当前客户端，同时我们要在Activity 退出时解除这个注册；另一方面，当有新书时，服务端会回调客户端的IOnNewBookArrivedListener对象中的onNewBookArrived方法，但是这个方法是在客户端的Binder线程池中执行的，因此，为了便于进行UI操作，我们需要有一个Handler可以将其切换到客户端的主线程中去执行，这个原理在Binder中已经做了分析，这里就不多说了。客户端的代码修改如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class BookManagerActivity extends Activity {
     private static final String TAG = "BookManagerActivity";
     private static final int MESSAGE_NEW_BOOK_ARRIVED = 1;
@@ -1128,17 +1191,17 @@ public class BookManagerActivity extends Activity {
 - 它的工作原理很简单，在它的内部有一个Map结构专门用来保存所有的AIDL回调，这个Map的key是IBinder类型，value是Callback类型，如下所示。
 - ArrayMap<IBinder, Callback> mCallbacks= new ArrayMap<IBinder, Callback>();
 - 其中Callback中封装了真正的远程listener。当客户端注册listener的时候，它会把这个listener的信息存入mCalbacks中，其中key和value分别通过下面的方式获得：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 IBinder key=listener. asBinder()
 Callback value=new Callback(listener, cookie)
 #+END_SRC 
 - 到这里，读者应该都明白了，虽然说多次跨进程传输客户端的同一个对象会在服务端生成不同的对象，但是这些新生成的对象有一个共同点，那就是它们底层的Binder对象是同一个，利用这个特性，就可以实现上面我们无法实现的功能。当客户端解注册的时候，我们只要遍历服务端所有的listener，找出那个和解注册listener具有相同Binder对象的服务端listener 并把它删掉即可，这就是RemoteCallbackList为我们做的事情。同时RemoteCallbackList还有一个很有用的功能，那就是当客户端进程终止后，它能够自动移除客户端所注册的listener。另外，RemoteCallbackList内部自动实现了线程同步的功能，所以我们使用它来注册和解注册时，不需要做额外的线程同步工作。由此可见，RemoteCallbackList的确是个很有价值的类，下面就演示如何使用它来完成解注册。
 - RemoteCallbackList 使用起来很简单，我们要对BookManagerService做一些修改，首先要创建一个RemoteCallbackList对象来替代之前的CopyOnWriteArrayList，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private RemoteCallbackList<IOnNewBookArrivedListener> mListenerList = new RemoteCallbackList<IOnNewBookArrivedListener>();
 #+END_SRC 
 - 然后修改registerListener和unregisterListener这两个接口的实现，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 @Override
 public void registerListener(IOnNewBookArrivedListener listener)
         throws RemoteException {
@@ -1151,7 +1214,7 @@ public void unregisterListener(IOnNewBookArrivedListener listener)
 }
 #+END_SRC 
 - 怎么样？是不是用起来很简单，接着要修改onNewBookArrived方法，当有新书时，我们就要通知所有已注册的listener，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private void onNewBookArrived(Book book) throws RemoteException {
     mBookList.add(book);
     final int N = mListenerList.beginBroadcast();
@@ -1174,7 +1237,7 @@ private void onNewBookArrived(Book book) throws RemoteException {
 2019-03-26 00:04:26.056 11421-11616/com.ryg.chapter_2:remote D/BMS: unregisterListener, current size:0
 #+END_SRC
 - 使用RemoteCallbackList，有一点需要注意，我们无法像操作List一样去操作它，尽管它的名字中也带个List，但是它并不是一个List。遍历RemoteCalbackList，必须要按照下面的方式进行，其中beginBroadcast和finishBroadcast必须要配对使用，哪怕我们仅仅是想要获取RemoteCallbackList中的元素个数，这是必须要注意的地方。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 final int N = mListenerList.beginBroadcast();
 for (int i = 0; i < N; i++) {
     IOnNewBookArrivedListener l = mListenerList.getBroadcastItem(i);
@@ -1185,7 +1248,7 @@ for (int i = 0; i < N; i++) {
 mListenerList.finishBroadcast();
 #+END_SRC 
 - 到这里，AIDL的基本使用方法已经介绍完了，但是有几点还需要再次说明一下。我们知道，客户端调用远程服务的方法，被调用的方法运行在服务端的Binder线程池中，同时客户端线程会被挂起，这个时候如果服务端方法执行比较耗时，就会导致客户端线程长时间地阻塞在这里，而如果这个客户端线程是UI线程的话，就会导致客户端ANR，这当然不是我们想要看到的。因此，如果我们明确知道某个远程方法是耗时的，那么就要避免在客户端的UI线程中去访问远程方法。由于客户端的onServiceConnected和onService Disconnected方法都运行在UI线程中，所以也不可以在它们里面直接调用服务端的耗时方法，这点要尤其注意。另外，由于服务端的方法本身就运行在服务端的Binder线程池中，所以服务端方法本身就可以执行大量耗时操作，这个时候切记不要在服务端方法中开线程去进行异步任务，除非你明确知道自己在干什么，否则不建议这么做。下面我们稍微改造一下服务端的getBookList方法，我们假定这个方法是耗时的，那么服务端可以这么实现：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 @Override
 public List<Book> getBookList() throws RemoteException {
     SystemClock.sleep(5000);
@@ -1194,7 +1257,7 @@ public List<Book> getBookList() throws RemoteException {
 #+END_SRC 
 - 然后在客户端中放一个按钮，单击它的时候就会调用服务端的getBookList方法，可以预知，连续单击几次，客户端就ANR了，如下图，感兴趣读者可以自行试一下。
 - 避免出现上述这种ANR其实很简单，我们只需要把调用放在非UI线程即可，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public void onButton1Click(View view) {
     Toast.makeText(this, "click button1", Toast.LENGTH_SHORT).show();
     new Thread(new Runnable() {
@@ -1212,7 +1275,7 @@ public void onButton1Click(View view) {
 }
 #+END_SRC 
 - 同理，当远程服务端需要调用客户端的listener中的方法时，被调用的方法也运行在Binder线程池中，只不过是客户端的线程池。所以，我们同样不可以在服务端中调用客户端的耗时方法。比如针对BookManagerService的onNewBookArrived方法，如下所示。在它内部调用了客户端的IOnNewBookArrivedListener中的onNewBookArrived方法，如果客户端的这个onNewBookArrived方法比较耗时的话，那么请确保BookManagerService中的onNewBookArrived运行在非UI线程中，否则将导致服务端无法响应。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private void onNewBookArrived(Book book) throws RemoteException {
     mBookList.add(book);
     Log.d(TAG, "onNewBookArrived,notify listeners:" + mListenerList.size());
@@ -1237,7 +1300,7 @@ private void onNewBookArrived(Book book) throws RemoteException {
     android:protectionLevel="normal" />
 #+END_SRC
 - 关于permission的定义方式请读者查看相关资料，这里就不详细展开了，毕竟本节的主要内容是介绍AIDL。定义了权限以后，就可以在BookManagerService的onBind方法中做权限验证了，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 @Override
 public IBinder onBind(Intent intent) {
     int check = checkCallingOrSelfPermission("com.ryg.chapter_2.permission.ACCESS_BOOK_SERVICE");
@@ -1256,7 +1319,7 @@ public IBinder onBind(Intent intent) {
 - 第二种方法
 - 我们可以在服务端的onTransact方法中进行权限验证，如果验证失败就直接返回false，这样服务端就不会终止执行AIDL中的方法从而达到保护服务端的效果。
 - 至于具体的验证方式有很多，可以采用permission验证，具体实现方式和第一种方法一样。还可以采用Uid和Pid来做验证，通过getCallingUid和getCallingPid可以拿到客户端所属应用的Uid和Pid，通过这两个参数我们可以做一些验证工作，比如验证包名。在下面的代码中，既验证了permission，又验证了包名。一个应用如果想远程调用服务中的方法，首先要使用我们的自定义权限“com.ryg.chapter_2.permission.ACCESS_BOOK_SERVICE”，其次包名必须以“com.ryg”开始，否则调用服务端的方法会失败。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public boolean onTransact(int code, Parcel data, Parcel reply, int flags)
         throws RemoteException {
     int check = checkCallingOrSelfPermission("com.ryg.chapter_2.permission.ACCESS_BOOK_SERVICE");
@@ -1278,12 +1341,12 @@ public boolean onTransact(int code, Parcel data, Parcel reply, int flags)
 }
 #+END_SRC 
 - 上面介绍了两种AIDL中常用的权限验证方法，但是肯定还有其他方法可以做权限验证，比如为Service指定android:permission属性等，这里就不一一进行介绍了。
-** 使用ContentProvider
+*** 使用ContentProvider
 - ContentProvider是Android中提供的专门用于不同应用间进行数据共享的方式，从这一点来看，它天生就适合进程间通信。和Messenger一样，ContentProvider的底层实现同样也是Binder，由此可见，Binder在Android系统中是何等的重要。虽然ContentProvider的底层实现是Binder，但是它的使用过程要比AIDL简单许多，这是因为系统已经为我们做了封装，使得我们无须关心底层细节即可轻松实现IPC。ContentProvider虽然使用起来很简单，包括自己创建一个ContentProvider也不是什么难事，尽管如此，它的细节还是相当多，比如CRUD操作、防止SQL注入和权限控制等。由于章节主题限制，在本节中，笔者暂时不对ContentProvider的使用细节以及工作机制进行详细分析，而是为读者介绍采用ContentProvider进行跨进程通信的主要流程，至于使用细节和内部工作机制会在后续章节进行详细分析。
 - 系统预置了许多ContentProvider，比如通讯录信息、日程表信息等，要跨进程访问这些信息，只需要通过ContentResolver的query、update、insert和delete方法即可。在本节中，我们来实现一个自定义的ContentProvider，并演示如何在其他应用中获取ContentProvider中的数据从而实现进程间通信这一目的。首先，我们创建一个ContentProvider，名字就叫BookProvider。创建一个自定义的ContentProvider很简单，只需要继承ContentProvider类并实现六个抽象方法即可：onCreate、query、update、insert、delete和getlype。这六个抽象方法都很好理解，onCreate代表ContentProvider的创建，一般来说我们需要做一些初始化工作；getType用来返回一个Uri请求所对应的MIME类型（媒体类型），比如图片、视频等，这个媒体类型还是有点复杂的，如果我们的应用不关注这个选项，可以直接在这个方法中返回null或者“**”；剩下的四个方法对应于CRUD操作，即实现对数据表的增删改查功能。根据Binder的工作原理，我们知道这六个方法均运行在ContentProvider的进程中，除了onCreate由系统回调并运行在主线程里，其他五个方法均由外界回调并运行在Binder线程池中，这一点在接下来的例子中可以再次证明。
 - ContentProvider主要以表格的形式来组织数据，并且可以包含多个表，对于每个表格来说，它们都具有行和列的层次性，行往往对应一条记录，而列对应一条记录中的一个字段，这点和数据库很类似。除了表格的形式，ContentProvider还支持文件数据，比如图片、视频等。文件数据和表格数据的结构不同，因此处理这类数据时可以在ContentProvider中返回文件的句柄给外界从而让文件来访问ContentProvider中的文件信息。Android系统所提供的MediaStore功能就是文件类型的ContentProvider，详细实现可以参考MediaStore。另外，虽然ContentProvider的底层数据看起来很像一个SQLite数据库，但是ContentProvider对底层的数据存储方式没有任何要求，我们既可以使用SOLite数据库，也可以使用普通的文件，甚至可以采用内存中的一个对象来进行数据的存储，这一点在后续的章节中会再次介绍，所以这里不再深入了。
 - 下面看一个最简单的示例，它演示了ContentProvider的工作工程。首先创建一个BookProvider类，它继承自ContentProvider并实现了ContentProvider的六个必须需要实现的抽象方法。在下面的代码中，我们什么都没干，尽管如此，这个BookProvider也是可以工作的，只是它无法向外界提供有效的数据而已。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class BookProvider extends ContentProvider {
     private static final String TAG = "BookProvider";
     @Override
@@ -1330,7 +1393,7 @@ public class BookProvider extends ContentProvider {
     android:process=":provider"></provider>
 #+END_SRC
 - 注册了ContentProvider以后，我们就可以在外部应用中访问它了。为了方便演示，这里仍然选择在同一个应用的其他进程中去访问这个BookProvider，至于在单独的应用中去访问这个BookProvider，和同一个应用中访问的效果是一样的，读者可以自行试一下（注意要声明对应权限）。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class ProviderActivity extends Activity {
     private static final String TAG = "ProviderActivity";
     @Override
@@ -1353,7 +1416,7 @@ public class ProviderActivity extends Activity {
 2019-03-26 11:38:01.401 6215-6228/com.ryg.chapter_2:provider D/BookProvider: query, current thread:Binder:6215_2
 #+END_SRC
 - 到这里，整个ContentProvider的流程我们已经跑通了，虽然ContentProvider中没有返回任何数据。接下来，在上面的基础上，我们继续完善BookProvider，从而使其能够对外部应用提供数据。继续本章提到的那个例子，现在我们要提供一个BookProvider，外部应用可以通过BookProvider来访问图书信息，为了更好地演示ContentProvider的使用，用户还可以通过BookProvider访问到用户信息。为了完成上述功能，我们需要一个数据库来管理图书和用户信息，这个数据库不难实现，代码如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class DbOpenHelper extends SQLiteOpenHelper {
     private static final String DB_NAME = "book_provider.db";
     public static final String BOOK_TABLE_NAME = "book";
@@ -1379,7 +1442,7 @@ public class DbOpenHelper extends SQLiteOpenHelper {
 }
 #+END_SRC 
 - 上述代码是一个最简单的数据库的实现，我们借助SQLiteOpenHelper来管理数据库的创建、升级和降级。下面我们就要通过BookProvider向外界提供上述数据库中的信息了。我们知道，ContentProvider通过Uri来区分外界要访问的的数据集合，在本例中支持外界对BookProvider中的book表和user表进行访问，为了知道外界要访问的是哪个表，我们需要为它们定义单独的Uri和Uri Code，并将Uri和对应的Uri_Code相关联，我们可以使用UriMatcher的addURI方法将Uri和Uri_Code关联到一起。这样，当外界请求访问BookProvider时，我们就可以根据请求的Uri来得到Uri_Code，有了Uri_Code我们就可以知道外界想要访问哪个表，然后就可以进行相应的数据操作了，具体代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class BookProvider extends ContentProvider {
     private static final String TAG = "BookProvider";
     public static final String AUTHORITY = "com.ryg.chapter_2.book.provider";
@@ -1400,7 +1463,7 @@ public class BookProvider extends ContentProvider {
 }
 #+END_SRC 
 - 从上面代码可以看出，我们分别为book表和user表指定了Uri，分别为“content://com.ryg.chapter_2.book.provider/book”和“content:/com.ryg.chapter_2.book.provider/user”，这两个Uri所关联的Uri_Code分别为0和1。这个关联过程是通过下面的语句来完成的：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private String getTableName(Uri uri) {
     String tableName = null;
     switch (sUriMatcher.match(uri)) {
@@ -1416,7 +1479,7 @@ private String getTableName(Uri uri) {
 }
 #+END_SRC 
 - 接着，我们就可以实现query、update、insert、delete方法了。如下是query方法的实现，首先我们要从Uri中取出外界要访问的表的名称，然后根据外界传递的查询参数就可以进行数据库的查询操作了，这个过程比较简单。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 @Override
 public Cursor query(Uri uri, String[] projection, String selection,
         String[] selectionArgs, String sortOrder) {
@@ -1429,7 +1492,7 @@ public Cursor query(Uri uri, String[] projection, String selection,
 }
 #+END_SRC 
 - 另外三个方法的实现思想和query是类似的，只有一点不同，那就是update、insert和delete方法会引起数据源的改变，这个时候我们需要通过ContentResolver的 notifyChange方法来通知外界当前ContentProvider中的数据已经发生改变。要观察一个ContentProvider中的数据改变情况，可以通过ContentResolver的 registerContentObserver方法来注册观察者，通过unregisterContentObserver方法来解除观察者。对于这三个方法，这里不再详细解释了，BookProvider的完整代码如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class BookProvider extends ContentProvider {
     private static final String TAG = "BookProvider";
     public static final String AUTHORITY = "com.ryg.chapter_2.book.provider";
@@ -1533,7 +1596,7 @@ public class BookProvider extends ContentProvider {
 }
 #+END_SRC 
 - 需要注意的是，query、update、insert、delete四大方法是存在多线程并发访问的，因此方法内部要做好线程同步。在本例中，由于采用的是SQLite并且只有一个SQLiteDatabase的连接，所以可以正确应对多线程的情况。具体原因是SQLiteDatabase内部对数据库的操作是有同步处理的，但是如果通过多个SQLiteDatabase对象来操作数据库就无法保证线程同步，因为SQLiteDatabase对象之间无法进行线程同步。如果ContentProvider的底层数据集是一块内存的话，比如是List，在这种情况下同List的遍历、插入、删除操作就需要进行线程同步，否则就会引起并发错误，这点是尤其需要注意的。到这里BookProvider已经实现完成了，接着我们在外部访问一下它，看看是否能够正常工作。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class ProviderActivity extends Activity {
     private static final String TAG = "ProviderActivity";
     @Override
@@ -1581,7 +1644,7 @@ public class ProviderActivity extends Activity {
 2019-03-26 15:43:18.461 18553-18553/com.ryg.chapter_2 D/ProviderActivity: query user:User:{userId:2, userName:jasmine, isMale:false}, with child:{null}
 #+END_SRC
 - 从上述log可以看到，我们的确查询到了4本书和2个用户，这说明BookProvider已经能够正确地处理外部的请求了，读者可以自行验证一下update和delete操作，这里就不再验证了。同时，由于ProviderActivity和BookProvider运行在两个不同的进程中，因此，这也构成了进程间的通信。ContentProvider除了支持对数据源的增删改查这四个操作，还支持自定义调用，这个过程是通过ContentResolver的Call 方法和ContentProvider的Call方法来完成的。关于使用ContentProvider来进行IPC就介绍到这里。
-** 使用Socket
+*** 使用Socket
 - 我们通过Socket来实现进程间的通信。Socket也称为“套接字”，是网络通信中的概念，它分为流式套接字和用户数据报套接字两种，分别对应于网络的传输控制层中的TCP和UDP协议。TCP协议是面向连接的协议，提供稳定的双向通信功能，TCP连接的建立需要经过“三次握手”才能完成，为了提供稳定的数据传输功能，其本身提供了超时重传机制，因此具有很高的稳定性；而UDP是无连接的，提供不稳定的单向通信功能，当然UDP也可以实现双向通信功能。在性能上，UDP具有更好的效率，其缺点是不保证数据一定能够正确传输，尤其是在网络拥塞的情况下。关于TCP和UDP的介绍就这么多，更详细的资料请查看相关网络资料。接下来我们演示一个跨进程的聊天程序，两个进程可以通过Socket来实现信息的传输，Socket本身可以支持传输任意字节流，这里为了简单起见，仅仅传输文本信息，很显然，这是一种IPC方式。
 - 使用Socket来进行通信，有两点需要注意，首先需要声明权限：
 #+BEGIN_SRC xml
@@ -1590,7 +1653,7 @@ public class ProviderActivity extends Activity {
 #+END_SRC
 - 其次要注意不能在主线程中访问网络，因为这会导致我们的程序无法在Android4.0及其以上的设备中运行，会抛出如下异常：android.os.NetworkOnMain ThreadException。而且进行网络操作很可能是耗时的，如果放在主线程中会影响程序的响应效率，从这方面来说，也不应该在主线程中访问网络。下面就开始设计我们的聊天室程序了，比较简单，首先在远程Service建立一个TCP服务，然后在主界面中连接TCP服务，连接上了以后，就可以给服务端发消息。对于我们发送的每一条文本消息，服务端都会随机地回应我们一句话。为了更好地展示Socket的工作机制，在服务端我们做了处理，使其能够和多个客户端同时建立连接并响应。
 - 先看一下服务端的设计，当Service启动时，会在线程中建立TCP服务，这里监听的是8688端口，然后就可以等待客户端的连接请求。当有客户端连接时，就会生成一个新的Socket，通过每次新创建的Socket就可以分别和不同的客户端通信了。服务端每收到一次客户端的消息就会随机回复一句话给客户端。当客户端断开连接时，服务端这边也会相应的关闭对应Socket并结束通话线程，这点是如何做到的呢？方法有很多，这里是通过判断服务端输入流的返回值来确定的，当客户端断开连接后，服务端这边的输入流会返回null，这个时候我们就知道客户端退出了。服务端的代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class TCPServerService extends Service {
     private boolean mIsServiceDestoryed = false;
     private String[] mDefinedMessages = new String[] {
@@ -1675,7 +1738,7 @@ public class TCPServerService extends Service {
 }
 #+END_SRC 
 - 接着看一下客户端，客户端Activity启动时，会在onCreate中开启一个线程去连接服务端Socket，至于为什么用线程在前面已经做了介绍。为了确定能够连接成功，这里采用了超时重连的策略，每次连接失败后都会重新建立尝试建立连接。当然为了降低重试机制的开销，我们加入了休眠机制，即每次重试的时间间隔为1000毫秒。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 Socket socket = null;
 while (socket == null) {
     try {
@@ -1692,7 +1755,7 @@ while (socket == null) {
 }
 #+END_SRC 
 - 服务端连接成功以后，就可以和服务端进行通信了。下面的代码在线程中通过while循环不断地去读取服务端发送过来的消息，同时当Activity退出时，就退出循环并终止线程。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 try {
     // 接收服务器端的消息
     BufferedReader br = new BufferedReader(new InputStreamReader(
@@ -1715,7 +1778,7 @@ try {
 }
 #+END_SRC 
 - 同时，当Activity退出时，还要关闭当前的Socket，如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 @Override
 protected void onDestroy() {
     if (mClientSocket != null) {
@@ -1730,7 +1793,7 @@ protected void onDestroy() {
 }
 #+END_SRC 
 - 接着是发送消息的过程，这个就很简单了，这里不再详细说明。客户端的完整代码如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class TCPClientActivity extends Activity implements OnClickListener {
     private static final int MESSAGE_RECEIVE_NEW_MSG = 1;
     private static final int MESSAGE_SOCKET_CONNECTED = 2;
@@ -1852,20 +1915,20 @@ public class TCPClientActivity extends Activity implements OnClickListener {
 - 上述过程就是典型的AIDL的使用流程。这本来也没什么问题，但是现在考虑一种情况：公司的项目越来越庞大了，现在有10个不同的业务模块都需要使用AIDL来进行进程间通信，那我们该怎么处理呢？也许你会说：“就按照AIDL的实现方式一个个来吧”，这是可以的，如果用这种方法，首先我们需要创建10个Service，这好像有点多啊！如果有100个地方需要用到AIDL呢，先创建100个Service？到这里，读者应该明白问题所在了。随着AIDL数量的增加，我们不能无限制地增加Service，Service是四大组件之一，本身就是一种系统资源。而且太多的Service会使得我们的应用看起来很重量级，因为正在运行的Service可以在应用详情页看到，当我们的应用详情显示有10个服务正在运行时，这看起来并不是什么好事。针对上述问题，我们需要减少Service的数量，将所有的AIDL放在同一个Service中去管理。
 - 在这种模式下，整个工作机制是这样的：每个业务模块创建自己的AIDL接口并实现此接口，这个时候不同业务模块之间是不能有耦合的，所有实现细节我们要单独开来，然后向服务端提供自己的唯一标识和其对应的Binder对象；对于服务端来说，只需要一个Service就可以了，服务端提供一个queryBinder接口，这个接口能够根据业务模块的特征来返回相应的Binder对象给它们，不同的业务模块拿到所需的Binder对象后就可以进行远程方法调用了。由此可见，Binder连接池的主要作用就是将每个业务模块的Binder 请求统一转发到远程Service中去执行，从而避免了重复创建Service的过程，它的工作原理如图2-10所示。
 - 通过上面的理论介绍，也许还有点不好理解，下面对Binder连接池的代码实现做一下说明。首先，为了说明问题，我们提供了两个AIDL接口（ISecurityCenter和ICompute）来模拟上面提到的多个业务模块都要使用AIDL的情况，其中ISecurityCenter接口提供加解密功能，声明如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 interface ISecurityCenter {
     String encrypt(String content);
     String decrypt(String password);
 }
 #+END_SRC 
 - 而ICompute接口提供计算加法的功能，声明如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 interface ICompute {
     int add(int a, int b);
 }
 #+END_SRC 
 - 虽然说上面两个接口的功能都比较简单，但是用于分析Binder连接池的工作原理已经足够了，读者可以写出更复杂的例子。接着看一下上面两个AIDL接口的实现，也比较简单，代码如下：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class SecurityCenterImpl extends ISecurityCenter.Stub {
     private static final char SECRET_CODE = '^';
     @Override
@@ -1883,7 +1946,7 @@ public class SecurityCenterImpl extends ISecurityCenter.Stub {
 }
 #+END_SRC 
 - 现在业务模块的AIDL接口定义和实现都已经完成了，注意这里并没有为每个模块的AIDL单独创建Service，接下来就是服务端和Binder连接池的工作了。首先，为Binder连接池创建AIDL接口IBinderPool.aidl，代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 interface IBinderPool {
     /**
      * @param binderCode, the unique token of specific Binder<br/>
@@ -1893,7 +1956,7 @@ interface IBinderPool {
 }
 #+END_SRC 
 - 接着，为Binder连接池创建远程Service并实现IBinderPool，下面是queryBinder的具体实现，可以看到请求转发的实现方法，当Binder连接池连接上远程服务时，会根据不同模块的标识即binderCode返回不同的Binder对象，通过这个Binder对象所执行的操作全部发生在远程服务端。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public static class BinderPoolImpl extends IBinderPool.Stub {
     public BinderPoolImpl() {
         super();
@@ -1918,7 +1981,7 @@ public static class BinderPoolImpl extends IBinderPool.Stub {
 }
 #+END_SRC 
 - 远程Service的实现就比较简单了，代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 public class BinderPoolService extends Service {
     private static final String TAG = "BinderPoolService";
     private Binder mBinderPool = new BinderPool.BinderPoolImpl();
@@ -1937,55 +2000,66 @@ public class BinderPoolService extends Service {
     }
 #+END_SRC 
 - 下面还剩下Binder连接池的具体实现，在它的内部首先它要去绑定远程服务，绑定成功后，客户端就可以通过它的queryBinder方法去获取各自对应的Binder，拿到所需的Binder以后，不同业务模块就可以进行各自的操作了，Binder连接池的代码如下所示。
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
+import java.util.concurrent.CountDownLatch;
+import android.content.ComponentName;
+import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.os.IBinder;
+import android.os.RemoteException;
+import android.util.Log;
+
 public class BinderPool {
     private static final String TAG = "BinderPool";
+    
+// 这个IBinder管理池负责管理三个业务接串口：-1， 0， 1    
     public static final int BINDER_NONE = -1;
     public static final int BINDER_COMPUTE = 0;
     public static final int BINDER_SECURITY_CENTER = 1;
+
     private Context mContext;
     private IBinderPool mBinderPool;
-    private static volatile BinderPool sInstance;
-    private CountDownLatch mConnectBinderPoolCountDownLatch;
+    private static volatile BinderPool sInstance; // <<<<<<<<<<
+// CountDownLatch是一种同步辅助，让我们多个线程执行任务时，需要等待线程执行完成后，才能执行下面的语句    
+    private CountDownLatch mConnectBinderPoolCountDownLatch; // 同步锁
+
     private BinderPool(Context context) {
         mContext = context.getApplicationContext();
-        connectBinderPoolService();
+        connectBinderPoolService(); // 如果远程服务没有创建，则自动创建
     }
-    public static BinderPool getInsance(Context context) {
+    public static BinderPool getInsance(Context context) { // 单例模式
         if (sInstance == null) {
             synchronized (BinderPool.class) {
-                if (sInstance == null) {
+                if (sInstance == null) 
                     sInstance = new BinderPool(context);
-                }
             }
         }
         return sInstance;
     }
-    private synchronized void connectBinderPoolService() {
-        //等待线程的数量
+    private synchronized void connectBinderPoolService() { // 同步锁方法：同时可以有多个客户端想要绑定服务端，需要上锁
         mConnectBinderPoolCountDownLatch = new CountDownLatch(1);
         Intent service = new Intent(mContext, BinderPoolService.class);
-        mContext.bindService(service, mBinderPoolConnection,Context.BIND_AUTO_CREATE);
+        mContext.bindService(service, mBinderPoolConnection,
+                             Context.BIND_AUTO_CREATE); // 自动创建
         try {
-            mConnectBinderPoolCountDownLatch.await();
+// 等待，应该是等待上面(如果远程不存在，则创建)绑定远程服务成功之后才再往下执行
+            mConnectBinderPoolCountDownLatch.await(); 
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
     }
     /**
      * query binder by binderCode from binder pool
-     *
-     * @param binderCode
-     *            the unique token of binder
+     * @param binderCode： the unique token of binder
      * @return binder who's token is binderCode<br>
      *         return null when not found or BinderPoolService died.
      */
-    public IBinder queryBinder(int binderCode) {
+    public IBinder queryBinder(int binderCode) { // 服务端提供给客户端的公用APIs业务接口
         IBinder binder = null;
         try {
-            if (mBinderPool != null) {
+            if (mBinderPool != null) 
                 binder = mBinderPool.queryBinder(binderCode);
-            }
         } catch (RemoteException e) {
             e.printStackTrace();
         }
@@ -1993,35 +2067,34 @@ public class BinderPool {
     }
     private ServiceConnection mBinderPoolConnection = new ServiceConnection() {
         @Override
-        public void onServiceDisconnected(ComponentName name) {
-            // ignored.
-        }
+        public void onServiceDisconnected(ComponentName name) {}
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             mBinderPool = IBinderPool.Stub.asInterface(service);
-            try {
+            try { // 注册服务端死亡通知监听回调
                 mBinderPool.asBinder().linkToDeath(mBinderPoolDeathRecipient, 0);
             } catch (RemoteException e) {
                 e.printStackTrace();
             }
-            mConnectBinderPoolCountDownLatch.countDown();
+            mConnectBinderPoolCountDownLatch.countDown(); // 更新这个辅助，有一个纯程的任务都完成了，可以 -1了
         }
     };
+    // 死亡监听回调实例
     private IBinder.DeathRecipient mBinderPoolDeathRecipient = new IBinder.DeathRecipient() {
         @Override
         public void binderDied() {
             Log.w(TAG, "binder died.");
-            mBinderPool.asBinder().unlinkToDeath(mBinderPoolDeathRecipient, 0);
+            mBinderPool.asBinder().unlinkToDeath(mBinderPoolDeathRecipient, 0); // 取消注册远程死亡通知监听回调吗 ？
             mBinderPool = null;
-            connectBinderPoolService();
+            connectBinderPoolService(); // 再次试图去绑定远程服务端
         }
     };
     public static class BinderPoolImpl extends IBinderPool.Stub {
         public BinderPoolImpl() {
             super();
         }
-        @Override
-        public IBinder queryBinder(int binderCode) throws RemoteException {
+// 根据模块接口码(binderCode)来获取相应的服务端IBinder实例的reference
+        @Override public IBinder queryBinder(int binderCode) throws RemoteException { 
             IBinder binder = null;
             switch (binderCode) {
             case BINDER_SECURITY_CENTER: {
@@ -2041,7 +2114,7 @@ public class BinderPool {
 }
 #+END_SRC 
 - Binder连接池的具体实现就分析完了，它的好处是显然易见的，针对上面的例子，我们只需要创建一个Service即可完成多个AIDL接口的工作，下面我们来验证一下效果。新创建一个Activity，在线程中执行如下操作：
-#+BEGIN_SRC java
+#+BEGIN_SRC csharp
 private void doWork() {
     BinderPool binderPool = BinderPool.getInsance(BinderPoolActivity.this);
     IBinder securityBinder = binderPool.queryBinder(BinderPool.BINDER_SECURITY_CENTER);
@@ -2099,642 +2172,4 @@ private void doWork() {
 | Socket    | 功能强大，可以通过网络传输字节流，         | 实现细节稍微有点繁琐，不支持直接的RPC             | 网络数据交换                        |
 |           | 支持一对多并发实时通信                     |                                                   |                                     |
 |-----------+--------------------------------------------+---------------------------------------------------+-------------------------------------|
-
-* Android进程保活招式大全
-- 目前市面上的应用，貌似除了微信和QQ都会比较担心被用户或者系统厂商杀死的问题。Android 进程拉活包括两个层面：（1）提供进程优先级，降低进程被杀死的概率。（2）在进程被杀死后，进行拉活。本文下面就从这两个方面做一下总结。
-** 提高进程优先级方面
-*** 进程优先级介绍
-- Android 系统将尽量长时间地保持应用进程，但为了新建进程或运行更重要的进程，需要清除旧进程来回收内存。为了确定保留或终止哪些进程，系统会根据进程中正在运行的组件以及这些组件的状态，将每个进程赋予“重要性”。必要时系统会首先消除重要性最低的进程以回收系统资源。进程的重要性从高到低可以划分为以下五级：
-- （1）前台进程(Foreground process)，即用户当前操作所必需的进程，通常数量不多。举例如下：
-  - //拥有用户正在交互的 Activity（已调用 onResume()）
-  - //拥有某个 Service，后者绑定到用户正在交互的 Activity
-  - //拥有正在“前台”运行的 Service（服务已调用startForeground()）
-  - //拥有正执行一个生命周期回调的 Service（onCreate()、onStart() 或 onDestroy()）
-  - //拥有正执行其 onReceive() 方法的BroadcastReceiver
-- （ 2 ）可见进程 (Visible process) ， 没有任何前台组件、但仍会影响用户在屏幕上所见内容的进程 。举例如下：
-  - //拥有不在前台、但仍对用户可见的 Activity（已调用 onPause()）
-  - //拥有绑定到可见（或前台）Activity 的 Service
-- （3）服务进程(Service process)，尽管服务进程与用户所见内容没有直接关联，但是它们通常在执行一些用户关心的操作（例如在后台播放音乐或从网络下载数据）。举例如下：
-  - //正在运行通过 startService() 方法启动的服务，且不属于上述两个更高类别进程的进程
-- （ 4 ）后台进程 (Background process) ， 后台进程对用户体验没有直接影响，系统可能随时终止它们 。通常会有很多后台进程在运行，因此它们会保存在 LRU 列表中，以确保包含用户最近查看的 Activity 所在进程最后一个被终止。举例如下：
-  - //对用户不可见的 Activity 的进程（已调用 Activity的onStop() 方法）
-- （ 5 ）空进程 (Empty process) ， 保留这种进程的的唯一目的是用作缓存，以缩短下次在其中运行组件所需的启动时间 。 为使总体系统资源在进程缓存和底层内核缓存之间保持平衡，系统往往会终止这些进程。举例如下：
-  - //不含任何活动应用组件的进程
-**** Low Memory Killer
-- Android的Low Memory Killer基于Linux的OOM机制，Low Memory Killer会根据进程的adj级别以及所占的内存，来决定是否杀掉该进程，adj越大，占用内存越多，进程越容易被杀掉。
-- 关于adj的分级，我们可以参考ProcessList.java，这里的常量定义了ADJ的分级。
-#+BEGIN_SRC java
-UNKNOWN_ADJ = 16
-//级别最低级的进程，通常是被缓存的进程，但是系统也不清楚缓存的内容
- 
-CACHED_APP_MAX_ADJ = 15
-//这是一个只托管不可见的活动的进程，因此可以在没有任何中断的情况下被杀死
- 
-CACHED_APP_MIN_ADJ = 9
-//缓存进程，没有英文解释
- 
-SERVICE_B_ADJ = 8
-//不活跃的服务，不像adj=5的服务那么活跃
-//在root以后，有的系统优化大师会把所有服务都调成adj=8来达到内存优化的目的
-//因为当所有人adj都比较高时，这样才能保证名正言顺的杀进程
- 
-PREVIOUS_APP_ADJ = 7
-//被切换的进程，一般是用户前一个使用的进程。两个应用来回切换，那么前一个应用一般adj设置为7
- 
-HOME_APP_ADJ = 6
-//与主应用程序有交互的进程
- 
-SERVICE_ADJ = 5
-//活跃的服务进程
- 
-HEAVY_WEIGHT_APP_ADJ = 4
-//高权重进程
- 
-BACKUP_APP_ADJ = 3
-//正在备份的进程
- 
-PERCEPTIBLE_APP_ADJ = 2
-//可感知进程,通常是前台Service进程
- 
-VISIBLE_APP_ADJ = 1
-//可见进程
- 
-FOREGROUND_APP_ADJ = 0
-//前台进程
-#+END_SRC 
-- 剩下的就是adj值为负数的进程，基本上都是系统集成，不在本文的讨论范围内。负数进程是不会被lmk杀掉的。
-- Android进程调度之adj算法
-  - http://gityuan.com/2016/08/07/android-adj/
-*** 如何提高 进程优先级
-**** 1   利用Activity提升权限
-- 本方案针对的是某些工具或应用会在检测到锁屏事件后会杀死后台进程，（已达到省电的目的问题）。因此本方案可以监控手机锁屏解锁事件，在屏幕锁屏时启动1个像素的 Activity，在用户解锁时将 Activity 销毁掉。通过该方案，可以使进程的优先级在屏幕锁屏时间提升为最高优先级。
-- 具体实现方案如下：
-  - 首先定义 Activity，并设置 Activity 的大小为1像素：
-  - 其次，从 AndroidManifest 中通过如下属性，避免 Activity 在 RecentTask 中的显示：
-  - 最后，控制 Activity 为透明：
-- Activity 启动与销毁时机的控制：
-**** 2  后台Service设置为前台Service
-- 通过 setForeground可以将后台Service设置为前台Service，使进程的优先级由4提升为2，使进程被杀死的概率大大降低。
-- 但是从Android3开始调用setForeground将后台Service设置为前台Service时，必须在系统的通知栏发送一条通知，也就是说前台 Service 与一条可见的通知是绑定在一起的。解决方案的话，可以增加一个内部Service，在Service和它内部的Service中，同时发送具有相同ID 的 Notification，然后再将这个内部Service结束掉。随着内部 Service 的结束，通知将会消失，但系统优先级依然保持为
-** 进程死后拉活方案
-*** 利用系统广播拉活
-- 在发生特定系统事件时，系统会发出响应的广播，通过在Manifest中静态注册对应的广播监听器，即可在发生响应事件时拉活。常用的用于拉活的广播事件包括：
-*** 利用系统Service机制拉活
-- 在service的onStartCommand方法里返回STATR_STICK，系统会重新创建这个服务并且调用onStartCommand()方法，当然了它不会重新传递Intent对象。
-- 但是这种方案有弊端：
-  - （1）Service 第一次被异常杀死后会在5秒内重启，第二次被杀死会在10秒内重启，第三次会在20秒内重启，一旦在短时间内Service被杀死达到5次，则系统不再拉起。
-  - （2）如果我们的进程被取得Root 权限的管理工具强制停止（forestop）后也无法重启。
-*** 覆写Service的onDestroy方法
-- 这种方案针对的是在设置里面，对正在运行的应用点击关闭，会走onDestroy方法，可以在这里可以把自己启动起来。
-- 但是如果被取得Root权限的管理工具强制停止（forestop）的话，压根不会走到onDestory这个方法。
-*** 利用Native守护进程拉活
-- 原理就是，在Android中所有进程和系统组件的生命周期受ActivityManagerService的统一管理。但是通过Linux 的fork机制创建的进程是Native进程，生命周期不受Android的管理。在Native守护进程中监控主进程的存活，当主进程挂掉后，在Native进程中立即对主进程进行拉活。
-- 该方案主要适用于 Android5.0 以下版本的手机，并且不受 强制停止的影响。
-- 对于Android5.0 以上手机，系统杀死进程的时候，不仅把主进程给杀死了，另外把主进程所属的进程组一并杀死，因此native进程可能会被杀死，但是这种情况不一定就拉不活。因为这其实是一个系统依次杀死进程的时间与拉活逻辑执行时间赛跑的问题，如果可以跑的比系统逻辑快，依然可以有效拉起。
-- 记得网上有人做过实验，该结论在某些 Android 5.0 以上机型是成立的。该方案中的几个重要问题补充如下：
-**** Native 进程中如何感知主进程死亡
-- （1）在 Native 进程中通过死循环或定时器，轮询判断主进程是否存活，当主进程不存活时进行拉活。但是缺点也很明显，就是轮询判断逻辑会非常耗电。
-- （2）具体判断主进程存活的方案是，在主进程中创建一个监控文件，并且在主进程中持有文件锁。在拉活进程启动后就去申请这个文件锁，然后就将会被堵塞，一旦拉活进程可以成功获取到锁，说明主进程挂掉，即可进行拉活。
-- 由于Java 层的文件锁与 Linux 层的文件锁是不同的，需要封装Linux层的文件锁供上层调用。
-**** Native 进程中如何拉活主进程
-- 在Native 进程进行拉活的时候，本质上是通过am命令进行拉活。（通过指定“–include-stopped-packages”参数拉活主进程被forestop的情况）
-*** 利用JobScheduler机制拉活
-- Android5.0以上提供了一个叫JobScheduler的接口，可以把它理解成是一个操作系统层面的全局定时器，而不是像Alarm一样是以APP为界限的。它会定时唤醒进程，使应用进行一些逻辑操作。该方案在 Android5.0 以上版本中不受 forcestop 影响，被强制停止的应用依然可以被拉活，在 Android5.0 以上版本拉活效果非常好。仅在小米手机可能会出现有时无法拉活的问题。
-*** 利用帐号同步机制拉活
-- Android系统里有一个帐号系统，系统会通过账户同步机制，定期进行帐号的同步，我们可以自己设定同步的事件间隔。当系统发起更新后进行进程的拉活。
-- 这个方案适用于除Android 7.0以外所有的 Android 版本，包括被 forestop 掉的进程也可以进行拉活。
-- 但是这个方案弊端太多了：
-  - （1）在7.0上系统对帐号同步做了一些变动。
-  - （2）从用户角度来说，用户会在系统设置里的账户列表上看到一个不认识的账户；而且某些手机比如note3需要手动设置账户。
-  - （3）从设备商角度看，同步的事件间隔是有限制的，最短1分钟，见源码，而且各种国产机怎么改的源码我们未知，是不是都能用仍然未知；
-  - （4）从Google的角度来看，Google提供这个机制是让用于同步账户信息，必须联网，不联网则无法同步。
-- 添加账号和设置同步周期的代码如下：
-- 该方案需要在 AndroidManifest 中定义账号授权与同步服务。
-*** 推送拉活
-- 根据终端不同，在小米手机（包括 MIUI）接入小米推送、华为手机接入华为推送，可以作为拉活方案的有效补充。
-*** 终极武器——客户粘性
-- 为什么QQ、微信这些应用推送服务不会被杀死呢，是因为手机厂商不让它死，如果一个人买了个手机然后收不到QQ消息，估计这款手机就卖不出去了。
-- 这就是客户粘性带来的效益，应用的客户粘性越高，就越有可能出现在手机厂商进程保活的白名单里。
-** 使用多进程的其他场景补充
-- 多进程还有一种非常有用的场景，就是多模块应用。比如我做的应用大而全，里面肯定会有很多模块，假如有地图模块、大图浏览、自定义WebView等等（这些都是吃内存大户），一个成熟的应用一定是多模块化的。首先多进程开发能为应用解决了OOM问题，因为Android对内存的限制是针对于进程的，所以，当我们需要加载大图之类的操作，可以在新的进程中去执行，避免主进程OOM。而且假如图片浏览进程打开了一个过大的图片，java heap 申请内存失败，该进程崩溃并不影响我主进程的使用。
-- 举个例子，现在要做一款音乐播放器，现在有以下几种方案：
-  - A. 在Activity中直接播放音乐。
-  - B. 启动后台Service，播放音乐。
-  - C. 启动前台Service，播放音乐。
-  - D. 在新的进程中，启动后台Service，播放音乐。
-  - E. 在新的进程中，启动前台Service，播放音乐。
-- E也是使用了多进程，并且在新进程中，使用了前台service.这个进程的值是2，
-  像C方案，非常小，非常稳定，而且我们还可以在系统进入后台后，手动杀掉
-  主进程，使整个应用的内存消耗降到最低。内存低，优先级又高，E获得了今
-  天的“最稳定方案奖”。
-* 多进程应用的使用场景
-- 可以让Android应用中的不同组件运行在不同的进程。有时这种做法是必要的，可以改进应用性能。但你必须意识到，官方网站上并没有太多关于Android多进程应用的文档，而且多进程应用也不容易理解。我们看看何时它会很有用，有何挑战以及如何解决。
-- 缺省时所有Android应用组件都运行在相同的Linux进程中。但也可以让不同组件运行在不同的进程。许多场景下多进程很有用。我们来看看。
-  - Android会不时杀死进程回收内存，以提供给更重要的进程。Android使用重要性等级来决定该杀死和保留哪个进程。占用内存高的后台进程更可能被Android杀死。如果你将后台组件(service, content provider)和前台组件(activity)放在同一个进程，该进程会使用更多的内存。当应用进入后台，它更可能被杀死。Android杀死进程时后杀死其中所有的组件。为了将后台组件跟UI的生命周期解耦，最好将其独立到一个独立的进程。
-  - 比如，如果应用需要在客户端和服务器端之间同步数据时，它可以在独立进程中的service中进行同步。这可以让后台进程更少重启，让其独立于UI进程的生命周期。另外，UI进程中的崩溃和异常对后台进程没有任何影响。反之亦然。
-  - 使用多进程的另一个原因是多个特性完全不同且独立。比如，如果应用支持
-    Email, Calendar, Contacts, Notes以及Tasks，其中每个特性可以在独立进
-    程中运行以保持各自的生命周期独立。
-* 如何运行多进程
-- <activity>, <service>, <receiver>以及<provider>都支持<android:process>属性，该属性可以指定组件运行的进程。多个组件也可以共享同一个进程，指定多少进程就能启动多少进程。
-** 挑战
-- 当Android应用使用多进程时，需要处理进程间的数据一致性。甚至你的代码结构良好，在运行时也不太容易知道哪段代码在哪个进程运行。
-** 共享数据
-- 尽管可以在多个独立进程中运行不同独立逻辑，某些时候它们仍然需要共享数据。如果你使用文件，数据库或者shared preferences，你可能遇到跨进程数据不一致问题。如果使用文件，你需要监听其他进程对文件进行的修改。如果从多个进程访问数据库，你可能会遇到非常难以调试的数据库冲突或死锁问题。如果使用shared preferences，必须使用多进程模式打开它，并且使用OnSharedPreferenceChangeListener监听其他进程导致的变化。
-** 单例
-- 单例是在Android应用中跨组件共享状态信息和数据的简单办法。可以使用synchronized关键字保证单例的方法是线程安全的。但如果在多进程应用中使用单例，可能生成的单例对象数量跟进程数量一样多。因为进程并不共享地址空间，所以一个进程中的单例对象对其他进程并不可见。如果使用shared preferences，数据库或文件中的数据初始化单例，要让(不同进程中的)每个单例对象保持一致的数据非常困难，而且很可能它们在运行时有不同的数据状态。另外，synchronized对这种情况不起作用。看看代码中单例的通常用法。
-- 假设我们有一个单例类，不妨称之为SubscriptionManager，它会跟踪用户订阅。在这个类中更新订阅内容。同时你将数据保存到文件以供离线访问。如果数据文件存在的话，由这些文件初始化单例。有两个进程：主进程和后台进程。在一个工具类中检查用户是否订阅了某个内容，该类会被主进程和后台进程调用。用户调用SubscriptionManager.getInstance(context).updateSubscription(feature, subscription);从主进程订阅。这个调用更新了订阅内容，发送到后台并且更新了文件。
-- 在这种情况下，后台进程中的SubscriptionManager并不知道主进程中发生的这次订阅，除非你在数据文件中设置了FileObserver，监听数据变化更进行相应更新。或者，你也可以使用广播机制来通知这次订阅。所以说，使用这些方式在进程间共享数据非常复杂，并不是最佳方案。
-** 解决办法
-- Android通过Binder接口提供进程间通信(IPC)。Content providers和Bound services使用binder接口来跨进程通信。所以本方案使用这种方式来维护多进程间数据和状态的一致性。
-*** Content Provider
-- ContentProvider用于管理对结构化数据的访问。它们封装数据并且提供数据安全机制。ContentProvider是在当前进程的数据跟其他进程的代码之间建立联系的标准接口。(Content providers are the standard interface that connects data in one process with code running in another process)
-- 尽管ContentProvider本是用于应用间共享数据，它也可以用于在多进程之间共享数据。Android保证跨进程时ContentProvider的单一性。ContentResolver提供易用的接口，所以应用代码不必担心IPC细节。
-- 注意：如果不想在应用外共享数据， 不要 在manifest中对外暴露ContentProvider(android:export="false")
-- 尽管ContentProvider和ContentResolver的”CURD” API主要被设计为共享SQL数据库中的数据，也可以扩展更通用的call(android.net.Uri, java.lang.String, java.lang.String, android.os.Bundle) API以实现应用特定的目的。
-- 比如：在上述例子的SubscriptionManager，你可以提供如下API来检查和更新订阅：
-#+BEGIN_SRC csharp
-ContentResolver resolver = getContentResolver(); 
-Bundle result = resolver.call(“SubcriptionCheck”, arg, extras);
-#+END_SRC 
-*** Bound Service
-- Bound service是客户端-服务器接口中的服务器端。Bound service允许组件(比如activity)绑定到service，发送请求，接收响应，甚至执行IPC
-- 有两种方式实现IPC：Messengers和AIDL。Messenger方式更简单一些。两种方式中Android框架都做好了IPC底层工作(marshalling, unmarshalling, RPC)，IPC对调用方是透明的。跟service通信的步骤如下：
-- bindService
-- 连接到service时收到回调
-- 使用binder接口发送请求，或调用service API
-- 从service接收响应
-- Service
-- 可以使用intent在另一个进程中启动service，或者从代码中的任何地方发送广播，并且在另外的进程中接收该广播并启动一个service来处理它。
-- 比如你有一个测量系统用于捕获应用中的某些事件，可以将每次测量发送到service，让service将其写入数据库或发送到后台，而不是让代码中到处都是数据库或网络操作。
-- Application类的坑
-- 你可以实现Application的子类，并且在AndroidManifest.xml的<application>标签的<android:name>属性中指定这个类的全名。当应用进程启动时，你实现的Application子类会最先初始化。
-- 要注意的是，应用中启动的每一个进程都会执行上述初始化。不幸的是，并不能为不同的进程指定不同的Application类。
-- 如果你使用Application类，很可能你会在它的onCreate()方法中做一些初始化工作。 请确保这些初始化工作对进程是恰当且必要的 也在Application.onCreate()中使用下面的代码确定进程上下文：
-#+BEGIN_SRC csharp
-int pid = android.os.Process.myPid(); 
-ActivityManager manager = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE); 
-for (ActivityManager.RunningAppProcessInfo processInfo : manager.getRunningAppProcesses()) { 
-    if (processInfo.pid == pid) { 
-        String currentProcName = processInfo.processName; 
-        if (!TextUtils.isEmpty(currentProcName) && currentProcName.equals(":background")) {
-           //Rest of the initializations are not needed for the background
-           //process
-           return; 
-        } 
-    } 
-}
-/* Initializations for the UI process */
-#+END_SRC 
-- 通过这种方式你可以降低内存占用，避免某些大块内存分配，甚至有可能加快
-  应用启动速度。这里提到初始化包括：加载专有字体，初始化Google Maps，
-  及以初始化第三方SDK。通常只需要在主进程中做这些初始化。
-* Serializable 和 Parcelable 两种序列化
-- 什么时候用的到序列化？
-  - 1、永久性保存对象，保存对象的字节序列到本地文件中
-  - 2、通过序列化对象在网络中传递对象
-  - 3、通过序列化在进程之间传递对象
-- 在安卓中，可以用作在Activity中传递复杂类型，主要是将自己的类转换为基础的字节数组，Android中Activity传递主要靠Intent这个类，Intent类内部传递数据的效率仍然需要拷贝，如果数据太大，其实可以考虑用单例模式，定义一个全局的静态类，活用设计模式。
-- Parcelable
-#+BEGIN_SRC csharp
-putExtra(String name, Parcelable value)   // 传递一个parcelable对象 
-putExtra(String name, Parcelable[] value) //  传递一个Parcelable数组
-putExtra(String name, Bundle value)       // 传递一个Bundle对象
-putParcelableArrayListExtra(String name, ArrayList<? extends Parcelable> value) // 传递一个实现Parcelable接口的对象数组
-putStringArrayListExtra(String name, ArrayList<String> value)   // 传递一个字符串数组
-putIntegerArrayListExtra(String name, ArrayList<Integer> value) // 传递一个整形数组。
-#+END_SRC 
-- Integer这些装箱类型，Intent还实现了 putExtra(String name, int[] value) 这样的基础类型数组，同时Parcelable效率比标准的Java序列化更高，同时还被用作在AIDL中交换数据，所以掌握Parcelable这样的显示序列化技术，可以大幅提高数据交换性能。
-- Serializable
-- 　 传统的Java，串行化技术，实现Serializable接口，原理和Parceble差不多，均将自己的类转换为基本的类型比如说字节数组，在Android中不是很实用，比Parcelable效率低，在Intent中使用Intent putExtra(String name, Serializable value) 这个方法即可。
-
-* Android Service aidl分析
-- https://www.jianshu.com/p/90889446fb4d
-** IRemoteBookBinder.aidl 文件来做分析
-#+BEGIN_SRC csharp
-interface IRemoteBookBinder {
-    void addBookIn(in BookBean bookBean);
-    void addBookOut(out BookBean bookBean);
-    void addBookInOut(inout BookBean bookBean);
-    List<BookBean> getBookList();
-}
-#+END_SRC 
-[[~/myandr/pic/ipc_20220505_103934.png]]
-** 内部类 Default
-#+BEGIN_SRC csharp
-public static class Default implements com.renj.service.aidl.IRemoteBookBinder {
-    @Override
-        public void addBookIn(com.renj.service.bean.BookBean bookBean) throws android.os.RemoteException {}
-    @Override
-        public void addBookOut(com.renj.service.bean.BookBean bookBean) throws android.os.RemoteException {}
-    @Override
-        public void addBookInOut(com.renj.service.bean.BookBean bookBean) throws android.os.RemoteException {}
-    @Override
-        public java.util.List<com.renj.service.bean.BookBean> getBookList() throws android.os.RemoteException {
-        return null;
-    }
-    @Override
-        public android.os.IBinder asBinder() {
-        return null;
-    }
-}
-#+END_SRC 
-- 该类实现了 IRemoteBookBinder 类，作为IRemoteBookBinder接口的默认实现，在实际中并无太多实际意义。
-** IRemoteBookBinder.aidl 文件中声明的方法
-   #+BEGIN_SRC csharp
-public void addBookIn(com.renj.service.bean.BookBean bookBean) throws android.os.RemoteException;
-public void addBookOut(com.renj.service.bean.BookBean bookBean) throws android.os.RemoteException;
-public void addBookInOut(com.renj.service.bean.BookBean bookBean) throws android.os.RemoteException;
-public java.util.List<com.renj.service.bean.BookBean> getBookList() throws android.os.RemoteException;
-   #+END_SRC
-- 这几个方法都是在 IRemoteBookBinder.aidl 进行了声明的，直接作为接口的声明方法，具体有子类实现。
-** 内部类 Stub
-   #+BEGIN_SRC csharp
-public static abstract class Stub extends android.os.Binder implements com.renj.service.aidl.IRemoteBookBinder {
-    private static final java.lang.String DESCRIPTOR = "com.renj.service.aidl.IRemoteBookBinder";
-
-    public Stub() {
-        this.attachInterface(this, DESCRIPTOR);
-    }
-    public static com.renj.service.aidl.IRemoteBookBinder asInterface(android.os.IBinder obj) {
-        if ((obj == null)) 
-            return null;
-        android.os.IInterface iin = obj.queryLocalInterface(DESCRIPTOR);
-        if (((iin != null) && (iin instanceof com.renj.service.aidl.IRemoteBookBinder))) 
-            return ((com.renj.service.aidl.IRemoteBookBinder) iin);
-        return new com.renj.service.aidl.IRemoteBookBinder.Stub.Proxy(obj);
-    }
-    @Override
-        public android.os.IBinder asBinder() {
-        return this;
-    }
-    @Override
-        public boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) throws android.os.RemoteException {
-        java.lang.String descriptor = DESCRIPTOR;
-        switch (code) {
-        case TRANSACTION_addBookIn: {
-            data.enforceInterface(descriptor);
-            com.renj.service.bean.BookBean _arg0;
-            if ((0 != data.readInt())) {
-                _arg0 = com.renj.service.bean.BookBean.CREATOR.createFromParcel(data);
-            } else {
-                _arg0 = null;
-            }
-            this.addBookIn(_arg0);
-            reply.writeNoException();
-            return true;
-        }
-        case TRANSACTION_addBookOut: {
-            data.enforceInterface(descriptor);
-            com.renj.service.bean.BookBean _arg0;
-            _arg0 = new com.renj.service.bean.BookBean();
-            this.addBookOut(_arg0);
-            reply.writeNoException();
-            if ((_arg0 != null)) {
-                reply.writeInt(1);
-                _arg0.writeToParcel(reply, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE);
-            } else {
-                reply.writeInt(0);
-            }
-            return true;
-        }
-        case TRANSACTION_addBookInOut: {
-            // ...
-            return true;
-        }
-        case TRANSACTION_getBookList: {
-            data.enforceInterface(descriptor);
-            java.util.List<com.renj.service.bean.BookBean> _result = this.getBookList();
-            reply.writeNoException();
-            reply.writeTypedList(_result);
-            return true;
-        }
-        default: {
-            return super.onTransact(code, data, reply, flags);
-        }
-        }
-    }
-    private static class Proxy implements com.renj.service.aidl.IRemoteBookBinder {
-        // ...
-    }
-    static final int TRANSACTION_addBookIn = (android.os.IBinder.FIRST_CALL_TRANSACTION + 0);
-    static final int TRANSACTION_addBookOut = (android.os.IBinder.FIRST_CALL_TRANSACTION + 1);
-    static final int TRANSACTION_addBookInOut = (android.os.IBinder.FIRST_CALL_TRANSACTION + 2);
-    static final int TRANSACTION_getBookList = (android.os.IBinder.FIRST_CALL_TRANSACTION + 3);
-    public static boolean setDefaultImpl(com.renj.service.aidl.IRemoteBookBinder impl) {
-        if (Stub.Proxy.sDefaultImpl == null && impl != null) {
-            Stub.Proxy.sDefaultImpl = impl;
-            return true;
-        }
-        return false;
-    }
-    public static com.renj.service.aidl.IRemoteBookBinder getDefaultImpl() {
-        return Stub.Proxy.sDefaultImpl;
-    }
-}
-   #+END_SRC 
-- 以上代码，去掉了 Proxy 内部类的实现，在后面再说，然后就是去掉了 TRANSACTION_addBookInOut 部分的实现，因为这部分就是TRANSACTION_addBookIn和TRANSACTION_addBookOut的结合。
-- Stub 类继承了 android.os.Binder 并且实现了 IRemoteBookBinder 接口，她就是真正的Binder类，是在Service中的onBind()方法返回给客户端的Binder类(一般我们在onBind()方法中返回的都是 .Stub 的子类，如 RemoteBookBinderImpl extends IRemoteBookBinder.Stub)，也是客户端 ServiceConnection 回调方法 onServiceConnected() 中的参数 service
-#+BEGIN_SRC csharp
-private ServiceConnection bindConnection = new ServiceConnection() {
-    @Override
-    public void onServiceConnected(ComponentName name, IBinder service) {
-        iRemoteBookBinder = IRemoteBookBinder.Stub.asInterface(service);
-    }
-    @Override
-    public void onServiceDisconnected(ComponentName name) {
-    }
-};
-#+END_SRC 
-*** DESCRIPTOR
-- Binder 的唯一标识，一般使用当前类的全路径名表示，如上面的 "com.renj.service.aidl.IRemoteBookBinder"。
-*** 构造方法
-- 将本身对象(this)和唯一标识(DESCRIPTOR)通过 attachInterface() 传递给父类 Binder 类，这里需要注意，后面会有地方用到。
-#+BEGIN_SRC csharp
-public void attachInterface(@Nullable IInterface owner, @Nullable String descriptor) {
-    mOwner = owner;
-    mDescriptor = descriptor;
-}
-#+END_SRC 
-*** asInterface(android.os.IBinder obj)
-- 将服务端的Binder对象转换成客户端所需要的AIDL接口对象， ServiceConnection 回调方法 onServiceConnected() 中就是使用这个方法对 service 参数进行转换。这个方法内部的转换是区分进程的，如果客户端和服务端在同一个进程，那么返回的就是服务端的Stub对象本身，否则返回的就是系统封装后的 IRemoteBookBinder.Stub.Proxy 类。注意创建 IRemoteBookBinder.Stub.Proxy(obj) 对象时，参数 obj ，就是 onBind() 方法返回的Binder对象，也就是回调 onServiceConnected() 方法中的参数 service。
-- 在asInterface()方法内部是通过 android.os.IInterface iin = obj.queryLocalInterface(DESCRIPTOR); 方法判断客户端和服务端是否在同一进程的，queryLocalInterface() 方法在 Binder 中的实现：
-#+BEGIN_SRC csharp
-public @Nullable IInterface queryLocalInterface(@NonNull String descriptor) {
-    if (mDescriptor != null && mDescriptor.equals(descriptor)) 
-        return mOwner;
-    return null;
-}
-#+END_SRC 
-- 上述方法中的 mDescriptor 和 mOwner 就是通过 Stub 的构造方法设置的值。
-*** asBinder() 方法
-- 该方法返回当前的类对象，也就是Binder
-*** 方法id
-    #+BEGIN_SRC csharp
-static final int TRANSACTION_addBookIn = (android.os.IBinder.FIRST_CALL_TRANSACTION + 0);
-static final int TRANSACTION_addBookOut = (android.os.IBinder.FIRST_CALL_TRANSACTION + 1);
-static final int TRANSACTION_addBookInOut = (android.os.IBinder.FIRST_CALL_TRANSACTION + 2);
-static final int TRANSACTION_getBookList = (android.os.IBinder.FIRST_CALL_TRANSACTION + 3);
-    #+END_SRC
-- 这里就是aidl接口中的方法，为他们都声明一个id，用于在 onTransact() 方法中确定调用的是哪个方法。
-*** onTransact() 方法
-- 该方法运行在服务端的Binder线程池中，当客户端跨进程调用服务器方法时，远程请求会通过系统的封装(Proxy)来调用该方法，然后由该方法根据方法id调用对应的方法，该方法的声明为：
-#+BEGIN_SRC csharp
-boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags)
-#+END_SRC 
-#+BEGIN_SRC text
-- code：调用的方法id
-- data：传递进来的数据
-- reply：需要返回的数据
-- flags：额外标记，正常传0(1：单向RPC，无返回值)
-- 返回值：Boolean类型，true表示调用成功，false表示调用失败，可以在这个方法内做权限控制。
-#+END_SRC 
-*** 关键字in, out, inout
-- 我们在《Android Service aidl使用及进阶》说过，非基本数据类型的数据的走向标记in、out、inout的作用，这里再次进行说明一下，因为以下内容需要明白他们的作用才能更好的理解。
-  - in：服务端只能接收输入，不能输出给客户端。当客户端传递BookBean给服务端时，服务端能获取到BookBean对象信息，但是服务端进行修改之后，客户端不会发生改变，还是原来的。
-  - out：服务端不能接收输入，只能输出给客户端。当客户端传递BookBean给服务端时，服务端获取到的BookBean对象之后，并不能获取BookBean里面的字段信息(都是默认值)，但是服务端修改了这些值后，客户端的信息会发生改变，变成服务端修改之后的值。
-  - inout：服务端既能接收输入，也能输出给客户端。当客户端传递BookBean给服务端时，服务端能获取到BookBean对象信息；服务端修改了这些值后，客户端的信息也会发生改变，变成服务端修改之后的值。
-- 下面对onTransact()内对方法 addBookIn() 和 addBookOut() 方法具体说明：
-**** TRANSACTION_addBookIn
-- 表示调用的是 addBookIn() 方法，该方法在 IRemoteBookBinder.aidl 中的定义是 void addBookIn(in BookBean bookBean);，注意关键字 in；
-#+BEGIN_SRC csharp
-  data.enforceInterface(descriptor);    // 服务端标识，这个数据该由谁处理
-  com.renj.service.bean.BookBean _arg0; // 声明一个新的对象
-  if ((0 != data.readInt())) { // 判断data是否有数据需要读取
-      // 根据传递进来的data创建一个新的对象并赋值给 _arg0
-      _arg0 = com.renj.service.bean.BookBean.CREATOR.createFromParcel(data);
-  } else {
-      _arg0 = null;
-  }
-  this.addBookIn(_arg0);    // 调用我们定义方法，具体由子类实现，将新的对象 _arg0 作为参数传递给方法
-  reply.writeNoException(); // 没有发生异常
-  return true; // 返回成功
-#+END_SRC 
-- 当确定调用的 addBookIn() 方法，先将 Binder 的唯一标识对数据标记，然后服务器创建一个新的对象，因为使用了 in 关键字，所以需要读取老的数据，然后调用抽象 addBookIn() 方法（由子类实现），并且将新建的对象作为参数传递，并没有将新的数据写入到 reply 中，因为没有 out 关键字。
-**** TRANSACTION_addBookOut
-- 表示调用的是 addBookOut() 方法，该方法在 IRemoteBookBinder.aidl 中的定义是 void addBookOut(out BookBean bookBean);，注意关键字 out；
-#+BEGIN_SRC csharp
-  data.enforceInterface(descriptor); // 服务端标识，这个数据该由谁处理
-  com.renj.service.bean.BookBean _arg0; // 声明一个新的对象
-  _arg0 = new com.renj.service.bean.BookBean(); // 因为只有out关键字，所以不会传递老的对象中的数据
-  this.addBookOut(_arg0); // 调用我们定义的方法，传递新的对象，所有字段都是默认值
-  reply.writeNoException(); // 没有发生异常
-  if ((_arg0 != null)) {
-      reply.writeInt(1); // 当数据发送变化后，修改标记
-      // 把变化后的数据写入 reply 中
-      _arg0.writeToParcel(reply, android.os.Parcelable.PARCELABLE_WRITE_RETURN_VALUE); 
-  } else {
-      reply.writeInt(0);
-  }
-  return true; // 返回成功
-#+END_SRC 
-- 当确定调用的 addBookOut() 方法，先将 Binder 的唯一标识对数据标记，然后服务器创建一个新的对象，因为使用了 out 关键字，所以只会创建一个包含默认值的东西，而不会读取老的数据，然后调用抽象 addBookOut() 方法（由子类实现），并且将新建的对象作为参数传递，方法调用完成后，就修改的数据写入 reply 中。
-- 对于IRemoteBookBinder.aidl 中的定义的 addBookInOut() 方法，也差不多。只是有 in 和 out 两个关键字，所以既能传入原始数据，也会返回修改后的数据。
-**** TRANSACTION_getBookList
-- 表示调用的是 getBookList() 方法，该方法在 IRemoteBookBinder.aidl 中的定义是 List<BookBean> getBookList();
-#+BEGIN_SRC csharp
-  data.enforceInterface(descriptor);
-  java.util.List<com.renj.service.bean.BookBean> _result = this.getBookList();
-  reply.writeNoException();
-  reply.writeTypedList(_result);
-#+END_SRC 
-- 这个方法直接调用抽象 getBookList() 方法（由子类实现），然后将结果写入到 reply 中返回。
-- setDefaultImpl() 和 getDefaultImpl() 方法
-- setDefaultImpl() 方法是设置默认aidl接口实现，当远程调用 transact() 方法（实际最终调用的就是内部类 Stub 的 onTransact() 方法）中的对应方法，返回结果为false，并且通过 getDefaultImpl() 方法获取到的默认实现不为 null 就会调用默认实现的对应方法。
-** 内部类 Stub 的内部类 Proxy
-   #+BEGIN_SRC csharp
-private static class Proxy implements com.renj.service.aidl.IRemoteBookBinder {
-    private android.os.IBinder mRemote;
-    Proxy(android.os.IBinder remote) {
-        mRemote = remote;
-    }
-    @Override
-        public android.os.IBinder asBinder() {
-        return mRemote;
-    }
-    public java.lang.String getInterfaceDescriptor() {
-        return DESCRIPTOR;
-    }
-    @Override
-        public void addBookInOut(com.renj.service.bean.BookBean bookBean) throws android.os.RemoteException {
-        android.os.Parcel _data = android.os.Parcel.obtain();
-        android.os.Parcel _reply = android.os.Parcel.obtain();
-        try {
-            _data.writeInterfaceToken(DESCRIPTOR);
-            if ((bookBean != null)) {
-                _data.writeInt(1);
-                bookBean.writeToParcel(_data, 0);
-            } else {
-                _data.writeInt(0);
-            }
-            boolean _status = mRemote.transact(Stub.TRANSACTION_addBookInOut, _data, _reply, 0);
-            if (!_status && getDefaultImpl() != null) {
-                getDefaultImpl().addBookInOut(bookBean);
-                return;
-            }
-            _reply.readException();
-            if ((0 != _reply.readInt())) {
-                bookBean.readFromParcel(_reply);
-            }
-        } finally {
-            _reply.recycle();
-            _data.recycle();
-        }
-    }
-    @Override
-        public java.util.List<com.renj.service.bean.BookBean> getBookList() throws android.os.RemoteException {
-        android.os.Parcel _data = android.os.Parcel.obtain();
-        android.os.Parcel _reply = android.os.Parcel.obtain();
-        java.util.List<com.renj.service.bean.BookBean> _result;
-        try {
-            _data.writeInterfaceToken(DESCRIPTOR);
-            boolean _status = mRemote.transact(Stub.TRANSACTION_getBookList, _data, _reply, 0);
-            if (!_status && getDefaultImpl() != null) {
-                return getDefaultImpl().getBookList();
-            }
-            _reply.readException();
-            _result = _reply.createTypedArrayList(com.renj.service.bean.BookBean.CREATOR);
-        } finally {
-            _reply.recycle();
-            _data.recycle();
-        }
-        return _result;
-    }
-    public static com.renj.service.aidl.IRemoteBookBinder sDefaultImpl;
-}
-   #+END_SRC 
-首先使用 Proxy 的情况是因为我们在 Stub 的 asInterface() 方法中判断了客户端和服务端是不是在同一个进程，不是在同一个进程时，才返回 Proxy 对象。
-*** 构造方法
-- 在解析 asInterface() 方法时，就说明了Proxy 的构造方法需要一个参数 obj ，就是 onBind() 方法返回的Binder对象，也就是回调 onServiceConnected() 方法中的参数 service。
-***** asBinder() 和 getInterfaceDescriptor()
-      #+BEGIN_SRC text
-asBinder()方法返回通过构造方法传递进来的 Binder 对象
-getInterfaceDescriptor()方法返回 Stub 的 DESCRIPTOR 字段，Binder 的唯一标识。
-      #+END_SRC 
-*** 方法调用
-- 就是当我们在客户端通过 service 调用方法时，实际上调用的就是 Proxy 中的方法，理由通过前面的分析我们已经知道了（对asInterface(android.os.IBinder obj) 方法分析）。
-- 对于 Stub 类，我们分析了 addBookIn() 和 addBookOut() 方法，那么在 Proxy 类中，我们分析一下 addBookInOut() 方法。
-**** void addBookInOut(com.renj.service.bean.BookBean bookBean) 方法
-     #+BEGIN_SRC csharp
-  android.os.Parcel _data = android.os.Parcel.obtain();  // 创建参数对象
-  android.os.Parcel _reply = android.os.Parcel.obtain(); // 创建返回值对象
-  try {
-      _data.writeInterfaceToken(DESCRIPTOR); // 唯一标识
-      if ((bookBean != null)) { // 参数不为null时，将客户端传递的参数数据写到新建对象中（因为关键字为 inout）
-          _data.writeInt(1);
-          bookBean.writeToParcel(_data, 0);
-      } else {
-          _data.writeInt(0);
-      }
-      // 通过 mRemote 调用 transact() 方法，传递调用方法id（Stub中定义的方法id），输入输出对象和标志位，
-      // 这些参数就时 Stub#onTransact()方法所接收的参数
-      boolean _status = mRemote.transact(Stub.TRANSACTION_addBookInOut, _data, _reply, 0);
-      // Stub#onTransact()方法返回失败，并且设置了默认aidl接口实现，就调用默认的实现
-      if (!_status && getDefaultImpl() != null) {
-          getDefaultImpl().addBookInOut(bookBean);
-          return;
-      }
-      _reply.readException();
-      // 因为有是 inout 关键字，所以需要将修改后的结果重写更新到客户端的对象中
-      if ((0 != _reply.readInt())) {
-          bookBean.readFromParcel(_reply);
-      }
-  } finally {
-      _reply.recycle();
-      _data.recycle();
-  }
-     #+END_SRC 
-- 上面的代码中，已经对代码做了注释了，我们发现在 Proxy 中的方法内，其实就是对参数和结果数据的处理，并没有其他的逻辑，然后直接调用了 mRemote 的 transact() 方法，mRemote 就是 Binder，这个我们是知道的，那看看 Binder#transact() 方法做了什么操作了
-#+BEGIN_SRC csharp
-  public final boolean transact(int code, @NonNull Parcel data, @Nullable Parcel reply,
-          int flags) throws RemoteException {
-      if (false) Log.v("Binder", "Transact: " + code + " to " + this);
-      if (data != null) {
-          data.setDataPosition(0);
-      }
-      // 调用了 onTransact 方法
-      boolean r = onTransact(code, data, reply, flags);
-      if (reply != null) {
-          reply.setDataPosition(0);
-      }
-      return r;
-  }
-#+END_SRC 
-- 在 Binder#transact() 中调用了 onTransact() 方法，这个方法也就是我们刚刚在分析 Stub 类时分析的方法。到了这里，我们就已经知道了客户端在跨进程调用服务端方法时的流程，以及 in、out和inout关键字作用的原理了。
-**** java.util.List<com.renj.service.bean.BookBean> getBookList() 方法
-     #+BEGIN_SRC csharp
-  android.os.Parcel _data = android.os.Parcel.obtain();
-  android.os.Parcel _reply = android.os.Parcel.obtain();
-  java.util.List<com.renj.service.bean.BookBean> _result;
-  try {
-      _data.writeInterfaceToken(DESCRIPTOR);
-      boolean _status = mRemote.transact(Stub.TRANSACTION_getBookList, _data, _reply, 0);
-      if (!_status && getDefaultImpl() != null) {
-          return getDefaultImpl().getBookList();
-      }
-      _reply.readException();
-      // 将返回 _reply 对象封装成客户端需要的类型
-      _result = _reply.createTypedArrayList(com.renj.service.bean.BookBean.CREATOR);
-  } finally {
-      _reply.recycle();
-      _data.recycle();
-  }
-  return _result;
-     #+END_SRC 
-- 和addBookInOut() 方法类似，封装参数，然后调用mRemote 的 transact() 方法，最后将结果 _reply 对象封装成客户端需要的类型返回。
-** 总结图
-[[~/myandr/pic/ipc_20220505_104700.png]]
-
-* 多进程应用的缺点
-** 静态成员和单例模式的完全失效
-- Android为每个应用分配一个独立的虚拟机，或者说为每一个进程分配一个独立的虚拟机，不同的虚拟机在内存分配上有不同的地址空间，这就导致在不同虚拟机中访问同一个类的对象会产生多份副本。
-** 线程同步机制完全失效
-- 因为都不是同一块内存空间，所以不管是锁对象还是锁全局类都无法保证线程同步，因为不同进程锁的不是同一个对象。
-** Application的onCreate()多次执行
-多进程被创建好了，应用运行时就会对进程进行初始化，如果一个application中有多个进程，在进行全局初始化时，多进程会被初始化多次。
-        解决方法:通过判断当前进程是不是 应用包名(默认进程名就是应用包名)，来决定需不需要进行初始化相关的操作。
-private String getCurrentProcessName() {
-     String currentProcName = "";
-     int pid = android.os.Process.myPid();
-     ActivityManager manager = (ActivityManager) this.getSystemService(Context.ACTIVITY_SERVICE);
-     for (ActivityManager.RunningAppProcessInfo processInfo : manager.getRunningAppProcesses()) {
-        if (processInfo.pid == pid) {
-            currentProcName = processInfo.processName;
-            break;
-        }
-      }
-      return currentProcName;
-}
-        如果子进程也需要一些初始化，则可根据进程名称来分别做对应的 初始化 即可，并且只初始化当前进程需要的业务，即按照进程按需初始化。
- 
-** 调试麻烦
-- 多进程开发，调试起来很麻烦，比如希望在子进程创建后的首行代码里 添加断点，这是做不到。 因为Android Studio添加调试器的时候，会让你选一个调试的进程，而这时这个子进程还没有启动起来， 一旦你启动起来后，首行代码就执行完毕了，就无法再添加调试了
-- 解决方法：
-  - 1可以在子进程启动后， 添加几秒的延迟 再来启动业务逻辑， 比如延迟5秒，而这5秒就是留给你去Android Studio中添加 断点的
-  - 2调试时关闭子进程，例如某些操作是在一个  Service时执行的，这时先把 service放到主进程中，等业务代码写完了，再放到子进程 进行 功能测试。
-** 不能内存共享
--  同一个进程的多个线程是共享该进程的所有资源，但多个进程间内存是不可见的，也就是说多个进程间内存是不共享的。    会引起一些问题，如：静态成员的失效。 
-** 文件共享问题。
-- 多进程情况下会出现两个进程在同一时刻访问同一个数据库文件的情况。这就可能造成资源的竞争访问，导致诸如数据库损坏数据丢失等。在多线程的情况下我们有锁机制控制资源的共享，但是在多进程中比较难，虽然有文件锁排队等机制，但是在Android里很难实现。解决办法就是多进程的时候不并发访问同一个文件，比如子进程涉及到操作数据库，就可以考虑调用主进程进行数据库的操作。
-** sharePreference不能在多进程中通用
-- 在主进程中往sharePreference存的值，在子进程不能立即可见。
-- 解决方法
-  - 1：使用SharedPreferences时，SharedPreferences 在MODE_PRIVATE MODE_PUBLIC 之外其实还可以设置多进程的Flag，即 MODE_MULTI_PROCESS。
-#+BEGIN_SRC java
-SharedPreferences myPrefs = context.getSharedPreferences(MY_FILE_NAME, Context.MODE_MULTI_PROCESS | Context.MODE_PRIVATE);
-#+END_SRC 
-    - 一旦我们设置了这个Flag，每次调用Context.getSharedPreferences 的时候系统会重新从SP文件中读入数据，因此我们在使用的时候每次读取和存入都要使用Context.getSharedPreferences 重新获取SP实例。即使是这样，由于SP本质上并不是多进程安全的，所以还是无法保证数据的同步，因此该方法我们并没有使用，我们也不推荐使用。
-  - 2: tray安卓多进程安全的sharePreferences - https://github.com/GCX-HCI/tray
-    - 如果SP不是多进程安全的，那么是否有多进程安全的，又有SP功能的第三方项目呢。答案是有的，Tray——一个多进程安全的SharedPreferences，我们可以在Github上找到它，如果是AndroidStudio,可以直接使用Gradle引入，可谓是十分方便，如下是使用的代码，十分简单，没有apply commit，看起来比SP还要简单。
-    - 但是最终我们并没有选择使用它，主要的原因是它需要minSdk 为15，而我们是支持sdk14的，所以只能果断放弃了。
-** 多进程的通信问题
-- 同一个进程的多个线程是共享该进程的所有资源，但多个进程间内存是不可见的，也就是说多个进程间内存是不共享的。    但通常我们的业务代码都是有关联，很少有 能开启多进程同时又不需要进程进程通信的 业务场景，因此这就需要多进程之间进行通信。
-- Android中提供了三种进程通信方法：
-  - 系统实现。
-  - AIDL（Android Interface Definition Language，Android接口定义语言）：大部分应用程序不应该使用AIDL去创建一个绑定服务，因为它需要多线程能力，并可能导致一个更复杂的实现。
-  - Messenger：利用Handler实现。（适用于多进程单线程，不需要考虑线程安全），其底层基于AIDL。
-** 多进程暖启动的恢复问题 
-- 在主进程的MainActivity退出后，子进程还在运行，这时用户又从手机桌面上点击应用图标启动了主进程，若业务功能中 主进程 与 子进程 有通信，那么此时 应该让 上次断开的主进程与子进程连接  再 重新连接上。  这里就需要额外的判断。
-** 内存共享：
-- 不同进程之间内存不能共享，最大的弊端是他们之间通信麻烦，不能将公用数据放在Application中，堆栈信息、文件操作也是独立的，如果他们之间传递的数据不大并且是可序列
-
+- https://www.cnblogs.com/dongweiq/p/5028970.html 它的这里面有示例链接，可以学习一下他的示例代码
