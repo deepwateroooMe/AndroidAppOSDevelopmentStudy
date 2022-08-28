@@ -1,0 +1,499 @@
+#+latex_class: cn-article
+#+title: Android ActivityService相关的原理
+#+author: deepwaterooo
+
+* ActivityManagerService源码分析
+- AMS是Android系统服务中很重要的一个，他负责四大组件的启动、切换、调度、生命周期的管理等等，接下来我们根据AMS的启动来分析AMS的源码
+** 1. SystemServer启动AMS
+- ActivityManagerService是在SystemServer.java中启动并注册的：
+#+BEGIN_SRC csharp
+private void startBootstrapServices() {
+
+    // 启动AMS，见小节2.1
+    mActivityManagerService = mSystemServiceManager.startService(
+        ActivityManagerService.Lifecycle.class).getService();
+
+    // 设置AMS
+    mActivityManagerService.setSystemServiceManager(mSystemServiceManager);
+
+    // 安装App安装器
+    mActivityManagerService.setInstaller(installer);
+\
+    // 电源管理已经开启，在AMS中初始化PM，见小节3
+    Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "InitPowerManagement");
+    mActivityManagerService.initPowerManagement();
+    Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+
+    // 设置应用实例，在系统进程开始的时候，见小节4
+    mActivityManagerService.setSystemProcess();
+}
+#+END_SRC 
+- 看源码可以看到，startBootstrapServices中启动并注册了很多其他的服务，比如：PowerManagerService，DisplayManagerService，LightsService，PackageManagerService，UserManagerService，SensorService(native)，这写服务彼此之间有依赖，所以都放在startBootstrapServices方法里面
+** 2. 注册并启动
+*** 2.1 startService: 文件：SystemServiceManager.java
+#+BEGIN_SRC csharp
+public <T extends SystemService> T startService(Class<T> serviceClass) {
+    try {
+        final String name = serviceClass.getName();
+        Slog.i(TAG, "Starting " + name);
+
+        Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "StartService " + name);
+        // 创建服务:这个服务的类必须是SystemService的子类，于是我们需要传入带有ActivityManagerService的Lifecycle 
+        if (!SystemService.class.isAssignableFrom(serviceClass)) {
+            throw new RuntimeException("Failed to create " + name
+                                       + ": service must extend " + SystemService.class.getName());
+        }
+        final T service;
+        try {
+            Constructor<T> constructor = serviceClass.getConstructor(Context.class);
+            service = constructor.newInstance(mContext);
+        } catch (InstantiationException ex) {
+            throw new RuntimeException("Failed to create service " + name
+                                       + ": service could not be instantiated", ex);
+        } catch (IllegalAccessException ex) {
+            throw new RuntimeException("Failed to create service " + name
+                                       + ": service must have a public constructor with a Context argument", ex);
+        } catch (NoSuchMethodException ex) {
+            throw new RuntimeException("Failed to create service " + name
+                                       + ": service must have a public constructor with a Context argument", ex);
+        } catch (InvocationTargetException ex) {
+            throw new RuntimeException("Failed to create service " + name
+                                       + ": service constructor threw an exception", ex);
+        }
+        // 注册
+        mServices.add(service);
+        // 开始服务
+        try {
+            service.onStart();
+        } catch (RuntimeException ex) {
+            throw new RuntimeException("Failed to start service " + name
+                                       + ": onStart threw an exception", ex);
+        }
+        return service;
+    } finally {
+        Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
+    }
+}
+#+END_SRC 
+- 可以看出这方法的作用是创建并且开始一个服务，但是这个服务的类必须是SystemService的子类，于是我们需要传入带有ActivityManagerService的Lifecycle
+*** 2.2 Lifecycle: 文件：SystemServiceManager.java
+#+BEGIN_SRC csharp
+public static final class Lifecycle extends SystemService {
+    private final ActivityManagerService mService;
+
+    public Lifecycle(Context context) {
+        super(context);
+        // 构建一个新的AMS，见小节2.3
+        mService = new ActivityManagerService(context);
+    }
+    @Override public void onStart() {
+        // 开始服务，2.1中的service.onStart()调用的就是它，见小节2.4
+        mService.start();
+    }
+    public ActivityManagerService getService() {
+        return mService;
+    }
+}
+#+END_SRC 
+- 可以看出Lifecycle是继承SystemService的，并且在构造里构建了AMS，接下来我们来看看AMS的构建函数
+*** 2.3 AMS的构建函数
+- 这个方法会在main thread中被唤醒，但是它需要通过各个handers和其他thread通信，所以要注意明确looper。该构造函数，里面是初始化一些变量，及创建了一些线程
+#+BEGIN_SRC csharp
+public ActivityManagerService(Context systemContext) {
+    mContext = systemContext;
+    mFactoryTest = FactoryTest.getMode();
+
+    mSystemThread = ActivityThread.currentActivityThread();
+    Slog.i(TAG, "Memory class: " + ActivityManager.staticGetMemoryClass());
+
+    // 创建一个mHandlerThread线程，默认名是：ActivityManager，异步线程 [ServiceThread 与 HandlerThread 有什么不同 ？]
+    mHandlerThread = new ServiceThread(TAG, android.os.Process.THREAD_PRIORITY_FOREGROUND, false /*allowIo*/);
+    mHandlerThread.start();
+    // 创建一个基于ActivityManager线程的Handler
+    mHandler = new MainHandler(mHandlerThread.getLooper());
+
+    // 创建一个UiHandler线程，是异步线程吗？
+    mUiHandler = new UiHandler();
+
+    // 用单例的方式创建一个名叫ActivityManager:kill的线程，并且创建一个killHandler
+    if (sKillHandler == null) {
+        sKillThread = new ServiceThread(TAG + ":kill",
+                                        android.os.Process.THREAD_PRIORITY_BACKGROUND, true /* allowIo */);
+        sKillThread.start();
+        // 用于杀死进程
+        sKillHandler = new KillHandler(sKillThread.getLooper());
+    }
+
+    // 构建一个可以延时10秒的前台广播队列
+    mFgBroadcastQueue = new BroadcastQueue(this, mHandler,
+                                           "foreground", BROADCAST_FG_TIMEOUT, false);
+    // 构建一个可以延时60秒的普通广播队列(一定全都是后台广播吗？)
+    mBgBroadcastQueue = new BroadcastQueue(this, mHandler,
+                                           "background", BROADCAST_BG_TIMEOUT, true);
+    mBroadcastQueues[0] = mFgBroadcastQueue; // 不故道这个数组的定义是在哪里，反正长度 >= 2
+    mBroadcastQueues[1] = mBgBroadcastQueue;
+    
+    mServices = new ActiveServices(this);
+    mProviderMap = new ProviderMap(this);
+    mAppErrors = new AppErrors(mContext, this);
+
+    // 新建一个data/system目录
+    File dataDir = Environment.getDataDirectory();
+    File systemDir = new File(dataDir, "system");
+    systemDir.mkdirs();
+
+    // 创建一个BatteryStatsService类
+    mBatteryStatsService = new BatteryStatsService(systemDir, mHandler);
+    // 把最新的数据写入硬盘
+    mBatteryStatsService.scheduleWriteToDisk();
+    mOnBattery = DEBUG_POWER ? true
+        : mBatteryStatsService.getActiveStatistics().getIsOnBattery();
+    mBatteryStatsService.getActiveStatistics().setCallback(this);
+
+    // 创建进程统计服务类，并新建一个data/system/procstats目录
+    mProcessStats = new ProcessStatsService(this, new File(systemDir, "procstats"));
+    // 创建一个应用权限检查类，新建一个data/system/appops.xml文件，并注册对应的回调接口
+    mAppOpsService = new AppOpsService(new File(systemDir, "appops.xml"), mHandler);
+    mAppOpsService.startWatchingMode(AppOpsManager.OP_RUN_IN_BACKGROUND, null,
+                                     new IAppOpsCallback.Stub() {
+                                         @Override public void opChanged(int op, int uid, String packageName) {
+                                             if (op == AppOpsManager.OP_RUN_IN_BACKGROUND && packageName != null) {
+                                                 if (mAppOpsService.checkOperation(op, uid, packageName)
+                                                     != AppOpsManager.MODE_ALLOWED) {
+                                                     runInBackgroundDisabled(uid);
+                                                 }
+                                             }
+                                         }
+                                     });
+    mGrantFile = new AtomicFile(new File(systemDir, "urigrants.xml"));
+
+    // 创建多用户控制器，user 0是第一个，同时也是唯一开机过程中运行的用户
+    mUserController = new UserController(this);
+
+    // 获取OpenGL版本，如果没有找到，则默认为0
+    GL_ES_VERSION = SystemProperties.getInt("ro.opengles.version",
+                                            ConfigurationInfo.GL_ES_VERSION_UNDEFINED);
+
+    mTrackingAssociations = "1".equals(SystemProperties.get("debug.track-associations"));
+    // 设置系统的一些默认配置信息
+    mConfiguration.setToDefaults();
+    mConfiguration.setLocales(LocaleList.getDefault());
+    mConfigurationSeq = mConfiguration.seq = 1;
+
+    // 初始化进程CPU跟踪器
+    mProcessCpuTracker.init();
+    // 解析/data/system/packages-compat.xml文件，当设备屏幕大小不满足APK所需要的大小，
+    // 则从packages-compat.xml都去尺寸，用兼容的方式运行
+    mCompatModePackages = new CompatModePackages(this, systemDir, mHandler);
+
+    // 根据AMS传入规则，过滤一些Intent
+    mIntentFirewall = new IntentFirewall(new IntentFirewallInterface(), mHandler);
+
+    // 用来管理Activity栈: 应试就是当系统有多个任务栈时，它们多任务栈的管理者，用于管理系统下存在的多个任务栈
+    mStackSupervisor = new ActivityStackSupervisor(this);
+    // 解释怎样启动Activity
+    mActivityStarter = new ActivityStarter(this, mStackSupervisor);
+    // 管理最近任务列表
+    mRecentTasks = new RecentTasks(this, mStackSupervisor);
+
+    // 创建一个统计 进程使用CPU情况 的线程，名叫CpuTracker
+    mProcessCpuThread = new Thread("CpuTracker") {
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    try {
+                        synchronized(this) {
+                            final long now = SystemClock.uptimeMillis();
+                            long nextCpuDelay = (mLastCpuTime.get()+MONITOR_CPU_MAX_TIME)-now;
+                            long nextWriteDelay = (mLastWriteTime+BATTERY_STATS_TIME)-now;
+                            //Slog.i(TAG, "Cpu delay=" + nextCpuDelay
+                            //        + ", write delay=" + nextWriteDelay);
+                            if (nextWriteDelay < nextCpuDelay) 
+                                nextCpuDelay = nextWriteDelay;
+                            if (nextCpuDelay > 0) {
+                                mProcessCpuMutexFree.set(true);
+                                this.wait(nextCpuDelay);
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                    }
+                    updateCpuStatsNow();
+                } catch (Exception e) {
+                    Slog.e(TAG, "Unexpected exception collecting process stats", e);
+                }
+            }
+        }
+    };
+    // watchdog添加对AMS的监控
+    Watchdog.getInstance().addMonitor(this);
+    Watchdog.getInstance().addThread(mHandler);
+}
+#+END_SRC 
+- 这个方法会在main thread中被唤醒，但是它需要通过各个handers和其他thread通信，所以要注意明确looper。该构造函数，里面是初始化一些变量，及创建了一些线程，大部分我都进行了注释。
+*** 2.4 start: 文件：ActivityManagerService.java
+#+BEGIN_SRC csharp
+private void start() {
+    // 移除所有的进程组
+    Process.removeAllProcessGroups();
+    // 开始监控进程的CPU使用情况
+    mProcessCpuThread.start();
+    // 注册电池统计服务
+    mBatteryStatsService.publish(mContext);
+    // 注册应用权限检测服务
+    mAppOpsService.publish(mContext);
+    Slog.d("AppOps", "AppOpsService published");
+    // 注册LocalService服务
+    LocalServices.addService(ActivityManagerInternal.class, new LocalService());
+}
+#+END_SRC 
+- 启动ProcessCpuThread，注册电池统计服务，应用权限检测服务和LocalService，其中LocalService继承了ActivityManagerInternal。
+- 小结：创建AMS，启动AMS
+** 3. 初始化PM: initPowerManagement: 文件：ActivityManagerService.java
+#+BEGIN_SRC csharp
+public void initPowerManagement() {
+    // Activity堆栈管理器和电池统计服务初始化PM
+    mStackSupervisor.initPowerManagement();
+    mBatteryStatsService.initPowerManagement();
+    mLocalPowerManager = LocalServices.getService(PowerManagerInternal.class);
+    PowerManager pm = (PowerManager)mContext.getSystemService(Context.POWER_SERVICE);
+    mVoiceWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "*voice*");
+    // 该唤醒锁为不计数锁，即无论acquire()多少次，一次release()就可以解锁
+    mVoiceWakeLock.setReferenceCounted(false);
+}
+#+END_SRC 
+- 小结：这主要是在AMS中初始化PM
+** 4. 设置应用实例
+*** 4.1 setSystemProcess: 文件：ActivityManagerService.java
+#+BEGIN_SRC csharp
+public void setSystemProcess() {
+    try {
+        // 以下都是想ServiceManager注册服务
+        ServiceManager.addService(Context.ACTIVITY_SERVICE, this, true); // 注册AMS自己
+        ServiceManager.addService(ProcessStats.SERVICE_NAME, mProcessStats); // 注册进程统计服务
+        ServiceManager.addService("meminfo", new MemBinder(this)); // 注册内存信息的服务
+        ServiceManager.addService("gfxinfo", new GraphicsBinder(this)); // 注册输出渲染信息的服务
+        ServiceManager.addService("dbinfo", new DbBinder(this)); // 注册输出数据库信息的服务
+        // MONITOR_CPU_USAGE默认为true
+        if (MONITOR_CPU_USAGE) {
+            ServiceManager.addService("cpuinfo", new CpuBinder(this)); // 输出进程使用CPU的情况
+        }
+        ServiceManager.addService("permission", new PermissionController(this)); // 注册权限管理
+        ServiceManager.addService("processinfo", new ProcessInfoService(this)); // 注册进程信息
+
+        // 查询名为android的应用信息
+        ApplicationInfo info = mContext.getPackageManager().getApplicationInfo(
+            "android", STOCK_PM_FLAGS | MATCH_SYSTEM_ONLY);
+        // 调用installSystemApplicationInfo ，见小节4.2
+        mSystemThread.installSystemApplicationInfo(info, getClass().getClassLoader());
+
+        synchronized (this) {
+            // 创建一个ProcessRecord对象 ，见小节4.5
+            ProcessRecord app = newProcessRecordLocked(info, info.processName, false, 0);
+            app.persistent = true;
+            app.pid = MY_PID;
+            app.maxAdj = ProcessList.SYSTEM_ADJ;
+            app.makeActive(mSystemThread.getApplicationThread(), mProcessStats);
+            synchronized (mPidsSelfLocked) {
+                mPidsSelfLocked.put(app.pid, app);
+            }
+            updateLruProcessLocked(app, false, null);
+            updateOomAdjLocked();
+        }
+    } catch (PackageManager.NameNotFoundException e) {
+        throw new RuntimeException(
+            "Unable to find android system package", e);
+    }
+}
+#+END_SRC 
+*** 4.2 installSystemApplicationInfo: 文件：ActivityThread.java
+#+BEGIN_SRC csharp
+public void installSystemApplicationInfo(ApplicationInfo info, ClassLoader classLoader) {
+    synchronized (this) {
+        // 看SystemService中创建的ContextIml的installSystemApplicationInfo，见小节4.3
+        getSystemContext().installSystemApplicationInfo(info, classLoader);
+        // give ourselves a default profiler
+        mProfiler = new Profiler();
+    }
+}
+#+END_SRC 
+*** 4.3 ContextIml.installSystemApplicationInfo:文件：ContextImpl.java
+#+BEGIN_SRC csharp
+void installSystemApplicationInfo(ApplicationInfo info, ClassLoader classLoader) {
+    // 调用的是LoadeApk里面的installSystemApplicationInfo，见小节4.4
+    mPackageInfo.installSystemApplicationInfo(info, classLoader);
+}
+#+END_SRC 
+*** 4.4 LoadeApk.installSystemApplicationInfo: 文件：LoadeApk.java
+#+BEGIN_SRC csharp
+void installSystemApplicationInfo(ApplicationInfo info, ClassLoader classLoader) {
+    // 断言只有packageName为android才能使用
+    assert info.packageName.equals("android");
+    mApplicationInfo = info;
+    mClassLoader = classLoader;
+}
+#+END_SRC 
+- 将ApplicationInfo加入到LoadeApk中，因为SystemService创建LoadeApk时，PKMS并没有完成对手机中文件的解析
+*** 4.5 AMS进程管理: 文件：ActivityManagerService.java
+#+BEGIN_SRC csharp
+synchronized (this) {
+    // 调用进程管理函数，见4.6
+    ProcessRecord app = newProcessRecordLocked(info, info.processName, false, 0);
+    app.persistent = true;
+    app.pid = MY_PID;
+    app.maxAdj = ProcessList.SYSTEM_ADJ;
+    // 将SystemServer对应的ApplicationThread保存到ProcessRecord中
+    app.makeActive(mSystemThread.getApplicationThread(), mProcessStats);
+    synchronized (mPidsSelfLocked) {
+        // 根据ProcessRecord的pid，将ProcessRecord存在mPidsSelfLocked中
+        mPidsSelfLocked.put(app.pid, app);
+    }
+    updateLruProcessLocked(app, false, null);
+    updateOomAdjLocked();
+}
+#+END_SRC 
+*** 4.6 newProcessRecordLocked: 文件：ActivityManagerService.java
+#+BEGIN_SRC csharp
+final ProcessRecord newProcessRecordLocked(ApplicationInfo info, String customProcess,
+        boolean isolated, int isolatedUid) {
+    String proc = customProcess != null ? customProcess : info.processName;
+    BatteryStatsImpl stats = mBatteryStatsService.getActiveStatistics();
+    final int userId = UserHandle.getUserId(info.uid);
+    int uid = info.uid;
+    // isolated为false
+    if (isolated) {
+            }
+    // 创建一个进程记录对象，见小节4.7
+    final ProcessRecord r = new ProcessRecord(stats, info, proc, uid);
+    // 判断是否为常驻的进程
+    if (!mBooted && !mBooting
+            && userId == UserHandle.USER_SYSTEM
+            && (info.flags & PERSISTENT_MASK) == PERSISTENT_MASK) {
+        r.persistent = true;
+    }
+    // 将ProcessRecord保存在AMS里的mProcessNames里
+    addProcessNameLocked(r);
+    return r;
+}
+#+END_SRC 
+*** 4.7 ProcessRecord: 文件：ProcessRecord.java
+#+BEGIN_SRC csharp
+ProcessRecord(BatteryStatsImpl _batteryStats, ApplicationInfo _info,
+        String _processName, int _uid) {
+    mBatteryStats = _batteryStats;
+    info = _info;
+    isolated = _info.uid != _uid;
+    uid = _uid;
+    userId = UserHandle.getUserId(_uid);
+    processName = _processName;
+    pkgList.put(_info.packageName, new ProcessStats.ProcessStateHolder(_info.versionCode));
+    maxAdj = ProcessList.UNKNOWN_ADJ;
+    curRawAdj = setRawAdj = ProcessList.INVALID_ADJ;
+    curAdj = setAdj = verifiedAdj = ProcessList.INVALID_ADJ;
+    persistent = false;
+    removed = false;
+    lastStateTime = lastPssTime = nextPssTime = SystemClock.uptimeMillis();
+}
+#+END_SRC 
+- 这主要是保存一些ProcessRecord里面的属性。
+- 小结：
+  - 第四节的主要作用就是将一些服务注册到ServiceManger中，包括AMS自己；然后将framework-res-.apk中applicationInfo信息加入到SystemServeice生成的LoadedApk中，同时构建SystemService对应的ProcessRecord，最后通过addProcessNameLocked(r)来把SystemService加入AMS的管理中来。
+* android内核剖析学习笔记：AMS（ActivityManagerService）内部原理和工作机制
+** 一、ActivityManagerService提供的主要功能：
+- （1）统一调度各应用程序的Activity
+- （2）内存管理
+- （3）进程管理
+** 二、启动一个Activity的方式有以下几种：
+- （1）在应用程序中调用startActivity启动指定的Activity
+- （2）在Home程序中单击一个应用图标，启动新的Activity
+- （3）按“Back”键，结束当前Activity，返回到上一个Activity
+- （4）长按“Home”键，显示出当前正在运行的程序列表，从中选择一个启动
+- 这四种启动方式的主体处理流程都会按照第一种启动方式运行，后面三种方式只是在前端消息处理上各有不同。
+** 三、进程数据类ProcessRecord
+- 该类的源代码在~\frameworks\base\services\java\com\android\server\am路径下。
+- 一般情况下，一个APK文件运行时会对应一个进程，ProcessRecord用来记录一个进程中的相关信息，主要包含的变量有：
+*** （1）进程文件信息：与该进程对应的APK文件的内部信息，如
+    #+BEGIN_SRC csharp
+final ApplicationInfo info; // all about the first app in the process
+final String processName;   // name of the process
+final ArrayMap<String, ProcessStats.ProcessState> pkgList 
+    = new ArrayMap<String, ProcessStats.ProcessState>();   //保存进程中所有APK文件包名
+    #+END_SRC 
+*** （2）进程的内存状态信息：用于Linux系统的out of memory(OOM)情况的处理，当发生内存紧张时，Linux系统会根据进程的内存状态信息杀掉低优先级的进程，包括的变量有
+    #+BEGIN_SRC csharp
+int maxAdj;                 // Maximum OOM adjustment for this process
+int curRawAdj;              // Current OOM unlimited adjustment for this process
+int setRawAdj;              // Last set OOM unlimited adjustment for this process
+int curAdj;                 // Current OOM adjustment for this proce
+int setAdj;                 // Last set OOM adjustment for this process
+    #+END_SRC 
+- 变量中Adj的含义是调整值（adjustment）
+*** （3）进程中包含的Activity、Provider、Service等，如下
+#+BEGIN_SRC csharp
+final ArrayList<ActivityRecord> activities = new ArrayList<ActivityRecord>();
+final ArraySet<ServiceRecord> services = new ArraySet<ServiceRecord>();
+final ArraySet<ServiceRecord> executingServices = new ArraySet<ServiceRecord>();
+final ArraySet<ConnectionRecord> connections = new ArraySet<ConnectionRecord>();
+final ArraySet<ReceiverList> receivers = new ArraySet<ReceiverList>();
+final ArrayMap<String, ContentProviderRecord> pubProviders = new ArrayMap<String,             ContentProviderRecord>();
+final ArrayList<ContentProviderConnection> conProviders = new ArrayList<ContentProviderConnection>();
+#+END_SRC 
+** 四、ActivityRecord数据类（Android 2.3以前版本叫HistoryRecord类）
+- ActivityManagerService使用ActivityRecord数据类来保存每个Activity的信息，ActivityRecord类基于IApplicationToken.Stub类，也是一个Binder,所以可以被IPC调用。
+- 主要包含的变量有：
+*** （1）环境信息：Activity的工作环境，比如进程名称、文件路径、数据路径、图标、主题等，这些信息一般是固定的，比如以下变量
+#+BEGIN_SRC csharp
+final String packageName; // the package implementing intent's component
+final String processName; // process where this component wants to run
+final String baseDir;   // where activity source (resources etc) located
+final String resDir;   // where public activity source (public resources etc) located
+final String dataDir;   // where activity data should go
+int theme;              // resource identifier of activity's theme.
+int realTheme;          // actual theme resource we will use, never 0.
+#+END_SRC 
+*** （2）运行状态数据信息：如idle、stop、finishing等，一般为boolean类型，如下
+#+BEGIN_SRC csharp
+boolean haveState;      // have we gotten the last activity state?
+boolean stopped;        // is activity pause finished?
+boolean delayedResume;  // not yet resumed because of stopped app switches?
+boolean finishing;      // activity in pending finish list?
+boolean configDestroy;  // need to destroy due to config change?
+#+END_SRC 
+** 五、TaskRecord类
+- ActivityManagerService中使用任务的概念来确保Activity启动和退出的顺序。
+- TaskRecord中的几个重要变量如下：
+#+BEGIN_SRC csharp
+final int taskId;       // 每个任务的标识.
+Intent intent;          // 创建该任务时对应的intent
+int numActivities;   //该任务中的Activity数目
+final ArrayList<ActivityRecord> mActivities = new ArrayList<ActivityRecord>();  //按照出现的先后顺序列出该任务中的所有Activity
+#+END_SRC 
+** 六、ActivityManagerService中一些重要的与调度相关的变量
+- （1）记录最近启动的Activity，如果RAM容量较小，则记录的最大值为10个，否则为20个，超过该值后，Ams会舍弃最早记录的Activity
+#+BEGIN_SRC csharp
+static final int MAX_RECENT_TASKS = ActivityManager.isLowRamDeviceStatic() ? 10 : 20;
+#+END_SRC 
+- （2）当Ams通知应用程序启动（Launch）某个Activity时，如果超过10s，Ams就会放弃
+#+BEGIN_SRC csharp
+static final int PROC_START_TIMEOUT = 10*1000;
+#+END_SRC 
+- （3）当Ams启动某个客户进程后，客户进程必须在10s之内报告Ams自己已经启动，否则Ams会认为指定的客户进程不存在
+#+BEGIN_SRC csharp
+static final int PROC_START_TIMEOUT = 10*1000;
+#+END_SRC 
+- （4）等待序列：
+  - 当Ams内部还没有准备好时，如果客户进程请求启动某个Activity，那么会被暂时保存到该变量中，
+#+BEGIN_SRC csharp
+final ArrayList<PendingActivityLaunch> mPendingActivityLaunches
+    = new ArrayList<PendingActivityLaunch>();
+#+END_SRC 
+- （5）优先启动，其次再停止。进程A1包含两个Activity，启动顺序为A1->A2，当用户请求启动A2时，如果A1正在运行，Ams会先暂停A1，然后启动A2，当A2启动后再停止A1。
+#+BEGIN_SRC csharp
+private final ArrayList<TaskRecord> mRecentTasks = new ArrayList<TaskRecord>();
+#+END_SRC 
+** 七、startActivity()的流程
+- 当用户单击某个应用图标后，执行程序会在该图标的onClick()事件中调用startActivity()方法，该方法会调用startActivityForResult()，在这个方法内部会调用Instrumentation对象的executeStartActivity()方法，每个Activity内部都有一个Instrumentation对象的引用，它就是一个管家，ActivityThread要创建或者暂停某个Activity都是通过它实现的。
+- 流程图如下所示：
+  
+[[./pic/activityService_20220828_103648.png]]
+
