@@ -858,10 +858,47 @@ public int startActivity(IApplicationThread caller, String callingPackage, Inten
 - 3.另外，获取调用者的pid和uid。由于本例的caller为null，故所得到的pid和uid均为am所在进程的uid和pid。
 - 4.启动Activity的核心函数是startActivityLocked。
 - 5.根据返回值做一些处理，因为目标Activity要运行在一个新的应用进程中，就必须等待那个应用进程正常启动并处理相关请求
-** startActivityLocked主要工作：
-- 1.处理sourceRecord及resultRecord。其中，sourceRecord表示发起本次请求的Activity，resultRecord表示接收处理结果的Activity（启动一个Activity肯定需要它完成某项事情，当目标Activity将事情成后，就需要告知请求者该事情的处理结果）。在一般情况下，sourceRecord和resultRecord应指向同一个Activity。
+** startActivityLocked主要工作
+- 1.处理sourceRecord及resultRecord。其中，sourceRecord表示发起本次请求的Activity，resultRecord表示接收处理结果的Activity（启动一个Activity肯定需要它完成某项事情，当目标Activity将事情成后，就需要告知请求者该事情的处理结果）。 *在一般情况下，sourceRecord和resultRecord应指向同一个Activity* (这里这么写是故意误导弱弱们的吧？)。
 - 2.处理app Switch。如果AMS当前禁止appswitch，则只能把本次启动请求保存起来，以待允许app switch时再处理。从代码中可知，AMS在处理本次请求前，会先调用doPendingActivityLaunchesLocked函数，在该函数内部将启动之前因系统禁止appswitch而保存的Pending请求。
 - 3.调用startActivityUncheckedLocked处理本次Activity启动请求，为新创建的ActivityRecord找到一个合适的Task。
+- *下面是来自另一处更变详尽的解释*
+-  startActivityLocked()方法在创建ActivityRecord前，还做了如下几个操作：
+    1. 确定sourceRecord和resultRecord，这两个变量均为ActivityRecord类型，前者代表请求启动当前activity的activity；后者表示当前的activity在启动之后需要返回结果的ActivityRecord，一般情况下，如果sourceRecord的activity使用startActivityForResult()启动当前activity并且requestCode>=0时，则resultRecord不为空，且resultRecord=sourceRecord。
+       
+[[./pic/activityService_20220829_094826.png]]
+   - 还有一种特殊的情况，当启动一个activity时，启动的Intent设置了Intent.FLAG_ACTIVITY_FORWARD_RESULT标志，在这种情况resultRecord并不指向sourceRecord，而是指向sourceRecord的sourceRecord，比较绕上个图先
+     
+[[./pic/activityService_20220829_094904.png]]
+   - 如上图所示，Activity A 启动了Activity B，Activity B又启动了C，A-->B-->C, 这种情况下，A启动B要求B返回result给A，但是如果B在启动C时，Intent设置了Intent.FLAG_ACTIVITY_FORWARD_RESULT标志，那么此时将会交由C向A setResult。为了避免冲突，B启动C时不得指定resultRecord>=0。
+#+BEGIN_SRC csharp
+ActivityRecord sourceRecord = null;  
+ActivityRecord resultRecord = null;  
+if (resultTo != null) {  
+    int index = indexOfTokenLocked(resultTo);  
+    if (DEBUG_RESULTS) Slog.v(  
+        TAG, "Sending result to " + resultTo + " (index " + index + ")");  
+    if (index >= 0) {  
+        sourceRecord = (ActivityRecord)mHistory.get(index);  
+        if (requestCode >= 0 && !sourceRecord.finishing)  
+            resultRecord = sourceRecord;  
+    }  
+}  
+int launchFlags = intent.getFlags();  
+if ((launchFlags&Intent.FLAG_ACTIVITY_FORWARD_RESULT) != 0  
+        && sourceRecord != null) {  
+    // Transfer the result target from the source activity to the new  
+    // one being started, including any failures.  
+    if (requestCode >= 0) { 
+        return START_FORWARD_AND_REQUEST_CONFLICT;  
+    resultRecord = sourceRecord.resultTo;  
+    resultWho = sourceRecord.resultWho;  
+    requestCode = sourceRecord.requestCode;  
+    sourceRecord.resultTo = null;  
+    if (resultRecord != null) 
+        resultRecord.removeResultsLocked(sourceRecord, resultWho, requestCode);  
+}
+#+END_SRC 
 ** startActivityUncheckedLocked的分析：
 - 步骤1：确定是否需要为新的Activity创建一个Task，即是否设置FLAG_ACTIVITY_NEW_TASK标志。
 - 步骤2：找到一个合适的Task，然后对应做一些处理。
@@ -919,3 +956,232 @@ public int startActivity(IApplicationThread caller, String callingPackage, Inten
 - 2.接下来进入ActivityManagerService和ActivityStack这两个核心类。对于启动Activity来说，这段行程又可分细分为两个阶段：第一阶段的主要工作就是根据启动模式和启动标志找到或创建ActivityRecord及对应的TaskRecord；第二阶段工作就是处理Activity启动或切换相关的工作。
 - 3.首先AMS直接创建目标进程并运行Activity的流程，其中涉及目标进程的创建，在目标进程中Android运行环境的初始化，目标Activity的创建以及触发onCreate、onStart及onResume等其生命周期中重要函数调用等相关知识点。
 - 4.接着AMS先pause当前Activity，然后再创建目标进程并运行Activity的流程。其中牵扯到两个应用进程和AMS的交互，其难度之大可见一斑。
+
+
+* task管理
+** task和activity以及process整体的关系
+- AMS提供了一个ArrayList mHistory来管理所有的activity，activity在AMS中的形式是ActivityRecord，task在AMS中的形式为TaskRecord，进程在AMS中的管理形式为ProcessRecord。如下图所示
+  
+[[./pic/activityService_20220829_095916.png]]
+- 从图中我们可以看出如下几点规则：
+  - 1. 所有的ActivityRecord会被存储在mHistory管理；
+  - 2. 每个ActivityRecord会对应到一个TaskRecord，并且有着相同TaskRecord的ActivityRecord在mHistory中会处在连续的位置；
+  - 3. 同一个TaskRecord的Activity可能分别处于不同的进程中，每个Activity所处的进程跟task没有关系；
+- 因此，在分析Activity管理之前，先了解一下这个规则。
+- 在android应用开发中，task是一个很重要的概念，在文章开始，我就画出了task和activity以及process整体的关系，在这里还需要说明一下，task和application的区别，
+- application在android中的作用仅仅是activity在未被使用前的一个容器，我们开发android应用程序时，需要一个application来组织我们开发的activity，application和activity之间是一个静态关系，并且是一一对应的关系；也就是说我们开发的activity在PM中的最终形式是唯一的，永远对应一个application。
+- 而task和activity之间的关系是动态的关系，是我们在运行应用程序时，activity的调用栈，同一个task中的activity可能来自不同的application。
+** 1 Intent.FLAG_ACTIVITY_NO_USER_ACTION
+- 检查Intent是否设置了Intent.FLAG_ACTIVITY_NO_USER_ACTION，如果设置了，则在activity pause之前将不再调用activity的onUserLeaveHint()方法。
+#+BEGIN_SRC csharp
+mUserLeaving = (launchFlags&Intent.FLAG_ACTIVITY_NO_USER_ACTION) == 0;  
+if (DEBUG_USER_LEAVING) Slog.v(TAG, "startActivity() => mUserLeaving=" + mUserLeaving);  
+#+END_SRC 
+** 2 Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP
+- 检查Intent是否设置了Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP，这个标志我有点困惑，从它的注释可以看出 *它的含义是指如果设置了该flag，那么mHistory中最top的activity在后续的处理中将不被视为top，而将前一个activity视为top，如A-->B-->C，将B视为top。*
+- 这个top activity的作用很大，涉及到后面对task的处理。但是目前来看这个flag并没有起到该有的作用，代码中判断如果设置了该标志，那么AMS将会视当前正在启动的activity为top，然后去mHistory中去查找它的前一个activity为后续task处理的top activity(topRunningNonDelayedActivityLocked()中实现)，但是现在的问题是此时此刻，正在启动的activity并不存在于mHistory中，因为我们在前一个函数中刚刚创建了这个ActivityRecord。如下面代码所示：
+#+BEGIN_SRC csharp
+ActivityRecord notTop = (launchFlags&Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP) != 0 ? r : null;  
+#+END_SRC 
+- 因此，感觉这个flag的意义不是太大。
+** 3 何时应该创建新的task
+- sourceRecord为空；
+- sourceRecord的activity的launch mode为ActivityInfo. *LAUNCH_SINGLE_INSTANCE* ，也就是sourceRecord activity的task只允许一个activity；
+- 当前activity的launch mode为ActivityInfo. *LAUNCH_SINGLE_INSTANCE* 或者r.launchMode == ActivityInfo. *LAUNCH_SINGLE_TASK* 。
+- *以上几种情况* ，均可视为需要为启动的activity创建一个新的task.
+#+BEGIN_SRC csharp
+if (sourceRecord == null) {  
+// This activity is not being started from another...  in this  
+// case we -always- start a new task.  
+    if ((launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) == 0) {  
+        Slog.w(TAG, "startActivity called from non-Activity context; forcing Intent.FLAG_ACTIVITY_NEW_TASK for: "  
+               + intent);  
+        launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;  
+    }  
+} else if (sourceRecord.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE) {  
+// The original activity who is starting us is running as a single  
+// instance...  this new activity it is starting must go on its  
+// own task.  
+    launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;  
+} else if (r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE  
+           || r.launchMode == ActivityInfo.LAUNCH_SINGLE_TASK) {  
+// The activity being started is a single instance...  it always  
+// gets launched into its own task.  
+    launchFlags |= Intent.FLAG_ACTIVITY_NEW_TASK;  
+}  
+#+END_SRC 
+** 4 Intent.FLAG_ACTIVITY_NEW_TASK时断开与Caller依赖
+- 如果启动的activity需要新的task，那么新启动的activity将会与其caller断开依赖关系，这个关系主要是指result反馈，A-->B,如果A是通过startActivityForResult()请求启动的，并且requestCode >=0,那么如果B是在新的task中，那么B在finish的时候将不再向A反馈result，而是在启动过程中就会向A反馈一个RESULT_CANCELED。
+#+BEGIN_SRC csharp
+if (r.resultTo != null && (launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {  
+// For whatever reason this activity is being launched into a new  
+// task...  yet the caller has requested a result back.  Well, that  
+// is pretty messed up, so instead immediately send back a cancel  
+// and let the new task continue launched as normal without a  
+// dependency on its originator.  
+    Slog.w(TAG, "Activity is launching as a new task, so cancelling activity result.");  
+    sendActivityResultLocked(-1,  
+                             r.resultTo, r.resultWho, r.requestCode,  
+                             Activity.RESULT_CANCELED, null);  
+    r.resultTo = null;  
+}  
+#+END_SRC 
+** 5 Task复用
+*** 5.1 Task的基本属性 
+- 检查mHistory中是否有task可复用，在分析这段之前，先了解一下 *task的一些基本概念*
+  - task的root activity是指如果一个activity启动时创建的了一个新的task，那么这个activity是task的root activity；
+  - task.affinity是指root activity的affinity；
+  - task.intent是指启动root activity的Intent；
+  - task.affinityIntent是指activity在进行了TaskReparenting之后，AMS为activity分配了新的task，该task的affinityIntent则是启动该activity时的Intent，此时task.intent==null。
+- TaskReparenting操作举例说明一下，假如有2个activity拥有不同的affinity，且自Activity A中启动Activity B，假如Activity A是所在task的root activity，如下图示：
+  
+[[./pic/activityService_20220829_101320.png]]
+- 假如Activity B设置了ActivityInfo.FLAG_ALLOW_TASK_REPARENTING，那么如果此时另外一个application启动了Activity B并要求其在新的task中，那么此时的Activity B将被从Task A中移动到新的task中，如下图所示：
+  
+[[./pic/activityService_20220829_101333.png]]
+- 这个过程就称之为TaskReparenting，关于TaskReparenting，我会专门写一篇文章分析一下。下面来分析task复用的过程。
+*** 5.2 查找可复用的task
+- 以下3种条件需要检查是否有有task可复用
+#+BEGIN_SRC csharp
+(launchFlags&Intent.FLAG_ACTIVITY_NEW_TASK) != 0 &&
+    (launchFlags&Intent.FLAG_ACTIVITY_MULTIPLE_TASK) == 0;
+r.launchMode == ActivityInfo.LAUNCH_SINGLE_TASK
+r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE
+#+END_SRC 
+- 第⑴是一个组合条件，Intent. *FLAG_ACTIVITY_MULTIPLE_TASK* 不能单独使用，它 *是和Intent.FLAG_ACTIVITY_NEW_TASK结合起来使用的* ， *如果设置了Intent.FLAG_ACTIVITY_MULTIPLE_TASK，那么将会永远启动一个新的task，不管是否有可复用的task。*
+- 为什么是这3种条件，从android的开发文档中，我们可知LAUNCH_SINGLE_TASK和LAUNCH_SINGLE_INSTANCE两种launch mode的activity只允许作为task的root activity，既然是作为root activity，那么它所处的task的affinity必然是和它的是一样的，因此从mHistory中找打一个和自己的affinity相同的task是非常有必要的。
+- 而对于设置了Intent.FLAG_ACTIVITY_NEW_TASK的Intent来说，并且没有设置Intent.FLAG_ACTIVITY_MULTIPLE_TASK，那么同样的，它也必须是作为它所处的task的root activity。道理是一样的。
+**** AMS去mHistory中查找可复用的task，查找这个task的规则如下：    
+***** ⑴ launchMode != ActivityInfo.LAUNCH_SINGLE_INSTANCE的情况，遵循如下规则： @findTaskLocked()
+- ① 查找mHistory中是否有与要启动的activity相同affinity的task，上面也提过这几类activity启动时，均是作为task的root activity，并且其task的affinity必须和自己的affinity相同，因此首先需要去mHistory查找和自己affinity相同的task。
+- ② 如果activity没有affinity，即属性android:taskAffinity设置为“”，空字符串时。此时AMS就会去mHistory中去查找是否有task的root activity和启动的activity相同，通过比较 *task.intent.getComponent()* 和 *启动activity的Comeponent* 比较，为什么是root activity，前面分析过了；
+- ③ 如果task.Intent为空，这种情况发生在TaskReparenting之后，TaskReparenting之后，AMS为这个activity创建一个新的task，并将启动这个activity的Intent赋值给task.affinityIntent，并且此时的task.Intent==null。此时就需要比较 *task.affinityIntent.getComponent()* 和 *启动activity的Comeponent* 比较，看是否和启动的activity相同。
+- *以上3个规则中* ，均是返回找的task中最上面的activity，而不一定是task的activity，至于如何处理要启动的activity和task中已有的activity，后面会介绍。
+***** ⑵ launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE的情况，遵循如下规则： @findActivityLocked()
+- 对于ActivityInfo. *LAUNCH_SINGLE_INSTANCE* 启动模式来说， *它所处的task中只允许有它一个activity* ，因此它的规则只符合上面规则中的②二；
+- 对于第①条，由于设置了ActivityInfo.LAUNCH_SINGLE_INSTANCE启动模式的activity，它只能自己独处一个task，不可能和别人共享同一个task，因此mHistory即使存在了与该activity有相同的affinity的activity，如果这个activity和启动的activity不同，那么ActivityInfo.LAUNCH_SINGLE_INSTANCE启动模式的activity也不可能和它共用一个task，因此这第①条完全可以不用检查。
+- 对于第②条，由于该模式的activity独处一个task，因此完全没有可能所处的task的affinity和自己的affinity不同，因此，假如mHistory存在相同的activity与启动的activity相同，那么这个activity的affinity必然和自己的相同。所以对于这种模式，第②条囊括了其他模式的①②两条。
+- 对于第③条，同样的道理，ActivityInfo.LAUNCH_SINGLE_INSTANCE启动模式的activity不可能处在与自己不同affinity的task中，因此不可能出现TaskReparenting操作，所以这条也不需要。
+#+BEGIN_SRC csharp
+ActivityRecord taskTop = r.launchMode != ActivityInfo.LAUNCH_SINGLE_INSTANCE  
+    ? findTaskLocked(intent, r.info)  
+    : findActivityLocked(intent, r.info);  
+#+END_SRC 
+- 在获得taskTop之后，下面来分析这个taskTop的意义。
+*** 5.3 task移到mHistory前端
+- 由于我们要复用task，因此需要将taskTop所在的task移到mHistory前端 。
+#+BEGIN_SRC csharp
+ActivityRecord curTop = topRunningNonDelayedActivityLocked(notTop);  
+if (curTop.task != taskTop.task) {  
+    r.intent.addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT);  
+    boolean callerAtFront = sourceRecord == null  
+        || curTop.task == sourceRecord.task;  
+    if (callerAtFront) {  
+// We really do want to push this one into the  
+// user's face, right now.  
+        moveTaskToFrontLocked(taskTop.task, r);  
+    }  
+}  
+#+END_SRC 
+*** 5.4 Reset Task
+- 如果Intent设置Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED，最常见的情况，当从Home启动应用程序时，会设置这个flag；从recently task进入应用程序，则不会设置这个falg。
+- 设置了FLAG_ACTIVITY_RESET_TASK_IF_NEEDED，AMS会对复用的task作如下处理，下面称这个可复用的task为复用task：
+**** 设置了FLAG_ACTIVITY_RESET_TASK_IF_NEEDED，AMS会对复用的task作如下处理
+***** ⑴ mHistory中，对于复用task中的除root activity外的activity，有如下处理
+- 在此之前，先介绍 *activity的几个关键属性：*
+  - 一① 如果 *复用task在后台时间超过30min* ，那么 *在这个过程中将删除除root activity之外的所有的activity* ；
+  - 二② 如果 *新启动的activity* 设置了属性ActivityInfo. *FLAG_ALWAYS_RETAIN_TASK_STATE* ，那么表明 *它并不要求后台20min的复用task删除activity；*
+  - 三③ 如果 *新启动的activity* 设置了属性ActivityInfo. *FLAG_CLEAR_TASK_ON_LAUNCH* ，那么表明 *不论复用task在后台是否超过30min，一律要求删除除root activity之外的所有的activity；*
+  - 四④ *复用task中的activity* 设置了属性ActivityInfo. *FLAG_FINISH_ON_TASK_LAUNCH* ，那么 *复用task从home中再次被启动到前台时，这个activity会被删除；*
+  - 五⑤ *复用task中的activity* 设置了属性ActivityInfo. *FLAG_ALLOW_TASK_REPARENTIN* ，并且这个 *activity的resultTo为空* ，那么也就是说这个activity和它的caller没有依赖关系，那么AMS认为这个activity暂时没有用处了， *需要对其进行TaskReparenting操作，最好的方法是把它放到mHistory栈底，不影响其他task。*
+  - 六⑥ *复用task中的activity* 的Intent设置属性Intent. *FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET* ，那么下次再从home中进入到task中，那么 *将删除设置了该属性的activity以上所有的activity* ，例如A-->B-->C ==> D-->E,加入在C启动D时设置了该属性，那么下次从HOME中再次进入到这个task中时，将会是A-->B-->C。
+  - 七⑦ 如果 *复用task中的activity的resultTo不为空* ，也就是启动这个activity的是一个activity，那么 *这个activity的处理将按照它的前一个activity的处理方式来处理* ，不管 *在何时情况下，它的前一个activity都是启动它的activity* ，(即便resultTo不是前一个activity，如设置了Intent. *FLAG_ACTIVITY_FORWARD_RESULT*) 。如果复用task中每个activity的resultTo都不为空，并且上述处理优先级在其前面的属性没有设置的话，那么 *这个复用task中的activity将不作任何的处理(这种情况没有看懂，不知道这种情况为什么可以不用处理？？？)* 。
+- 一般情况下，activity的resultTo都不为空，除非设置了Intent. *FLAG_ACTIVITY_FORWARD_RESULT* ，那么此时被启动的activity的caller的resultTo将会为空。
+- task中的activity的属性设置是上述属性的组合，因此 *reset task过程要按照一定的优先级来处理* ，上述属性的处理优先级是： *六⑥ = 四④ > 七⑦ > 五⑤ > 三③ = 二② > 一①*
+          - 具体操作顺序如下：
+  - ♣ 根据六⑥，四④条件来 *删除复用task中相应的activity；*
+  - ♣ 七⑦条件下，将会 *暂时不做处理，再根据它的前一个activity的属性来做处理，即使这个activity设置了allowTaskReparenting；*
+  - ♣ *如果activity的resultTo为空，并且满足条件五⑤* ，那么 *将其及其以上未作处理的，满足条件七⑦的所有activity，一并进行TaskReparenting操作，并放置在mHistory栈底。它们在mHistory栈底顺序如同在复用task中的顺序；*
+  ♣ *根据一①二②三③的条件来删除复用task中相应的activity。*
+***** ⑵ mHistory中，不属于复用task的activity，并且它的resultTo不为空，那么将根据它的前一个activity的处理来处理；
+***** ⑶ mHistory中，不属于复用task，但是和当前启动的activity有相同affinity，并且允许TaskReparenting操作，那么将进行以下操作：
+      - ♣ 如果满足上述的①②③④的条件，但是其中的task不是复用task，而是这个activity所处的task，那么将输出这个activity，而不是进行TaskReparenting操作。
+  - 为什么非复用task中的activity，和当前启动的activity有相同affinity，并且允许TaskReparenting操作，满足了①②③④的条件之后要删除呢，为什么非复用task中的其他activity，不需要删除呢？
+  - *正因为它和启动的activity有相同的affinity，因此AMS认为这个activity是和启动activity相关的，以后可能会重新调用，所以当其满足删除条件后,这时它将不允许TaskReparenting操作，并且不应该再允许它存在于其他的task中，此时应该删除。*
+- ♣ 如果没有满足①②③④的条件，那么将会对其进行TaskReparenting操作，重新将其移动到复用task或新启动的task中。
+      #+BEGIN_SRC csharp
+          // If the caller has requested that the target task be  
+          // reset, then do so.  
+          if ((launchFlags&Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) != 0) {  
+              taskTop = resetTaskIfNeededLocked(taskTop, r);  
+          }  
+                #+END_SRC 
+- 上面就是这个复用task的reset 过程，它的执行过程是按照上述的⑴⑵⑶的顺序来执行的，下面给出一个图示，便于更好的理解reset task的过程。
+  
+[[./pic/activityService_20220829_104430.png]]
+*** 5.5 判断是否有可复用的activity
+- 如果mHistory中有可复用的task，那么在某些情况下并不需要启动这个activity，下面分析具体是什么情况：
+- ⑴ Intent设置了Intent.FLAG_ACTIVITY_CLEAR_TOP，或者launchMode == ActivityInfo.LAUNCH_SINGLE_TASK，或者r.launchMode == ActivityInfo.LAUNCH_SINGLE_INSTANCE；这3种条件有一个共同点，就是启动的activity启动之后，在这个task中,这个activity之上不能有其他的activity。
+  - 一般情况下，需要将复用task中启动的activity之上的所有的activity删除，
+  - 当activity的launchMode == ActivityInfo. *LAUNCH_MULTIPLE，即普通模式* ，并且 *Intent并未要求singletop模式* ，这种情况是 *连复用task中与启动activity相同的activity都要删除，也就是不希望复用相同的activity。*
+  - *performClearTaskLocked()* 实现了上述功能，并返回可复用的activity。
+#+BEGIN_SRC csharp
+ActivityRecord top = performClearTaskLocked(  
+    taskTop.task.taskId, r, launchFlags, true);  
+#+END_SRC 
+  - 如果有可复用的activity，并且这个activity是task的root activity，由于task的Intent是root activity的Intent，所以需要重新设置task的Intent。
+  - 向可复用的activity发送新的Intent，通知它Intent的变化，最终会调用到这个activity的onNewIntent()方法。
+- ⑵ 如果不满足⑴条件的话，但是启动的activity与复用task的root activity相同。
+  - 如果此时Intent设置了Intent.FLAG_ACTIVITY_SINGLE_TOP，并且复用task的top activity正好是要启动的activity，则复用这个activity，同时更新activity的Intent，如果需要更新task的Intent。
+  - 如果Intent没有设置了Intent.FLAG_ACTIVITY_SINGLE_TOP，即使设置了，但是当前的top activity不是正要启动的activity，那么会判断当前启动的Intent和task的Intent不同，那么将会重新启动这个activity。
+  - 其他情况，将直接resume top的activity。
+- ⑶ 如果⑴ ⑵条件均不满足，其实如果不满足⑴ ⑵条件的话，复用的task中就不存在与启动的activity相同的activity了，如果启动的Intent没有设置Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED，那么一定不会复用任何的activity。
+- (4) 如果⑴ ⑵条件均不满足，并且Intent设置了Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED，那么需要检查当前复用task的Intent是否设置了Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED。
+- 如果没有设置，重新设置新的Intent,同样不可能复用activity。
+- 这种情况下，将不会显示要启动的activity，而是改为显示复用的task中的内容，如下图：
+  
+[[./pic/activityService_20220829_104857.png]]
+- 至此，整个Task复用，已经activity复用的过程就介绍完了，如果没有可复用的activity，则需要启动一个新的activity，如果有可复用的activity，那么activity的启动过程至此结束，直接调用resumeTopActivityLocked()resume top的activity即可。
+- *以后的处理均为Task复用和activity复用失败之后的处理。*
+** 6 singleTop和singleTask属性的处理
+   - 这一部分是针对singleTop和singleTask属性的处理，前面分析Task复用的时候，也有对singleTop和singleTask属性的处理，两者有什么不同呢？
+- Task复用中是启动的activity需要在新的task中，而这里的处理主要是针对同一个task。
+- 当设置Intent.FLAG_ACTIVITY_SINGLE_TOP或者launchMode == ActivityInfo.LAUNCH_SINGLE_TOP或者launchMode == ActivityInfo.LAUNCH_SINGLE_TASK这几种情况下，如果top activity与启动的activity为同一个activity，那么将复用top activity，并直接resume top activity。
+#+BEGIN_SRC csharp
+if (top != null && r.resultTo == null) {  
+    if (top.realActivity.equals(r.realActivity)) {  
+        if (top.app != null && top.app.thread != null) {  
+            if ((launchFlags&Intent.FLAG_ACTIVITY_SINGLE_TOP) != 0  
+                || r.launchMode == ActivityInfo.LAUNCH_SINGLE_TOP  
+                || r.launchMode == ActivityInfo.LAUNCH_SINGLE_TASK) {  
+                logStartActivity(EventLogTags.AM_NEW_INTENT, top, top.task);  
+// For paranoia, make sure we have correctly  
+// resumed the top activity.  
+                if (doResume) {  
+                    resumeTopActivityLocked(null);  
+                }  
+                if (onlyIfNeeded) {  
+                    // We don't need to start a new activity, and  
+                    // the client said not to do anything if that  
+                    // is the case, so this is it!  
+                    return START_RETURN_INTENT_TO_CALLER;  
+                }  
+                top.deliverNewIntentLocked(callingUid, r.intent);  
+                return START_DELIVERED_TO_TOP;  
+            }  
+        }  
+    }  
+}  
+#+END_SRC 
+- r.resultTo == null这个条件是在startActivityForResult()的requestCode<0时成立。
+- 为什么没有ActivityInfo. *LAUNCH_SINGLE_INSTANCE* ？这是 *因为这种启动模式，如果Task复用失败之后，直接启动为其启动一个Intent.FLAG_ACTIVITY_NEW_TASK即可。*
+** 7 standard和singleInstance模式
+   - 为什么代码中没有明显的针对ActivityInfo.LAUNCH_SINGLE_INSTANCE模式的处理？这是因为这种启动模式，如果Task复用失败之后，直接启动为其启动一个Intent.FLAG_ACTIVITY_NEW_TASK即可。
+- ⑴ 设置了Intent.FLAG_ACTIVITY_NEW_TASK，则为该activity创建一个新的task；
+- ⑵ 在当前的task中启动新的activity，
+  - 一①当前的caller是一个activity，如果设置Intent.FLAG_ACTIVITY_CLEAR_TOP，当前的task如果存在要启动的activity(这个和上一节中的Task复用时的clear top过程不同，两者是互斥的过程，不冲突)，清除其上的所有的activity；
+  - 二② 当前的caller是一个activity，如果设置Intent.FLAG_ACTIVITY_REORDER_TO_FRONT，这个flag表示如果启动的activity已经在当前的task中，那么如果当前启动的Intent设置了该flag，那么则会将这个activity从task中移动到top。
+    - 如果A-->B-->C-->D，D启动B时，设置了该flag，那么将变为A-->C-->D-->B
+    - ①②两个条件，则不需要再启动新的activity，直接resume top。
+  - 三③  当前的caller是一个activity，其他情况则需要启动新的activity。
+- ⑶ 当前的caller不是activity，那么仍将新启动的activity放在top的task中。
