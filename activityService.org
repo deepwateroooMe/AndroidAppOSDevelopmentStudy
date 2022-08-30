@@ -826,6 +826,9 @@ public int startActivity(IApplicationThread caller, String callingPackage, Inten
  
 * am命令启动一个Activity
 - am和pm一样，也是一个脚本，它用来和AMS交互，如启动Activity、启动Service、发送广播等。其核心文件在Am.java中。
+- 下面附一个看见的参考图，但是不一定是用am来启动一个活动的
+  
+[[./pic/activityService_20220830_083145.png]]
 ** AMS的startActivityAndWait函数分析
 ** Task、Back Stack、ActivityStack及Launch mode
 - 一个Acitivity的启动是由一个应用进程发起的，IApplicationThread是应用进程和AMS交互的通道，也可算是调用进程的标示。
