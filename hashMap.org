@@ -434,3 +434,4 @@ null
 - SparseArray的key为int，value为Object。
 - *在Android中，数据长度小于千时，用于替换HashMap*
 - 相比与HashMap，其采用 时间换空间 的方式，使用更少的内存来提高手机APP的运行效率(HashMap中当table数组中内容达到总容量0.75时，则扩展为当前容量的两倍，关于HashMap可查看HashMap实现原理学习)
+** 

@@ -114,7 +114,6 @@ private final ArrayList<TaskRecord> mRecentTasks = new ArrayList<TaskRecord>();
 [[./pic/activityService_20220828_152742.png]]
 - AMS由ActivityManagerNative（以后简称AMN）类派生，并实现Watchdog.Monitor和BatteryStatsImpl.BatteryCallback接口。而AMN由Binder派生，实现了IActivityManager接口。
 - 客户端使用ActivityManager类。由于AMS是系统核心服务，很多API不能开放供客户端使用，所以设计者没有让ActivityManager直接加入AMS家族。在ActivityManager类内部通过调用AMN的getDefault函数得到一个ActivityManagerProxy对象，通过它可与AMS通信。
-
 ** SystemServer启动AMS
 - ActivityManagerService是在SystemServer.java中启动并注册的：
 #+BEGIN_SRC csharp
@@ -140,6 +139,79 @@ private void startBootstrapServices() {
 }
 #+END_SRC 
 - 看源码可以看到，startBootstrapServices中启动并注册了很多其他的服务，比如：PowerManagerService，DisplayManagerService，LightsService，PackageManagerService，UserManagerService，SensorService(native)，这写服务彼此之间有依赖，所以都放在startBootstrapServices方法里面
+** 相对完整一点儿的SystemServer类的源码
+#+BEGIN_SRC csharp
+public final class SystemServer {
+    // zygote的主入口
+    public static void main(String[] args) {
+        new SystemServer().run();
+    }
+    public SystemServer() {
+        // Check for factory test mode.
+        mFactoryTestMode = FactoryTest.getMode();
+    }
+    private void run() {
+        // 加载本地系统服务库，并进行初始化
+        System.loadLibrary("android_servers"); // <<<<<<<<<< jni:
+        nativeInit();
+        // 1、创建系统上下文
+        createSystemContext();
+        // 初始化SystemServiceManager对象，
+        // 下面的系统服务开启都需要调用SystemServiceManager.startService(Class<T>)，这个方法通过反射来启动对应的服务
+        mSystemServiceManager = new SystemServiceManager(mSystemContext);
+        // 开启服务
+        try { 
+            startBootstrapServices(); // <<<<<<<<<<<<<<<<<<<< 
+            startCoreServices();
+            startOtherServices();
+        } catch (Throwable ex) {
+            Slog.e("System", "******************************************");
+            Slog.e("System", "************ Failure starting system services", ex);
+            throw ex;
+        }
+    }
+
+    /*初始化系统上下文对象mSystemContext，并设置默认的主题,mSystemContext实际上是一个ContextImpl对象。
+     *调用ActivityThread.systemMain()的时候，会调用ActivityThread.attach(true)，而在attach()里面，则创建了Application对象，
+     *并调用了Application.onCreate()。 */
+    private void createSystemContext() {
+        ActivityThread activityThread = ActivityThread.systemMain(); // <<<<<<<<<< 
+        mSystemContext = activityThread.getSystemContext();
+        mSystemContext.setTheme(android.R.style.Theme_DeviceDefault_Light_DarkActionBar);
+    }
+
+    // 在这里开启了几个核心的服务，因为这些服务之间相互依赖，所以都放在了这个方法里面。
+    private void startBootstrapServices() {
+        // 初始化ActivityManagerService
+        mActivityManagerService = mSystemServiceManager.startService(
+            ActivityManagerService.Lifecycle.class).getService();
+        mActivityManagerService.setSystemServiceManager(mSystemServiceManager);
+
+        // 初始化PowerManagerService，因为其他服务需要依赖这个Service，因此需要尽快的初始化
+        mPowerManagerService = mSystemServiceManager.startService(PowerManagerService.class);
+        // 初始化DisplayManagerService
+        mDisplayManagerService = mSystemServiceManager.startService(DisplayManagerService.class);
+        // 2、systemServer进程加载到AMS中，并被它管理
+        mActivityManagerService.setSystemProcess();
+    }
+    private void startOtherServices() {
+        // 3、将SettingProvider放到SystemServer进程中来运行
+        mActivityManagerService.installSystemProviders();
+        // 4、AMS是系统的核心服务，只有它准备好了，才能调用其他服务的SystemReady
+        mActivityManagerService.systemReady(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startSystemUi(context); // 启动systemUi，如此，状态栏就准备好了
+                    } catch (Throwable e) {
+                        reportWtf("starting System UI", e);
+                    }
+                    Watchdog.getInstance().start(); // 启动watchdog
+                }
+            });
+    }
+}
+#+END_SRC 
 ** 注册并启动
 *** startService: 文件：SystemServiceManager.java
 #+BEGIN_SRC csharp
@@ -1284,3 +1356,471 @@ if (top != null && r.resultTo == null) {
 - 我们知道当一个进程中的acitiviy全部都关闭以后,这个空进程并不会立即就被杀死，而是要等到系统内存不够时才会杀死。但是实际上ActivityManagerService并不能够管理内存，android的内存管理是Linux内核中的内存管理模块和OOM进程一起管理的。
 - Android进程在运行的时候,会通过Ams把每一个应用程序的oom_adj值告诉OOM进程,这个值的范围在-16-15,值越低说明越重要，越不会被杀死。当发生内存低的时候,Linux内核内存管理模块会通知OOm进程根据AMs提供的优先级强制退出值较高的进程。因此Ams在内存管理中只是扮演着一个提供进程oom_adj值的功能.真正的内存管理还是要调用OOM进程来完成，下面通过调用Activity的finish()方法来看看内存释放的情况。
 - 当我们手动调用finish()方法或者按back键时都是会关闭activity的，在调用finish的时候只是会先调用ams的finishActivityLocked方法将当前要关闭的acitiviy的finish状态设置为true，然后就会先去启动新的acitiviy，当新的acitiviy启动完成以后就会通过消息机制通知Ams，Ams在调用activityIdleInternalLocked方法来关闭之前的acitiviy。
+
+* ActivityManager的实现: IActiivtyManager接口类的前世今生，与aidl鸡生蛋与蛋生鸡的问题
+** 通过Parcelable实现的Intent
+- 首先我们可以来看看Intent与Activity的内部实现机制。作为Android应用层最强大最灵活的跨进程通信方式，Intent本质上就是一个Parcelable类，是通过Parcelable接口创建的，可在多个进程之间进行传输的消息：
+  
+[[./pic/activityService_20220831_073202.png]]
+- Intent实现了Parcelable接口，在传输一个Intent对象时，我们便可以使用Parcelable协议，但Intent里包含的信息写入到一个Parcel对象的buffer里，然后再传递给另一个进程处理。在Intent处理里，大部分信息都是使用的基本数据类型，比如mAction、mType、mPackage、mComponent都是String。对于比较特殊的Uri类型的mData，因为Uri这种类型的类也是复杂构造的类，于是Uri也被会实现Parcelable接口。而另一个复杂类型mExtras，因为我们在现实中可能通过mExtras传递任意复杂的数据对象，于是mExtras是一个继承自Bundle类的字典型数据结构。于是，我们得到的Intent的构成便是一个简单的Parcelable实现：
+  
+[[./pic/activityService_20220831_073216.png]]
+- Intent的源代码位于frameworks/base/core/java/android/content/Intent.java。我们会看到这一代码实现的Parcelable比我们范例里的要复杂。这跟实际情况相符，我们现实中使用的aidl接口实现与Parcelable接口实现，都会比我们例子里的要复杂，因为Parcelable接口与aidl接口只是解决跨进程传输问题，相当于是提供给跨进程访问的Public属性或方法，但我们每个对象除了有Public属性，还会有Private属性，只在当前进程内有效的，为当前对象提供一些辅助属性与操作方法，所以除了aidl与Parcelable，这些基于IBinder的对象还会有其他部分的实现。
+** Intent的发送 --- IActiivtyManager接口类
+- 在创建了Intent之后，大体上会有三种Intent的发送方式，startActivity()|startActivityForResult()来启动一个Activity，startService()|bindService()来启动一个Service，以及sendBroadcast()来发送广播消息。而在Android内部实现上，Intent的发送，大致都如下图所示：
+  
+[[./pic/activityService_20220831_073247.png]]
+- Intent的发送，分别有可能通过Context的startActivity()、startService()、sendBroadcast()三个出口进行发送。Context由Framework实现的ContextImpl来提供具体的发送功能，在ContextImpl类里会经过不同的特殊处理，比如在startActivity()之上会再套接一层execStartActivity()方法来驱动Instrumentation测试框架，但最终都会通过ActivityManagerNative类来访问到一个处理Intent请求的gDefault对象。正如我们看到的gDefault，实际上是Singleton<IActivityManager>生成的进程唯一的IActivityManager对象。于是，最终，所有的Intent，都会通过IActivityManager来走入Activity、Service与Broadcast三个不同的处理方法。
+- 如果是按照aidl的标准写法，此时我们理论上应该会在IAcitvityManager.java的同一级目录里找到一个IActivityManager.aidl文件。但很不幸，我们找不到这么一个文件，跟我们前面见到的aidl实现似乎很不一样。所有需要使用到AIDL实现的地方，总需要某种机制可以得到IBinder引用，而像ActivityManager，还有稍后会介绍的一个ServiceManager，都会是尝试去获取一个IBinder引用的，这时便有了个“鸡与蛋”的问题，为了简化逻辑，于是这一层便是绕开AIDL，直接实现IActivityManager接口类。
+- 仔细看一下的话，其实IActivityManager.java与通过aidl自动生成的文件很类似，基本构成都是一样：
+#+BEGIN_SRC csharp
+public interface IActivityManagerextends IInterface { // <<<<<<<<<< 1
+
+    public int startActivity(IApplicationThread caller,
+                             Intent intent, String resolvedType, Uri[] grantedUriPermissions,
+                             int grantedMode, IBinder resultTo, String resultWho,int requestCode,
+                             boolean onlyIfNeeded, boolean debug) throws RemoteException; // <<<<<<<<<< 2
+    public boolean finishActivity(IBinder token,int code, Intent data) throws RemoteException;          
+    public int broadcastIntent(IApplicationThread caller, Intent intent,
+                               String resolvedType, IIntentReceiver resultTo, int resultCode,
+                               String resultData, Bundle map, String requiredPermission,
+                               boolean serialized, boolean sticky) throws RemoteException;
+    public ComponentName startService(IApplicationThread caller, Intent service,
+                                      String resolvedType) throws RemoteException;
+    public int bindService(IApplicationThread caller, IBinder token,
+                           Intent service, String resolvedType,
+                           IServiceConnection connection, int flags)throws RemoteException;
+
+    String descriptor = "android.app.IActivityManager"; // <<<<<<<<<< 3
+
+    int START_RUNNING_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION;
+    int HANDLE_APPLICATION_ERROR_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+1;
+    int START_ACTIVITY_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+2;
+    int UNHANDLED_BACK_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+3;
+    int OPEN_CONTENT_URI_TRANSACTION = IBinder.FIRST_CALL_TRANSACTION+4; // <<<<<<<<<< 4
+}
+#+END_SRC 
+- 与根据aidl定义生成的接口类一样，IActivityManager也是基于IInterface生成的接口类，于是在这里我们只会定义接口方法，而不提供具体实现。
+- 对于每一个需要实现接口方法而言，因为每个方法都将是跨进程的调用，所以每个方法都必须抛出Remote Exception。
+- 作为使用Binder传输对象，都需要一个DESCRIPTOR作为传输时的标识，于是在Binder接收时会以这个Token作为验证传输是否有效的凭据。
+- 虽然不是自动生成，但在这一接口类也会定义一系列Binder命令，Binder命令都是从IBinder.FIRST_CALL_TRANSACTION开始，其他命令都会通过+1进行Binder命令的统一化。
+** IActiivtyManager的Proxy端实现
+- 但是，由于IActivityManager.java不是由aidl工具自动生成的，于是不会自生成的Stub和Proxy对象，这些对象都须由实现这一接口类的部分实现，提供发送与接收两端的Binder处理的接口方法。我们可以在源代码里行搜索，发现 *实现IActivityManager接口类的居然又回到ActivityManagerNative.java，是由这一文件里的ActivityManagerProxy类来实现Proxy端功能* 。这是Android的一个缺陷，有时代码会不必要地“回溯”。所以从代码角度分析，最后我们 *得到的会是Remote Service的Proxy端代码：*
+#+BEGIN_SRC csharp
+package android.app; // <<<<<<<<<< 1 代码是属于我们Android应用程序的进程空间内，可直接使用的对象
+import android.content.ComponentName;
+
+// 这个类具备了Binder通信能力: 
+public abstract class ActivityManagerNative extends Binder implements IActivityManager { // <<<<<<<<<< 2
+
+    // 检测ActivityManager对应的Service端是否已经就绪，并在就绪的情况下创建ActivityManagerProxy对象
+    static public IActivityManager asInterface(IBinder obj) { // <<<<<<<<<< 3
+        if (obj == null) 
+            return null;
+        IActivityManager in = (IActivityManager)obj.queryLocalInterface(descriptor);
+        if (in != null) 
+            return in;
+        return new ActivityManagerProxy(obj); // <<<<<<<<<< 4 只可能在客户端调用到
+    }
+
+    // 解决IActivityManager与aidl的鸡与蛋问题的办法
+    static public IActivityManager getDefault() { // <<<<<<<<<< 5 
+        if (gDefault != null) 
+            return gDefault;
+        IBinder b = ServiceManager.getService("activity");    
+        gDefault = asInterface(b); // <<<<<<<<<< 6
+        return gDefault;
+    }
+
+// 通过ActivityManager的testIsSystemReady远程调用来检测系统是否已经就绪
+    static boolean sSystemReady =false;
+    static public boolean isSystemReady() { // <<<<<<<<<< 7
+        if (!sSystemReady) 
+            sSystemReady = getDefault().testIsSystemReady();
+        return sSystemReady;
+    }
+
+    public ActivityManagerNative() { // 将descriptor通过attachInterface()写入Binder通信里
+        attachInterface(this, descriptor); // <<<<<<<<<< 8 将descriptor通过attachInterface()写入Binder通信里
+    }
+    public boolean onTransact(int code, Parcel data,Parcel reply,int flags)
+        throws RemoteException { // <<<<<<<<<< 9
+        switch (code) {
+        // ActivityManagerService所需要实现的就只剩下这里缺失的具体实现了
+        case START_ACTIVITY_TRANSACTION: // <<<<<<<<<< 10 解析完成后具体执行的方法
+            // ...
+        case START_ACTIVITY_AND_WAIT_TRANSACTION:
+            // ...
+        case START_ACTIVITY_WITH_CONFIG_TRANSACTION:
+            // ...
+        case START_ACTIVITY_INTENT_SENDER_TRANSACTION:
+            // ...  
+        case START_NEXT_MATCHING_ACTIVITY_TRANSACTION:
+            // ...
+        case FINISH_ACTIVITY_TRANSACTION:
+            // ...
+            // 在解析完所有在IActivityManager接口里定义的Binder命令之后，
+            // 会通过IoC(Inversion of Controll)模式，反向调用到Binder的onTransact()处理通用Binder命令。
+            return super.onTransact(code, data, reply, flags); // <<<<<<<<<< 11
+        }
+        public IBinder asBinder() { // <<<<<<<<<< 12 Service端的asBinder实现，返回一个IBinder引用
+            // IInterface接口实际只需要这一接口方法，这一接口方法的神奇之处在于，
+              // 在客户端调用里，asBinder()会返回针对Proxy端的IBinder引用，
+              // 在Service实现部分，则会返回Stub对象的IBinder引用。
+            return this;
+        }
+        private static IActivityManager gDefault;
+    }
+
+    class ActivityManagerProxy implements IActivityManager { // <<<<<<<<<< 13
+        public ActivityManagerProxy(IBinder remote) {
+            mRemote = remote;
+        }
+        public IBinder asBinder() { // <<<<<<<<<< 14 Proxy端提供的asBinder()，会返回Proxy的IBinder引用
+            return mRemote;    
+        }
+        // 作为Proxy对象，ActivityManagerProxy类里也必须提供IActivityManager接口里所有方法的实现
+        public int startActivity(IApplicationThread caller, Intent intent,
+                                 String resolvedType, Uri[] grantedUriPermissions, int grantedMode,
+                                 IBinder resultTo, String resultWho,
+                                 int requestCode, boolean onlyIfNeeded,
+                                 boolean debug) throws RemoteException { // <<<<<<<<<< 15
+            Parcel data = Parcel.obtain();
+            Parcel reply = Parcel.obtain();
+            data.writeInterfaceToken(IActivityManager.descriptor);
+            data.writeStrongBinder(caller != null ? caller.asBinder() :null);
+            intent.writeToParcel(data, 0);
+            data.writeString(resolvedType);
+            data.writeTypedArray(grantedUriPermissions, 0);
+            data.writeInt(grantedMode);
+            data.writeStrongBinder(resultTo);
+            data.writeString(resultWho);
+            data.writeInt(requestCode);
+            data.writeInt(onlyIfNeeded ? 1 : 0);
+            data.writeInt(debug ? 1 : 0);
+            mRemote.transact(START_ACTIVITY_TRANSACTION, data, reply, 0);
+            reply.readException();
+            int result = reply.readInt();
+            reply.recycle();
+            data.recycle();
+            return result;
+        }
+        public int broadcastIntent(IApplicationThread caller,
+                                   Intent intent, String resolvedType, IIntentReceiver resultTo,
+                                   int resultCode, String resultData, Bundle map,
+                                   String requiredPermission, boolean serialized,
+                                   boolean sticky) throws RemoteException           {
+            Parcel data = Parcel.obtain();
+            Parcel reply = Parcel.obtain();
+            data.writeInterfaceToken(IActivityManager.descriptor);
+            data.writeStrongBinder(caller != null ? caller.asBinder() :null);
+            intent.writeToParcel(data, 0);
+            data.writeString(resolvedType);
+            data.writeStrongBinder(resultTo != null ? resultTo.asBinder() :null);
+            data.writeInt(resultCode);
+            data.writeString(resultData);
+            data.writeBundle(map);
+            data.writeString(requiredPermission);
+            data.writeInt(serialized ? 1 : 0);
+            data.writeInt(sticky ? 1 : 0);
+            mRemote.transact(BROADCAST_INTENT_TRANSACTION, data, reply, 0);
+            reply.readException();
+            int res = reply.readInt();
+            reply.recycle();
+            data.recycle();
+            return res;
+        }
+        private IBinder mRemote;
+    }
+}
+#+END_SRC 
+- 从包名也可以看出，这部分代码是属于我们Android应用程序的进程空间内，可直接使用的对象，Intent会由应用程序通过ActivityManagerNative，将方法对应的Binder命令发送出去。
+- 这里通过一个ActivityManagerNative类来实现了IActivityManager接口，同时也会继承自Binder，于是 *这个类具备了Binder通信能力* 。但我们注意到这个类是一个抽象类，于是它对于接口方法会不会提供实现是没有保证的。而我们可以注意到是， *ActivityManagerNative这个对象被创建之后，是会提供给应用程序来使用的，于是最终这个类可能也只会需要Proxy端的功能* 。
+- 正如我们在 *aidl编程* 里看到过， *asInterface()是提供给Proxy端来创建一个Proxy 对象的接口方法* 。于是在这一方法的实现里，会 *先通过queryLocalInterface()查询一下Binder通信里是否存在以descriptor为标识的监听端，存在则说明已经有IActivityManager的Service端，然后就创建一个ActivityManagerProxy对象，准备后续的命令发送* 。但与aidl不同之处在于， *aidl可以通过bindService()来启动一个Service并与之建立binder通信，然后就可以在onServiceConnected()里取回这个Service的IBinder引用* 。但 *这种操作对于ActivityManager来说是不现实的，因为基于Intent通信的bindService()，本身也就是通过ActivityManager来发送的（鸡和蛋的问题）* 。于是，我们 *并不能直接通过aidl来完成IActivityManager实现，因为没法使用bindService()，这是IActivityManager接口与标准AIDL的唯一区别，IActivityManager是aidl机制的基础* 。
+- 这部分只可能在客户端调用到，于是当前面的检测条件都已通过之后，就会直接返回一个ActivityManagerProxy对象。
+- getDefault()，则是解决IActivityManager与aidl的鸡与蛋问题的办法。因为没法使用标准的bindService()，然后再通过IBinder.Stub.asInterface()取回Remote Service引用，所以Intent的发送便使用了比较特殊的方式，会先直接调用ActivityManagerNative对象的getDefault()，正如我们前面的执行流程里分析的那样。而在这个getDefault()方法里，会通过SystemManager.getService()取回来一个叫activity的service。这部分代码在Android 3.0之后，出于兼容Fragment的考虑，开始使用Singleton模式运行ActivityManagerProxy，于是会有我们图中的Singleton<ActivityManagerProxy>。
+- 通过asInterface()来检测ActivityManager对应的Service端是否已经就绪，并在就绪的情况下创建ActivityManagerProxy对象。从getDefault()成功之后，Intent则可以通过这个Proxy对象来与系统进程里执行ActivityManagerService来进行通信了。
+- isSystemReady()，通过ActivityManager的testIsSystemReady远程调用来检测系统是否已经就绪。
+- ActivityManagerNative的初始化方法，在这一方法里会将descriptor通过attachInterface()写入Binder通信里。虽然ActivityManagerNative类只是一个抽象类，但提供了这些通用方法，就可以让真正实现IActivityManager接口的ActivityManagerService代码尽可能只专注于Service端代码实现，也通过定义Proxy端与Service端的共用属性，像descriptor、IBinder命令等，来达到代码尽可能被重用的目的。
+- 从我们前面aidl实现部分可以看到，实际上onTransact()是完成IBinder命令的解析与转发功能的代码。在抽象类里提供onTransact()，则可以重用IBinder命令的定义。因为这里执行的都会是远程调用，所以也必须抛出Remote Service。
+- 通过onTransact()方法解析完成后具体执行的方法，在这里则不会提供实现。对于每一个不同的Binder命令，它都会从Binder里取出参数，然后再调用相应的方法实现（虽然现在还不存在），然后再把执行结果和异常信息写回Binder。于是ActivityManagerService所需要实现的就只剩下这里缺失的具体实现了。
+- 出于处理Binder通用性命令的需求，在解析完所有在IActivityManager接口里定义的Binder命令之后，会通过IoC模式，反向调用到Binder的onTransact()处理通用Binder命令。
+- Service端的asBinder实现，返回一个IBinder引用。我们的IInterface接口实际只需要这一接口方法，这一接口方法的神奇之处在于，在客户端调用里，asBinder()会返回针对Proxy端的IBinder引用，在Service实现部分，则会返回Stub对象的IBinder引用。到此为止，实际上ActivityManagerNative就已经把Binder接收部分的代码实现了，对于具体的IActivityManager接口的Service端实现，所剩的工作，也就只有具体的远程方法的实现。
+- 因为我们在客户端部分使用IActivityManager接口，已经可以通过ActivityManagerNative类的getDefault()方法来创建Proxy对象来完成，于是IActivityManager接口的Proxy实现，便与普通的aidl实现没有任何区别了。我们的ActivtityManagerProxy，也就会是一个实现IActivityManager接口的类，可以基于这个类来创建Proxy对象。
+- 对于同一IInterface，Proxy端提供的asBinder()，会返回Proxy的IBinder引用。
+- 作为Proxy对象，ActivityManagerProxy类里也必须提供IActivityManager接口里所有方法的实现。不过，这里并不会有真正的调用实现，而只是将参数通过Parcel进行序列化操作，再把需要执行的Binder命令与写入Parcel的参数，通过Binder发送出去。然后执行将会被Binder阻塞，直接远程调用返回。在继续执行时，这时就取出执行结果与异常信息，返回给调用这一方法的地方。所有的命令在发送时都会使用IActivityManager.descriptor作为传输时的凭据，所以也会保证这些命令会被正确地发送到IActivityManager的Service实现。因为是访问远程方法调用，于是会同样将在Binder里读到的Remote Exception上抛，以被合适的代码捕捉处理。
+- 所以，从代码层面来看，除了因为bindService()传输上的“鸡与蛋”问题，我们的ActivityManager本身与普通的aidl编程没有本质区别，只是通过一层getDefault()方法来绕开bindService()的使用。但是因为IActivityManager接口本身需要支持bindService()机制，所以对实现IActivityManager的Service端的代码来说，就没有Service的生存周期这回事了。
+- 基于这样分析，最后，我们上面Proxy端的执行逻辑，实际上在内部实现是这样进行交互的：
+  
+[[./pic/activityService_20220831_080158.png]]
+- 通过ActivityManagerNative的getDefault()方法，我们最终得到的gDefault会是一个ActivityManagerProxy对象，然后我们所有的调用，会通过ActivityManagerProxy里对于各个方法的封装，再将具体的命令通过Binder发送到IActivityManager的Service实现部分。
+- 于是对于IActivityManager这一接口类，剩下的工作便是看看它是如何被响应处理的。
+** IActiivtyManager的Stub端实现
+- 对于IActivityManager的Service的实现部分，因为整个Stub接口都已经在抽象类ActivityManagerNative里完成了，所以也跟aidl会有不一样之处，我们不需要创建一个Stub对象，然后再在这个Stub对象里提供具体的方法实现，而是只需要根据onTransact()解析出来的方法提供具体实现。一般的Remote Service，Stub对象是通过onBind()回调方法触发创建的，会返回一个IBinder的引用到客户端。对于IActivityManager来说没有这样的触发点，它反倒是会远程调用到这一回调方法，所以这里并不需要实现这部分代码，而是保持循环，提供这种onBind()触发能力。
+- IActivityManager的Stub端，是会运行在SystemServer进程空间里，由frameworks/base/services/java/com/android/server/am/ActivityManagerService.java实现的。从前面的代码可以看出，其实ActivityManagerNative类已经将Binder接收端的代码封装好了，此时，我们所需要的，只是写一个ActivityManagerNative的实现类（因为ActivityManagerNative是一个抽象类）。
+- 我们可以再来看看ActivityManagerService.java的实现：
+#+BEGIN_SRC csharp
+// ActivityManagerNative里带抽象标记的方法，都需要在ActivityManagerService里实现
+public finalclass ActivityManagerService extends ActivityManagerNative
+    implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback { // <<<<<<<<<< 1
+
+    final Handler mHandler= newHandler() { // <<<<<<<<<< 2
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+            case SHOW_ERROR_MSG: { 
+                HashMap data = (HashMap)msg.obj;
+                synchronized(ActivityManagerService.this) {
+                    ProcessRecord proc =(ProcessRecord)data.get("app");
+                    if (proc != null &&proc.crashDialog != null) {
+                        Slog.e(TAG, "App already has crash dialog: " + proc);
+                        return;
+                    }
+                    AppErrorResult res =(AppErrorResult) data.get("result");
+                    if (mShowDialogs &&!mSleeping && !mShuttingDown) {
+                        Dialog d = newAppErrorDialog(mContext, res, proc);
+                        d.show();
+                        proc.crashDialog = d;
+                    } else {
+                        res.set(0);
+                    }
+                }               
+                ensureBootCompleted();
+            } break;
+            }
+        };
+    }
+    @Override
+        public boolean onTransact(int code, Parcel data,Parcel reply,int flags) throws RemoteException { // <<<<<<<<<< 3
+        if (code == SYSPROPS_TRANSACTION) {// ...}
+            try {
+                return super.onTransact(code, data, reply, flags);
+            } catch (RuntimeException e) {
+                if (!(e instanceof SecurityException)) 
+                    Slog.e(TAG, "Activity Manager Crash", e);
+                throw e;
+            }
+        }
+    }
+
+    // 涉及安全的功能，最需要在Intent分发时便被处理
+    // 系统其他部分，则可以统一通过对IPermissionController远程接口的访问，得到权限验证功能。
+    static class PermissionController extends IPermissionController.Stub { // <<<<<<<<<< 4
+        ActivityManagerService mActivityManagerService;
+        PermissionController(ActivityManagerService activityManagerService) {
+            mActivityManagerService =activityManagerService;
+        }
+        public boolean checkPermission(String permission,int pid, int uid) {
+            return mActivityManagerService.checkPermission(permission, pid, uid)
+                == PackageManager.PERMISSION_GRANTED;
+        }
+    }
+
+    // 提供Service的“监护”功能:
+    // 当某一个Service处于Bounded生命周期内，又因为出错退出，或是由于系统资源不够被回收时，
+    // ServiceRestarter对象则会将Service进行重启
+    private class ServiceRestarter implements Runnable { // <<<<<<<<<< 5
+        private ServiceRecord mService;
+        void setService(ServiceRecord service) {
+            mService = service;
+        }
+        public void run() {
+            synchronized(ActivityManagerService.this) {
+                performServiceRestartLocked(mService);
+            }
+        }
+    }
+
+    public finalint startActivity(IApplicationThread caller, // <<<<<<<<<< 6
+                                  Intent intent, String resolvedType, IBinder resultTo,
+                                  String resultWho, int requestCode,int startFlags,      
+                                  StringprofileFile, ParcelFileDescriptor profileFd, Bundle options) {
+        enforceNotIsolatedCaller("startActivity");
+        int userId = 0;
+        if (intent.getCategories() != null && intent.getCategories().contains(Intent.CATEGORY_HOME)) {
+            userId = mCurrentUserId;
+        } else {
+            if (Binder.getCallingUid() < Process.FIRST_APPLICATION_UID) {
+                userId = 0;
+            } else userId =Binder.getOrigCallingUser();
+        }
+        return mMainStack.startActivityMayWait(caller, -1, intent, resolvedType,
+                                               resultTo, resultWho, requestCode, startFlags, profileFile, profileFd,
+                                               null, null, options, userId);
+    }
+    
+    public int bindService(IApplicationThread caller, IBinder token, // <<<<<<<<<< 7
+                           Intent service, String resolvedType,
+                           IServiceConnection connection, int flags,int userId) {
+        enforceNotIsolatedCaller("bindService");
+        if (service != null && service.hasFileDescriptors() == true) 
+            throw new IllegalArgumentException("File descriptors passed in Intent");
+        checkValidCaller(Binder.getCallingUid(), userId);
+ 
+        synchronized(this) {
+            final ProcessRecord callerApp = getRecordForAppLocked(caller);
+            if (callerApp == null) {
+                throw new SecurityException(
+                    "Unable to find app for caller " + caller
+                    + " (pid=" +Binder.getCallingPid()
+                    + ") when binding service " + service);
+            }
+ 
+            ActivityRecord activity = null;
+            if (token != null) {
+                activity = mMainStack.isInStackLocked(token);
+                if (activity == null) {
+                    Slog.w(TAG, "Binding with unknown activity: " + token);
+                    return 0;
+                }
+            }
+ 
+            PendingIntent clientIntent = null;
+            int clientLabel = 0;
+            if (callerApp.info.uid == Process.SYSTEM_UID) {
+                try {
+                    clientIntent = (PendingIntent)service.getParcelableExtra(Intent.EXTRA_CLIENT_INTENT);
+                } catch (RuntimeException e) {}
+                if (clientIntent != null) {
+                    clientLabel = service.getIntExtra(Intent.EXTRA_CLIENT_LABEL, 0);
+                    if (clientLabel != 0) 
+                        service =service.cloneFilter();
+                }
+            }
+           
+            ServiceLookupResult res = retrieveServiceLocked(
+                service,resolvedType, Binder.getCallingPid(),Binder.getCallingUid(), userId);
+            if (res == null) return 0;
+            if (res.record == null) return -1;
+            if (isSingleton(res.record.processName, res.record.appInfo)) {
+                userId = 0;
+                res = retrieveServiceLocked(
+                    service, resolvedType, Binder.getCallingPid(),
+                    Binder.getCallingUid(),0);
+            }
+            ServiceRecord s = res.record;
+            final long origId = Binder.clearCallingIdentity();
+ 
+            if (unscheduleServiceRestartLocked(s)) 
+                if (DEBUG_SERVICE) Slog.v(TAG,"BIND SERVICE WHILE RESTART PENDING:" + s);
+ 
+            AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);
+            ConnectionRecord c = new ConnectionRecord(
+                b, activity, connection, flags,clientLabel, clientIntent);
+ 
+            IBinder binder = connection.asBinder();
+            ArrayList<ConnectionRecord> clist = s.connections.get(binder);
+            if (clist == null) {
+                clist = new ArrayList<ConnectionRecord>();
+                s.connections.put(binder,clist);
+            }
+            clist.add(c);
+            b.connections.add(c);
+            if (activity != null) {
+                if (activity.connections == null) 
+                    activity.connections = new HashSet<ConnectionRecord>();
+                activity.connections.add(c);
+            }
+            b.client.connections.add(c);
+            if ((c.flags&Context.BIND_ABOVE_CLIENT) != 0) 
+                b.client.hasAboveClient = true;
+            clist = mServiceConnections.get(binder);
+            if (clist == null) {
+                clist = newArrayList<ConnectionRecord>();
+                mServiceConnections.put(binder,clist);
+            }
+            clist.add(c);
+ 
+            if ((flags&Context.BIND_AUTO_CREATE) != 0) {
+                s.lastActivity =SystemClock.uptimeMillis();
+                if (!bringUpServiceLocked(s,service.getFlags(),false)) 
+                    return 0;
+            }
+            if (s.app != null) 
+                // This could have made the service more important.
+                updateOomAdjLocked(s.app);
+ 
+            if (DEBUG_SERVICE) Slog.v(TAG, "Bind" + s + "with " + b
+                                      + ": received=" +b.intent.received
+                                      + " apps=" +b.intent.apps.size()
+                                      + " doRebind=" +b.intent.doRebind);
+             if (s.app != null && b.intent.received) {
+                try {
+                    c.conn.connected(s.name,b.intent.binder);
+                } catch (Exception e) {
+                    Slog.w(TAG, "Failure sending service " + s.shortName
+                           + " to connection " + c.conn.asBinder()
+                           + " (in " +c.binding.client.processName +")", e);
+                }
+                if (b.intent.apps.size() ==1 &&b.intent.doRebind) 
+                    requestServiceBindingLocked(s, b.intent, true);
+            } else if (!b.intent.requested) 
+                requestServiceBindingLocked(s,b.intent, false);
+            Binder.restoreCallingIdentity(origId);
+        }
+        return 1;
+    }
+ 
+    public final int broadcastIntent(IApplicationThread caller, // <<<<<<<<<< 8
+                                     Intent intent, String resolvedType, IIntentReceiver resultTo,
+                                     int resultCode, String resultData, Bundle map,
+                                     String requiredPermission, boolean serialized, boolean sticky, int userId) {
+        enforceNotIsolatedCaller("broadcastIntent");
+        synchronized(this) {
+            intent = verifyBroadcastLocked(intent);
+            final ProcessRecord callerApp = getRecordForAppLocked(caller);
+            final int callingPid = Binder.getCallingPid();
+            final int callingUid = Binder.getCallingUid();
+            final long origId = Binder.clearCallingIdentity();
+// <<<<<<<<<<<<<<<<<<<< 通过内部实现的broadcastIntentLocked()来进行互斥性的消息发送
+            int res = broadcastIntentLocked(callerApp, 
+                                            callerApp != null ? callerApp.info.packageName :null,
+                                            intent, resolvedType,resultTo,
+                                            resultCode, resultData,map, requiredPermission, serialized, sticky,
+                                            callingPid, callingUid,userId);
+            Binder.restoreCallingIdentity(origId);
+            return res;
+        }
+    }
+    
+    private final int computeOomAdjLocked( // 计算OOM_ADJ
+        ProcessRecord app, int hiddenAdj,
+        ProcessRecord TOP_APP, boolean recursed, boolean doingAll) { // <<<<<<<<<< 9
+        return app.curRawAdj;
+    }
+ 
+    final void performAppGcLocked(ProcessRecord app) { // <<<<<<<<<< 10
+        try {
+            app.lastRequestedGc = SystemClock.uptimeMillis();
+            if (app.thread != null) 
+                if (app.reportLowMemory) {
+                    app.reportLowMemory = false;
+                    app.thread.scheduleLowMemory();
+                } else app.thread.processInBackground();
+        } catch (Exception e) {} // whatever. 
+    }
+}
+#+END_SRC 
+- ActivityManagerService最终会是一个实现ActivityManagerNative接口方法的类， *ActivityManagerNative里带抽象标记的方法，都需要在ActivityManagerService里实现* 。
+  - 虽然 *基本的Binder接收端处理也还是在ActivityManagerNative类里实现的* ，但由于 *直接使用ActivityManagerNative类的地方，并不能将这一抽象类实例化* ，
+  - 于是在 *客户端实际上只能得到ActivityManagerProxy* ，
+  - 而 *服务端则可以通过ActivityManagerService得到具体的IActivityManager接口的Service实例* 。
+  - 这样的 *代码实现* 则 *使构建在Binder收发两端的代码逻辑都被统一起来* ， *同时也可以在运行时通过不同的实例化能力被拆分开。*
+  - 由于 *ActivityManager还需要提供其他部分的交互功能* ，于是不光是实现 *ActivityManagerNative* 抽象类，同时还会实现 *Watchdog.Monitor*,和 *BatteryStatsImpl.BatteryCallback* 这两个接口对象。
+- Handler对象。在Android世界里，Handler对象是多线程处理上的一种异常灵活的机制，Handler会与创建它的线程，以及这一线程所附带的MessageQueue绑定。而拥有Handler对象的线程，则具备从MessageQueue中取出消息进行处理的能力，如果Message本身是一个Runnable对象，则可以在当前线程内执行某种操作。这样的机制应用程序的多线程编程时多用于后台线程回调到UI主线程里，但在Android系统里，也会大量使用这种机制，实现消息管理上的灵活处理。Handler通过postMessage()方法将Message插入MessageQueue，而通过handleMessage()将消息取出并处理，而在一个Handler对象的实现里，一般只需要实现handleMessage()方法。
+- 覆盖onTransact()方法。如我们前面所述的IoC模式在设计上的妙用，于是我们每次继承某个基类时，我们都有可能通过覆盖方法+反向调用的方式实现对基类的原有方法的动态拓展。在Android系统里，这一技巧被反复使用，我们即可以在父类方法之后添加一些新的处理，也可以将新加的处理插到父类方法处理之前，唯一做不到的是在父类方法执行中插入新的处理。当然，基于Binder的收发处理上有其特殊性，在ActivityManagerService里拓展的onTransact()处理，并没有公布出来，客户端的transact()并不会分发这样的消息，于是我们也可以认为这一种类似于private限定的RPC，可以通过特殊路径来发送这样拓展出来的Message，供内部使用。
+- 内部实现的IPermissionController的Stub对象。IPermissionController实际上只需要一个接口方法，checkPermission()，这一部分涉及安全的功能，最需要在Intent分发时便被处理，于是我们就在ActivityManagerService里实现。而系统其他部分，则可以统一通过对IPermissionController远程接口的访问，得到权限验证功能。
+- ServiceRestarter对象，则提供Service的“监护”功能，当某一个Service处于Bounded生命周期内，又因为出错退出，或是由于系统资源不够被回收时，ServiceRestarter对象则会将Service进行重启。
+- startActivity()。应用程序里一般会通过Context.startActivity()将Intent发送出来，但实际上会通过IActivityManager这一接口，将消息发送到ActivityManagerNative。在ActivityManagerNative的onTransact()方法里会再调用一个它自己并没有实现，而在继承它的ActivityManagerService里实现的startActivity()，也就是我们这里看到的这一方法，通过ActivityStack来找到合适的Activity来响应Intent消息的请求。
+- bindService ()。因为我们前面以RemoteService为例，于是我们这里看看bindService()的实现（Remote Service必须以BoundedService为其生存期）。与Activity不同，Service不需要栈式管理，但需要更严格的并发控制，于是可以看到在整个bindService()实现里，都使用了synchronized限制符用于线程并发同步。在整个Service引用的获取过程里，差不多都是检测当前环境里是否已经存在所需要的Service，如果没有，则尝试启动它。
+- broadcastIntent()。与bindService()类似，既然我们可以使用Intent来启动合适的Service，同理我们也可以使用Intent来驱动Broadcast Receiver。在广播消息发送时，会通过内部实现的broadcastIntentLocked()来进行互斥性的消息发送。而在broadcastIntentLocked()里，则会对系统发送的Intent进行一系列特殊的操作，然后针对 sticky方式发送的Intent进行专门的处理，最后便会调用PackageManager来取得系统里会接收这一Intent的Receiver，然后再将消息发送到这些进程的MessageQueue。
+- 计算OOM_ADJ。在应用程序设计时，我们看到，Android应用程序世界里有一种永不退出的机制，而会在系统内存不够时通过一个OOM_ADJ参数来杀死合适的进程以回收内存，这里便会计算并选择合理的进程。在本质上说，进程本身会通过其是否是处于前台交互，是否与前台交互相关等来确定其优先级，但在执行过程中，还是需要根据其活跃程序来判断是否该杀死该进程，如果这一进程使用频度很高，则杀死该进程则过于浪费系统资源。于是在这一computeOomAdjLocked()方法里，会根据Activity等执行实体在调度上的时间信息来动态调整OOM的相关信息。
+- 针对进程进行垃圾回收。与标准Java虚拟机不一样，Android的DalvikVM是以进程为单位来构建虚拟机执行环境的，于是系统里不再有一个统一的Java虚拟机环境，不能进行全局的垃圾回收。于是，在这个performAppGcLocked()方法里，会尝试针对某个进程回收内存。
+** 总结
+- ActivityManagerService.java实现的代码很长，而且并非独立工作，实际上它只是frameworks/base/services/java/com/android/server/am这个包的调用入口。 *因为IActivityManager这个接口类可以说是整个Android系统的“调度器”，涉及消息分发、进程管理* 。虽然 *这样的把这样大量功能揉合到一起的设计思路并不是很优雅，也不够低耦合* ，但 *从整个系统构建来看，这样的设计便很好地贯彻了简单高效的设计思路。* 
+  - 从编程角度来看，事实上， *ActivityManagerService类只不过是ActivityManagerNative接口的具体实现* ，并不难理解。
+  - 从 *应用程序* 角度，它会 *直接通过进程内预置的ActivityManagerProxy对象（通过ContextImpl对象来找到）向IActivityManager的Binder接收端发命令* .
+  - 如果我们系统里 *有任何一个进程或是线程创建一个ActivityManagerService对象，则所有基于IActivityManager接口进行RPC调用的地方，都将使用这一ActivityManagerService对象响应其执行请求* 。从前面对于Android的进程模型的分析我们也可以看到，完成这样功能的进程会是一个叫 *SystemServer的系统进程* 。于是，所有的分析得到的结果，便是如下这样的执行模型：
+    
+[[./pic/activityService_20220831_083935.png]]
+- *当系统里拥有一个ActivityManagerService的实例，则任何系统组成部分、或是应用程序，都可以使用bindService()取回合适的Binder，然后再通过这一Binder通信管道完成后续的通讯* 。在ActivityManagerService实例存在之后，我们后续的操作就可以都通过aidl的方式来进行了。这种 *使用bindService()的方式，我们在系统里偶尔用到，但并非最常用的一种。*
+- 为什么？因为 *这种方式很低效，每次调用前需要通过bindService()来驱动Service的有效bounded生命周期* 。这样的应用情境也存在，比如蓝牙、VPN等功能，系统只是偶尔要使用，使用时通过bindService()来初始化Service的上下文环境，不再用时便可以通过unbindService()取消对Service的引用，从而可以可以按需分配地使用系统提供的各种功能。但对于系统里的绝大部分功能来说，它的生存周期是一直存在的，在系统运行过程里，需要一直给不同执行部分提供其功能。这样的Service不需要生命周期的控制，在系统运行起来后就会一直在系统内存在，全局提供系统内功能的共享。这样的Service，我们一般可以称之为SystemService，它们不再使用bindService()来驱动，而直接通过一个叫ServiceManager的功能部件来实现。
