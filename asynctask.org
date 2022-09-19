@@ -654,107 +654,6 @@ public class WorkThread extends Thread {
 - 只有一个线程处理，效率较低。
 - 线程优先级默认优先级为 THREAD_PRIORITY_DEFAULT，容易和 UI 线程抢占资源。
 
-* AsyncTask
-- 较为轻量级的异步类，封装了 FutureTask 的线程池、ArrayDeque 和 Handler 进行调度。AsyncTask 主要用于 _后台与界面持续交互_
-- 我们来看看 AsyncTask 这个抽象类的定义，当我们定义一个类来继承 AsyncTask 这个类的时候，我们需要为其指定3个泛型参数：
-#+BEGIN_SRC java
-AsyncTask　<Params, Progress, Result>
-#+END_SRC
-  - Params: 这个泛型指定的是我们传递给异步任务执行时的参数的类型。
-  - Progress: 这个泛型指定的是我们的异步任务在执行的时候将执行的进度返回给UI线程的参数的类型。
-  - Result: 这个泛型指定的异步任务执行完后返回给UI线程的结果的类型。
-- 我们在定义一个类继承 AsyncTask 类的时候，必须要指定好这三个泛型的类型，如果都不指定的话，则都将其写成 void。
-- 我们来看一个官方给的例子：
-#+BEGIN_SRC java
-private class DownloadFilesTask extends AsyncTask<URL, Integer, Long> {
-     protected Long doInBackground(URL... urls) {
-         int count = urls.length;
-         long totalSize = 0;
-         for (int i = 0; i < count; i++) {
-             totalSize += Downloader.downloadFile(urls[i]);
-             publishProgress((int) ((i / (float) count) * 100));
-             // Escape early if cancel() is called
-             if (isCancelled()) break;
-         }
-         return totalSize;
-     }
-     protected void onProgressUpdate(Integer... progress) {
-         setProgressPercent(progress[0]);
-     }
-     protected void onPostExecute(Long result) {
-         showDialog("Downloaded " + result + " bytes");
-     }
-}
-#+END_SRC
-- 使用时只需要集成 AsyncTask，创建对象并调用 execute 执行即可：
-#+BEGIN_SRC java
-new DownloadFilesTask().execute(url1, url2, url3);
-#+END_SRC
-- doInBackground(Params…) 方法里执行耗时逻辑，然后在 onPostExecute(Result) 中将结果更新回UI组件
-- AsyncTask 的几个主要方法中，doInBackground 方法运行在子线程，execute、onPreExecute、onProgressUpdate、onPostExecute 这几个方法都是在 UI 线程运行的。
-** 使用 AsyncTask 的注意事项
-- AsyncTask 的实例必须在 UI Thread 中创建。
-- 只能在 UI 线程中调用 AsyncTask 的 execute 方法。
-- AsyncTask 被重写的四个方法是系统自动调用的,不应手动调用。
-- 每个AsyncTask 只能被执行一次，多次执行会引发异常。
-- AsyncTask 的四个方法，只有 doInBackground 方法是运行在其他线程中,其他三个方法都运行在 UI 线程中，也就说其他三个方法都可以进行 UI 的更新操作。
-- AsyncTask 默认是串行执行，如果需要并行执行，使用接口 executeOnExecutor 方法。
-** 补充总结
-- AsyncTask是android提供的轻量级的异步类,可以直接继承AsyncTask，在类中实现异步操作，并提供接口反馈当前异步执行的程度(可以通过接口实现UI进度更新)，最后反馈执行的结果给UI主线程。
-- AsyncTask通过一个阻塞队列BlockingQuery<Runnable>存储待执行的任务，利用静态线程池THREAD_POOL_EXECUTOR提供一定数量的线程，默认128个。在Android 3.0以前，默认采取的是并行任务执行器，3.0以后改成了默认（by default,如果想要并行执行，需要设置配置）采用串行任务执行器，通过静态串行任务执行器SERIAL_EXECUTOR控制任务串行执行，循环取出任务交给THREAD_POOL_EXECUTOR中的线程执行，执行完一个，再执行下一个。( _这里写的内容需要再校对一下_ )
-- 用法举例：
-#+BEGIN_SRC java
-class DownloadTask extends AsyncTask<Integer, Integer, String>{  
-    // AsyncTask<Params, Progress, Result>
-    //后面尖括号内分别是参数（例子里是线程休息时间），进度(publishProgress用到)，返回值类型
-    @Override
-    protected void onPreExecute() {
-        //第一个执行方法
-        super.onPreExecute();
-    }
-    @Override
-    protected String doInBackground(Integer... params) {
-        //第二个执行方法,onPreExecute()执行完后执行
-        for(int i=0;i<=100;i++){
-            publishProgress(i);
-            try {
-                Thread.sleep(params[0]);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-        return "执行完毕";
-    }
-    @Override
-    protected void onProgressUpdate(Integer... progress) {
-        //这个函数在doInBackground调用publishProgress时触发，虽然调用时只有一个参数
-        //但是这里取到的是一个数组,所以要用progesss[0]来取值
-        //第n个参数就用progress[n]来取值
-        tv.setText(progress[0]+"%");
-        super.onProgressUpdate(progress);
-    }
-    @Override
-    protected void onPostExecute(String result) {
-        //doInBackground返回时触发，换句话说，就是doInBackground执行完后触发
-        //这里的result就是上面doInBackground执行后的返回值，所以这里是"执行完毕"
-        setTitle(result);
-        super.onPostExecute(result);
-    }
-}
-#+END_SRC 
-** 优点：
-- 结构清晰，使用简单，适合后台任务的交互。
-- 异步线程的优先级已经被默认设置成了：THREAD_PRIORITY_BACKGROUND，不会与 UI 线程抢占资源。
-  - 1. 处理单个异步任务简单，可以获取到异步任务的进度
-  - 2. 可以通过cancel方法取消还没执行完的AsyncTask
-  - 3. 处理多个异步任务代码显得较多
-** 缺点：
-- 结构略复杂，代码较多。
-- 每个 AsyncTask 只能被执行一次，多次调用会发生异常。
-- AsyncTask 在整个 Android 系统中维护一个线程池，有可能被其他进程的任务抢占而降低效率。
-- 适用范围
-  - 1. 单个异步任务的处理
-
 * ThreadPoolExecutor
 - ThreadPoolExecutor提供了一组线程池，可以管理多个线程并行执行。这样一方面减少了每个并行任务独自建立线程的开销，另一方面可以管理多个并发线程的公共资源，从而提高了多线程的效率。所以ThreadPoolExecutor比较适合一组任务的执行。Executors利用工厂模式对ThreadPoolExecutor进行了封装，使用起来更加方便。
 - Executors提供了四种创建ExecutorService的方法，他们的使用场景如下：
@@ -771,6 +670,176 @@ class DownloadTask extends AsyncTask<Integer, Integer, String>{
 #+END_SRC
 - 适用范围
   - 批处理任务
+** HandlerThread构造函数和继承关系：
+   #+BEGIN_SRC csharp
+public class HandlerThread extends Thread {
+    int mPriority;
+    int mTid = -1;
+    Looper mLooper;
+    private @Nullable Handler mHandler;
+
+    public HandlerThread(String name) { // 构造函数1
+        super(name);
+        mPriority = Process.THREAD_PRIORITY_DEFAULT;
+    }
+    
+    /**
+     * Constructs a HandlerThread.
+     * @param name
+     * @param priority The priority to run the thread at. The value supplied must be from 
+     * {@link android.os.Process} and not from java.lang.Thread.
+     */
+    public HandlerThread(String name, int priority) { // 构造函数2
+        super(name);
+        mPriority = priority;
+    }
+}
+   #+END_SRC 
+- 逻辑解析：
+  - HandlerThread继承自Thread类，所以它本质上是一个线程类，可以实现线程相关的操作。
+  - 我们来看HandlerThread的构造函数，这里有2个重载版本。
+  - 第一个构造函数接收一个name参数，直接调用了super方法，为该线程命令，且线程优先级为Process.THREAD_PRIORITY_DEFAULT。
+  - 第二个构造函数接收2个参数，可实现线程命名，和设置线程的优先级。
+** HandlerThread的run方法：
+#+BEGIN_SRC csharp
+@Override
+public void run() {
+    mTid = Process.myTid();
+    Looper.prepare();
+    synchronized (this) {
+        mLooper = Looper.myLooper();
+        notifyAll();
+    }
+    Process.setThreadPriority(mPriority);
+    onLooperPrepared();
+    Looper.loop();
+    mTid = -1;
+}
+#+END_SRC 
+- 逻辑解析：
+  - 我们在创建了HandlerThread实例之后，调用start()方法执行，ART虚拟机会帮我们创建一个线程对象，然后在子线程中执行run方法。
+  - run方法中，执行了Looper.prepare()方法，创建了一个Looper对象并绑定到该线程。
+  - 然后在同步块中，执行了mLooper的赋值，调用notifyAll通知Looper已创建完成。
+  - 调用Process.setThreadPriority方法设置线程优先级。
+  - 调用空方法onLooperPrepared，通常用于回调使用。
+  - 最后调用Looper.loop()方法，启动该线程的消息循环。
+** getLooper方法：
+#+BEGIN_SRC csharp
+public Looper getLooper() {
+    if (!isAlive()) {//判断线程是否存活
+        return null;
+    }
+
+    // If the thread has been started, wait until the looper has been created.
+    synchronized (this) {
+        //如果线程存活，但mLooper没有创建完成，则等待
+        while (isAlive() && mLooper == null) {
+            try {
+                wait();
+            } catch (InterruptedException e) {
+            }
+        }
+    }
+    return mLooper;//返回当前线程的Looper对象
+}
+#+END_SRC 
+- 逻辑解析：
+- getLooper方法可以返回当前线程绑定的Looper对象，我们可以使用该对象作为参数，创建一个该线程的Handler对象，用于线程交互。
+- getLooper方法首先会判断当前线程是否存活，如果存活，则继续。
+- 如果线程存活，但Looper对象还没有创建完成，则调用wait方法进行等待（Looper创建完成后，会在HandlerThread的run方法中，调用notifyAll()通知，以继续执行当前逻辑）。
+- 最后返回Looper对象即可。
+** HandlerThread的getThreadHandler方法
+   #+BEGIN_SRC csharp
+    /**
+     * @return a shared {@link Handler} associated with this thread
+     * @hide
+     */
+    public Handler getThreadHandler() {
+        if (mHandler == null) {
+            mHandler = new Handler(getLooper());
+        }
+        return mHandler;
+    }
+   #+END_SRC 
+- 如果我们不想自己创建Handler对象，也可以使用HandlerThread为他们提供的Handler对象。
+- getThreadHandler方法返回一个当前线程的Handler对象。
+- 它是一个隐藏方法，我们在应用中不可调用。
+** HandlerThread的退出
+   #+BEGIN_SRC csharp
+    //立即执行退出
+    public boolean quit() {
+        Looper looper = getLooper();
+        if (looper != null) {
+            looper.quit();
+            return true;
+        }
+        return false;
+    }
+    //处理完成已到执行时间的消息后退出。
+    public boolean quitSafely() {
+        Looper looper = getLooper();
+        if (looper != null) {
+            looper.quitSafely();
+            return true;
+        }
+        return false;
+    }
+   #+END_SRC 
+- 当不需要HandlerThread时，需要调用quit方法或quitSafely方法结束线程管理的Looper消息循环。
+** HandlerThread实战
+- HandlerThread的实现其实并不复杂，我们以一个简单Demo来看它的使用。
+*** Demo
+    #+BEGIN_SRC csharp
+public class HandlerThreadTest {
+    private final static String TAG = "budaye";
+    public static final int HT_MSG = 1;
+    private HandlerThread mHandlerThread = new HandlerThread("myHandlerThread", Process.THREAD_PRIORITY_BACKGROUND);
+    private Handler mHandler = null;
+
+    public void startHandlerthread(){
+        mHandlerThread.start();
+        if (mHandler == null){
+            mHandler = new Handler(mHandlerThread.getLooper()){
+                @Override
+                public void handleMessage(@NonNull Message msg) {
+                    super.handleMessage(msg);
+                    switch (msg.what){
+                        case HT_MSG:
+                            Log.d(TAG, "当前线程：" + Thread.currentThread());
+                            Log.d(TAG, "收到其他线程发送过来的消息了");
+                            break;
+                    }
+                }
+            };
+        }
+    }
+    public void sendMessage() {
+        Log.d(TAG, "当前线程：" + Thread.currentThread());
+        Message msg = Message.obtain();
+        msg.what = HT_MSG;
+        mHandler.sendMessage(msg);
+    }
+}
+    #+END_SRC 
+- 逻辑解析：
+  - 在HandlerThreadTest里，创建了一个HandlerThread对象。
+  - 调用startHandlerthread方法，开始了HandlerThread对象的线程消息循环，并且创建了一个mHandler对象，用于处理其他线程发送过来的消息。
+  - 我们可以在UI线程中调用sendMessage方法来发送给HandlerThread线程一个消息，并在mHandler对象的handleMessage方法中进行处理。
+- Demo日志输出
+#+BEGIN_SRC text
+25208-25208/com.example.simpledemo D/budaye: 当前线程：Thread[main,5,main]
+25208-25284/com.example.simpledemo D/budaye: 当前线程：Thread[myHandlerThread,5,main]
+25208-25284/com.example.simpledemo D/budaye: 收到其他线程发送过来的消息了
+#+END_SRC 
+- 我们分别在2个线程中输出了日志。
+** 最佳实践&总结
+- HandlerThread是一个异步处理的工具类，它可以帮助我们很轻松的实现异步线程处理。
+- HandlerThread继承自Thread类，它的本质是一个线程类。
+- HandlerThread实现原理非常简单，它利用了Handler原理，在内部了一个Looper循环，并绑定到当前线程中。
+- 我们使用创建一个Handler对象，绑定到HandlerTHread对象所对应的Looper，并处理其他线程发送过来的消息。
+- HandlerThread在构造方法中可以设置线程优先级，默认使用Process.THREAD_PRIORITY_DEFAULT作为默认优先级。
+- 我们在应用过程中，不要大量使用HandlerThread来执行异步任务，这样会造成线程资源的浪费，大量的异步任务，建议使用线程池来进行操作。
+- HandlerThread的线程优先级设定一定要注意，如果任务优先级不高，则应该设置成后台任务优先级，避免和UI线程抢占系统资源。
 
 *  IntentService
 - IntentService 继承自 Service 类，用于启动一个异步服务任务，它的内部是通过 HandlerThread 来实现异步处理任务的。
@@ -1415,3 +1484,335 @@ task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, "westworld");
 #+END_SRC 
 
 
+* AsyncTask
+- 较为轻量级的异步类，封装了 FutureTask 的线程池、ArrayDeque 和 Handler 进行调度。AsyncTask 主要用于 _后台与界面持续交互_
+- 我们来看看 AsyncTask 这个抽象类的定义，当我们定义一个类来继承 AsyncTask 这个类的时候，我们需要为其指定3个泛型参数：
+#+BEGIN_SRC java
+AsyncTask　<Params, Progress, Result>
+#+END_SRC
+  - Params: 这个泛型指定的是我们传递给异步任务执行时的参数的类型。
+  - Progress: 这个泛型指定的是我们的异步任务在执行的时候将执行的进度返回给UI线程的参数的类型。
+  - Result: 这个泛型指定的异步任务执行完后返回给UI线程的结果的类型。
+- 我们在定义一个类继承 AsyncTask 类的时候，必须要指定好这三个泛型的类型，如果都不指定的话，则都将其写成 void。
+- 我们来看一个官方给的例子：
+#+BEGIN_SRC java
+private class DownloadFilesTask extends AsyncTask<URL, Integer, Long> {
+     protected Long doInBackground(URL... urls) {
+         int count = urls.length;
+         long totalSize = 0;
+         for (int i = 0; i < count; i++) {
+             totalSize += Downloader.downloadFile(urls[i]);
+             publishProgress((int) ((i / (float) count) * 100));
+             // Escape early if cancel() is called
+             if (isCancelled()) break;
+         }
+         return totalSize;
+     }
+     protected void onProgressUpdate(Integer... progress) {
+         setProgressPercent(progress[0]);
+     }
+     protected void onPostExecute(Long result) {
+         showDialog("Downloaded " + result + " bytes");
+     }
+}
+#+END_SRC
+- 使用时只需要集成 AsyncTask，创建对象并调用 execute 执行即可：
+#+BEGIN_SRC java
+new DownloadFilesTask().execute(url1, url2, url3);
+#+END_SRC
+- doInBackground(Params…) 方法里执行耗时逻辑，然后在 onPostExecute(Result) 中将结果更新回UI组件
+- AsyncTask 的几个主要方法中，doInBackground 方法运行在子线程，execute、onPreExecute、onProgressUpdate、onPostExecute 这几个方法都是在 UI 线程运行的。
+** 使用 AsyncTask 的注意事项
+- AsyncTask 的实例必须在 UI Thread 中创建。
+- 只能在 UI 线程中调用 AsyncTask 的 execute 方法。
+- AsyncTask 被重写的四个方法是系统自动调用的,不应手动调用。
+- 每个AsyncTask 只能被执行一次，多次执行会引发异常。
+- AsyncTask 的四个方法，只有 doInBackground 方法是运行在其他线程中,其他三个方法都运行在 UI 线程中，也就说其他三个方法都可以进行 UI 的更新操作。
+- AsyncTask 默认是串行执行，如果需要并行执行，使用接口 executeOnExecutor 方法。
+** 补充总结
+- AsyncTask是android提供的轻量级的异步类,可以直接继承AsyncTask，在类中实现异步操作，并提供接口反馈当前异步执行的程度(可以通过接口实现UI进度更新)，最后反馈执行的结果给UI主线程。
+- AsyncTask通过一个阻塞队列BlockingQuery<Runnable>存储待执行的任务，利用静态线程池THREAD_POOL_EXECUTOR提供一定数量的线程，默认128个。在Android 3.0以前，默认采取的是并行任务执行器，3.0以后改成了默认（by default,如果想要并行执行，需要设置配置）采用串行任务执行器，通过静态串行任务执行器SERIAL_EXECUTOR控制任务串行执行，循环取出任务交给THREAD_POOL_EXECUTOR中的线程执行，执行完一个，再执行下一个。( _这里写的内容需要再校对一下_ )
+- 用法举例：
+#+BEGIN_SRC java
+class DownloadTask extends AsyncTask<Integer, Integer, String>{  
+    // AsyncTask<Params, Progress, Result>
+    //后面尖括号内分别是参数（例子里是线程休息时间），进度(publishProgress用到)，返回值类型
+    @Override
+    protected void onPreExecute() {
+        //第一个执行方法
+        super.onPreExecute();
+    }
+    @Override
+    protected String doInBackground(Integer... params) {
+        //第二个执行方法,onPreExecute()执行完后执行
+        for(int i=0;i<=100;i++){
+            publishProgress(i);
+            try {
+                Thread.sleep(params[0]);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        return "执行完毕";
+    }
+    @Override
+    protected void onProgressUpdate(Integer... progress) {
+        //这个函数在doInBackground调用publishProgress时触发，虽然调用时只有一个参数
+        //但是这里取到的是一个数组,所以要用progesss[0]来取值
+        //第n个参数就用progress[n]来取值
+        tv.setText(progress[0]+"%");
+        super.onProgressUpdate(progress);
+    }
+    @Override
+    protected void onPostExecute(String result) {
+        //doInBackground返回时触发，换句话说，就是doInBackground执行完后触发
+        //这里的result就是上面doInBackground执行后的返回值，所以这里是"执行完毕"
+        setTitle(result);
+        super.onPostExecute(result);
+    }
+}
+#+END_SRC 
+** 优点：
+- 结构清晰，使用简单，适合后台任务的交互。
+- 异步线程的优先级已经被默认设置成了：THREAD_PRIORITY_BACKGROUND，不会与 UI 线程抢占资源。
+  - 1. 处理单个异步任务简单，可以获取到异步任务的进度
+  - 2. 可以通过cancel方法取消还没执行完的AsyncTask
+  - 3. 处理多个异步任务代码显得较多
+** 缺点：
+- 结构略复杂，代码较多。
+- 每个 AsyncTask 只能被执行一次，多次调用会发生异常。
+- AsyncTask 在整个 Android 系统中维护一个线程池，有可能被其他进程的任务抢占而降低效率。
+- 适用范围
+  - 1. 单个异步任务的处理
+
+* AsyncTask源码解析
+- 我们接下来分析AsyncTask的源码，看下它的实现原理。
+- 在Demo中，我们调用AsyncTask的实例对象的execute方法来实现调用的，那么我们就从execute方法作为入口点来分析。
+** AsyncTask的execute方法：
+   #+BEGIN_SRC csharp
+    @MainThread
+    public final AsyncTask<Params, Progress, Result> execute(Params... params) {
+        return executeOnExecutor(sDefaultExecutor, params);
+    }
+   #+END_SRC 
+- 这里调用了executeOnExecutor方法，参数sDefaultExecutor是一个线程池，作为默认线程池。
+** executeOnExecutor方法：
+   #+BEGIN_SRC csharp
+    @MainThread
+    public final AsyncTask<Params, Progress, Result> executeOnExecutor(Executor exec,
+            Params... params) {
+        if (mStatus != Status.PENDING) {
+            switch (mStatus) {
+                case RUNNING:
+                    throw new IllegalStateException("Cannot execute task:"
+                            + " the task is already running.");
+                case FINISHED:
+                    throw new IllegalStateException("Cannot execute task:"
+                            + " the task has already been executed "
+                            + "(a task can be executed only once)");
+            }
+        }
+        mStatus = Status.RUNNING;
+        onPreExecute();
+        mWorker.mParams = params;
+        exec.execute(mFuture);
+        return this;
+    }
+   #+END_SRC 
+- 逻辑解析
+  - 该方法在UI线程中执行。
+  - 属性mStatus用来判断当前任务的状态，当任务正在运行或已经结束了，会抛出Error。
+  - 设置mStatus的状态为Status.RUNNING。
+  - 调用onPreExecute()方法，该方法通常在使用AsyncTask时，需要实现。
+  - 把参数params保存在mWorker.mParams中。
+  - 调用线程池，执行mFuture。
+- 线程池执行的部分我们后面来分析，先来看这里有2个重要的属性mWorker和mFuture，它们起到了非常重要的作用，我们来看。
+** mWorker、mFuture
+- 属性mWorker和mFuture是在AsyncTask的构造方法中初始化的，它们是后台线程控制逻辑的核心所在。
+- 我们来看AsyncTask的构造方法：
+#+BEGIN_SRC csharp
+    public AsyncTask() {//这里是在UI线程中执行的
+        this((Looper) null);
+    }
+    public AsyncTask(@Nullable Handler handler) {
+        this(handler != null ? handler.getLooper() : null);
+    }
+    public AsyncTask(@Nullable Looper callbackLooper) {
+        mHandler = callbackLooper == null || callbackLooper == Looper.getMainLooper()
+            ? getMainHandler()
+            : new Handler(callbackLooper);
+        mWorker = new WorkerRunnable<Params, Result>() {
+            public Result call() throws Exception {//这里是在后台线程中执行的
+                mTaskInvoked.set(true);
+                Result result = null;
+                try {
+                    Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);//这里设置了线程的优先级为THREAD_PRIORITY_BACKGROUND
+                    //noinspection unchecked
+                    result = doInBackground(mParams);//这里调用了doInBackground方法
+                    Binder.flushPendingCommands();
+                } catch (Throwable tr) {
+                    mCancelled.set(true);
+                    throw tr;
+                } finally {
+                    postResult(result); //post结果给UI线程
+                }
+                return result;//把后台线程处理结果返回
+            }
+        };
+        mFuture = new FutureTask<Result>(mWorker) {
+            @Override
+            protected void done() { //异步任务执行完成后回调，这里的当前线程还是在后台线程中
+                try {
+                    postResultIfNotInvoked(get());
+                } catch (InterruptedException e) {
+                    android.util.Log.w(LOG_TAG, e);
+                } catch (ExecutionException e) {
+                    throw new RuntimeException("An error occurred while executing doInBackground()",
+                            e.getCause());
+                } catch (CancellationException e) {
+                    postResultIfNotInvoked(null);
+                }
+            }
+        };
+    }
+    private static abstract class WorkerRunnable<Params, Result> implements Callable<Result> {
+        Params[] mParams;
+    }
+#+END_SRC 
+- 逻辑解析：
+  - 首先初始化Handler对象，因为AsyncTask涉及到后台线程和UI线程之间的通信，它内部实现使用了Handler通信机制。
+  - mWorker属性赋值，这里的mWorker是一个WorkerRunnable对象，它是一个抽象类，继承自Callable接口，用于执行异步任务并获取线程执行结果。WorkerRunnable对象的call()方法是在后台线程中执行的。这里可以看到在call()方法中，调用了doInBackground方法。
+  - call()方法中设置了线程的优先级为THREAD_PRIORITY_BACKGROUND（后台线程优先级）。
+  - mFuture属性赋值，这里的mFuture是一个FutureTask对象，FutureTask可以用于线程任务的控制等逻辑，异步任务执行完成后，会回调done()方法。
+  - done()方法中，调用postResultIfNotInvoked方法，把任务结果返回给UI线程，这里执行的是非正常情况下的返回，正常执行结束会在mWorker的call方法中通过调用postResult(result)将结果返回给UI线程。
+** Handler处理
+- 我们来看，后台任务处理完成后，会在WorkerRunnable的call方法中，调用postResult(result)将结果返回给UI线程，但如果后台任务执行之前被终止，则会把结果传递给postResultIfNotInvoked方法。
+- 我们来看这两个方法：
+#+BEGIN_SRC csharp
+    private void postResultIfNotInvoked(Result result) {
+        final boolean wasTaskInvoked = mTaskInvoked.get();
+        if (!wasTaskInvoked) { //同步属性的布尔值，表示后台任务是否已经开始执行
+            postResult(result);//这里，后台任务并没有执行
+        }
+    }
+    private Result postResult(Result result) {
+        @SuppressWarnings("unchecked")
+        Message message = getHandler().obtainMessage(MESSAGE_POST_RESULT,
+                new AsyncTaskResult<Result>(this, result));
+        message.sendToTarget();
+        return result;
+    }
+#+END_SRC 
+- postResult方法，创建一个message对象，把执行结果封装成一个AsyncTaskResult对象，通过Handler机制，将后台执行结果传递给UI线程（这里只考虑UI线程一种情况）。
+** 串行执行的线程池实现
+- 到了这里，Asynctask的执行部分、结果处理以及跨线程通信部分，都已经分析完成了，接下来我们来看后台线程是如何执行的，任务队列是如何实现的。
+- 我们从上文知道，AsyncTask的execute方法中，直接使用了一个默认线程池sDefaultExecutor来负责后台线程的创建及执行。
+- 回顾一下：
+#+BEGIN_SRC csharp
+    @MainThread
+    public final AsyncTask<Params, Progress, Result> execute(Params... params) {
+        return executeOnExecutor(sDefaultExecutor, params);
+    }
+#+END_SRC 
+- sDefaultExecutor的单线程队列的实现：
+#+BEGIN_SRC csharp
+    private static volatile Executor sDefaultExecutor = SERIAL_EXECUTOR;
+    public static final Executor SERIAL_EXECUTOR = new SerialExecutor();
+    
+    private static class SerialExecutor implements Executor {
+        final ArrayDeque<Runnable> mTasks = new ArrayDeque<Runnable>();
+        Runnable mActive;
+        public synchronized void execute(final Runnable r) {
+            mTasks.offer(new Runnable() {
+                public void run() {
+                    try {
+                        r.run();
+                    } finally {
+                        scheduleNext();
+                    }
+                }
+            });
+            if (mActive == null) {
+                scheduleNext();
+            }
+        }
+        protected synchronized void scheduleNext() {
+            if ((mActive = mTasks.poll()) != null) {
+                THREAD_POOL_EXECUTOR.execute(mActive);
+            }
+        }
+    }
+#+END_SRC 
+- 我们可以看到，sDefaultExecutor是SerialExecutor的一个实例对象。
+- SerialExecutor的属性：
+  - mTasks：是一个先进先出的队列，这里可以理解为容量无限的一个先进先出的队列（当然不可能无限，不过正常情况下我们是达不到它的最大容量的）。
+  - mActive：表示当前正在执行的任务，它是一个Runnable对象。
+- 后台任务队列的执行过程：
+  - 当第一次有任务进来时，先把任务添加到mTasks队列中，这时mActive == null，执行scheduleNext方法。
+  - scheduleNext方法中，从队列中取出队列头部的Runnale对象，并赋给mActive，最后把它交由THREAD_POOL_EXECUTOR线程池执行。
+  - 当第一个任务执行结束后，紧接着会调用scheduleNext方法执行下一个任务，以此类推……
+- 串行执行的秘密：这里其实就实现了一个单线程的任务队列，所有AnsyncTask的任务，都会顺序的，单线程执行。它的实现原理其实就是，准备了一个可以扩容的先进先出的任务队列mTasks，所有的后台任务执行时，先进入队列中，然后调用scheduleNext执行，当前任务结束后，继续执行下一个任务，这样也就实现了串行的任务处理。
+** 线程池THREAD_POOL_EXECUTOR
+- 这里的线程池其实没有发挥线程池的作用，因为默认情况下，AsyncTask只会执行单个任务调用，因为在SerialExecutor中已经实现了任务的队列管理了，SerialExecutor会单个顺序的执行线程任务的调用。
+- THREAD_POOL_EXECUTOR的定义：
+#+BEGIN_SRC csharp
+    public static final Executor THREAD_POOL_EXECUTOR;
+    private static final int CORE_POOL_SIZE = 1;
+    private static final int MAXIMUM_POOL_SIZE = 20;
+    private static final int BACKUP_POOL_SIZE = 5;
+    private static final int KEEP_ALIVE_SECONDS = 3;
+    static {
+        ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(
+                CORE_POOL_SIZE, MAXIMUM_POOL_SIZE, KEEP_ALIVE_SECONDS, TimeUnit.SECONDS,
+                new SynchronousQueue<Runnable>(), sThreadFactory);
+        threadPoolExecutor.setRejectedExecutionHandler(sRunOnSerialPolicy);
+        THREAD_POOL_EXECUTOR = threadPoolExecutor;
+    }
+#+END_SRC 
+- THREAD_POOL_EXECUTOR其实是一个可并发的线程池，它的核心线程数是1，最大线程数是20。（注意，不同Android版本中的实现会有不同）
+- 线程的创建：
+#+BEGIN_SRC csharp
+    private static final ThreadFactory sThreadFactory = new ThreadFactory() {
+        private final AtomicInteger mCount = new AtomicInteger(1);
+        public Thread newThread(Runnable r) {
+            return new Thread(r, "AsyncTask #" + mCount.getAndIncrement());
+        }
+    };
+#+END_SRC 
+- 线程池是通过ThreadFactory对象来进行线程创建的，并且会为线程命名为"AsyncTask #" + mCount.getAndIncrement()。
+** AsyncTask并发的实现
+- 在Android 3.0时，AsyncTask的任务执行改回了单一线程中顺序执行，那么我们如果想用AsyncTask实现并发任务，可以做到吗？答案是肯定的，我们来看如何实现。
+- 我们来看AsyncTask的executeOnExecutor方法：
+#+BEGIN_SRC csharp
+    public final AsyncTask<Params, Progress, Result> executeOnExecutor(Executor exec,
+            Params... params) {
+        ……
+        exec.execute(mFuture);
+        return this;
+    }
+#+END_SRC 
+- 源码解析：
+  - executeOnExecutor方法，可以接受一个线程池的参数，来让使用者实现自定义线程池的目的。
+  - 我们可以自定义一个并发的线程池，通过调用executeOnExecutor方法，替换掉AsyncTask的默认线程池，即可实现并发处理。
+- 注意：虽然这里可以实现线程池的并发处理，但是并不建议这么做，如果想要实现并发的后台任务，推荐使用java.util.concurrent并发工具包中的Executor、ThreadPoolExecutor和FutureTask等。
+** AsyncTask的最佳实践
+- 到了这里，我们已经深入了解了AsyncTask的使用及实现原理了，那么我们在开发时，有哪些是需要注意的呢？
+- AsyncTask使用时的一些要求：
+- AsyncTask类必须在UI线程中被加载（Android 4.1之后自动执行）。
+- AsyncTask实例对象，必须在UI线程中创建。
+- 必须在UI线程中调用execute()来运行任务。
+- 必须创建AsyncTask的子类，以它的子类形式来使用。
+- 必须在子类中至少实现doInBackground()回调方法，通常我们还会实现onPostExecute()方法。
+- 不要手动调用onPreExecute(), onPostExecute(Result), doInBackground(Params…), onProgressUpdate(Progress…)方法。
+- AsyncTask后台任务，只能执行一次，否则会抛出异常。
+- 整个进程中的AsyncTask线程池及任务队列都是同一个（自定义的除外），大量的调用AsyncTask执行后台任务会造成任务队列整体执行时间的变长，导致任务执行的时间不可控。
+- AsyncTask的默认线程优先级是Process.THREAD_PRIORITY_BACKGROUND（后台线程级别），优先级较低，分配的CPU资源会较少，不适合执行优先级较高的任务。
+** 关于执行顺序及Android历史版本中的变更
+- AsyncTask后台任务的执行顺序是不可靠的，因为它在Android历史版本中经历了多次变更。在刚刚引入AsyncTask时，AsyncTask后台任务的执行，是在单一线程中顺序执行的；但是在Android 1.6中，AsyncTask的任务执行改成了可多线程并发执行；在Android 3.0时，AsyncTask的任务执行又改回了单一线程中顺序执行，以避免多线程造成的并发等问题。
+- 如果我们想通过AsyncTask来并发执行后台任务，可以使用executeOnExecutor(java.util.concurrent.Executor, java.lang.Object[])方法，传递一个线程池来执行。
+- 注意：AsyncTask在Android R（Android 11）中被标记为弃用状态，建议使用java.util.concurrent并发工具包来代替。
+
+* 几种异步方式的再次比较
+  
+[[./pic/asynctask_20220918_203513.png]]
+- 以上就是Android系统中常用的异步任务的实现方式。
