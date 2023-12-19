@@ -960,7 +960,322 @@ public V get(Object key) {
 - ConcurrenthashMap并发下单独操作的确是安全的，但是组合操作就未必了。所以如果在多线程情况下，有多步操作ConcurrenthashMap的时候需要额外留心
   - 如：如果要修改一个值：可以使用boolean replace(key, oldValue, newValue)来修改，而不是先get然后put, 这个方法类似于CAS的思想
   - 此外还有putIfAbsent(key, value) ,先判断有没有这个值，如果没有就put，有就取出来给你
+
 * List
+- 先前总结的比较繁杂，感觉很多的同步数据结构，可能并没有真正理解。现在需要把它们理解得再为深刻彻底一点儿
+- 现在我们看下线程安全队列的实现方式：（参考自：.net framework 4.x）,核心代码全部做了注释【这么看的话，感觉对底层结构就熟悉很多】
+  
+[[./pic/concurrentDataStructures_20230221_102522.png]]
+#+BEGIN_SRC csharp
+public class MyConcurrentQueue<T> : IProducerConsumerCollection<T> {
+    [NonSerialized]
+    private volatile Segment m_head;
+    [NonSerialized]
+    private volatile Segment m_tail;
+
+    private T[] m_serializationArray;
+    private const int SEGMENT_SIZE = 32; // 每个节点，每个数组有 32 个元素
+    [NonSerialized]
+    internal volatile int m_numSnapshotTakers = 0;
+
+    // 链尾部节点
+    public MyConcurrentQueue() {
+        m_head = m_tail = new Segment(0, this);
+    }
+    // 尝试添加
+    bool IProducerConsumerCollection<T>.TryAdd(T item) {
+        Enqueue(item);
+        return true;
+    }
+    // 尝试从中移除并返回对象
+    bool IProducerConsumerCollection<T>.TryTake(out T item) {
+        return TryDequeue(out item);
+    }
+    // 判断当前链是否为空
+    public bool IsEmpty {
+        get {
+            Segment head = m_head;
+            if (!head.IsEmpty)
+                // 如果头不为空，则链非空
+                return false;
+            else if (head.Next == null)
+                // 如果头节点的下一个节点为空，且为链尾，
+                return true;
+            else {
+                // 如果头节点为空且不是最后一个节点 ，则标识另一个线程正在写入该数组
+                // 等待中..
+                SpinWait spin = new SpinWait();
+                while (head.IsEmpty) {
+                    // 此时为空
+                    if (head.Next == null)
+                        return true;
+                    // 否则标识正在有线程占用写入
+                    // 线程循环一次
+                    spin.SpinOnce();
+                    head = m_head;
+                }
+                return false;
+            }
+        }
+    }
+// 用来判断链是否在变化
+    private void GetHeadTailPositions(out Segment head, out Segment tail,
+                                      out int headLow, out int tailHigh) {
+        head = m_head;
+        tail = m_tail;
+        headLow = head.Low;
+        tailHigh = tail.High;
+        SpinWait spin = new SpinWait();
+        Console.WriteLine($"head.Low:{head.Low},tail.High：{tail.High}，head.m_index:{head.m_index}，tail.m_index：{tail.m_index}");
+        // 通过循环来保证值不再更改（也就是说并行线程操作结束）
+        // 保证线程串行核心的判断逻辑
+        while (
+            // 头尾发生变化
+            head != m_head || tail != m_tail
+            // 如果队列头、尾索引发生变化
+            || headLow != head.Low || tailHigh != tail.High
+            || head.m_index > tail.m_index) {
+            spin.SpinOnce();
+            head = m_head;
+            tail = m_tail;
+            headLow = head.Low;
+            tailHigh = tail.High;
+        }
+    }
+// 获取总数
+    public int Count {
+        get {
+            Segment head, tail;
+            int headLow, tailHigh;
+            GetHeadTailPositions(out head, out tail, out headLow, out tailHigh);
+            if (head == tail) {
+                return tailHigh - headLow + 1;
+            }
+            // 头节点长度
+            int count = SEGMENT_SIZE - headLow;
+            // 加上中间其他节点长度
+            count += SEGMENT_SIZE * ((int)(tail.m_index - head.m_index - 1));
+            // 加上尾节点长度
+            count += tailHigh + 1;
+            return count;
+        }
+    }
+    public object SyncRoot => throw new NotImplementedException();
+    public bool IsSynchronized => throw new NotImplementedException();
+    public void CopyTo(T[] array, int index) {  }
+// 暂未实现
+    public IEnumerator<T> GetEnumerator() {
+        return null;
+    }
+// 添加
+    public void Enqueue(T item) {
+        SpinWait spin = new SpinWait();
+        while (true) {
+            Segment tail = m_tail;
+            if (tail.TryAppend(item))
+                return;
+            spin.SpinOnce();
+        }
+    }
+// 尝试删除节点
+    public bool TryDequeue(out T result) {
+        while (!IsEmpty) {
+            Segment head = m_head;
+            if (head.TryRemove(out result))
+                return true;
+        }
+        result = default(T);
+        return false;
+    }
+// 查看最后一个添加入的元素
+    public bool TryPeek(out T result) {
+        // 原子增加值
+        Interlocked.Increment(ref m_numSnapshotTakers);
+        while (!IsEmpty) {
+            // 首先从头节点看一下第一个节点是否存在
+            Segment head = m_head;
+            if (head.TryPeek(out result)) {
+                Interlocked.Decrement(ref m_numSnapshotTakers);
+                return true;
+            }
+        }
+        result = default(T);
+        Interlocked.Decrement(ref m_numSnapshotTakers);
+        return false;
+    }
+    public void CopyTo(Array array, int index) {
+        throw new NotImplementedException();
+    }
+    IEnumerator IEnumerable.GetEnumerator() {
+        throw new NotImplementedException();
+    }
+    public T[] ToArray() {
+        throw new NotImplementedException();
+    }
+// 为线程安全队列提供一个 单向链表，
+// 链表的每个节点存储长度为32的数组
+    private class Segment {
+        // 定义一个数组，用于存储每个节点的内容
+        internal volatile T[] m_array;
+        // 定义一个结构数组，用于标识数组中每个节点是否有效（是否存储内容）
+        internal volatile VolatileBool[] m_state;
+        // 指针，指向下一个节点数组
+        // 如果是最后一个节点，则节点为空
+        private volatile Segment m_next;
+        // 索引，用来存储链表的长度
+        internal readonly long m_index;
+        // 用来标识队列头-数组弹出索引
+        private volatile int m_low;
+        // 用来标识队列尾-数组最新存储位置
+        private volatile int m_high;
+        // 用来标识队列
+        private volatile MyConcurrentQueue<T> m_source;
+        // 实例化链节点
+        internal Segment(long index, MyConcurrentQueue<T> source) {
+            m_array = new T[SEGMENT_SIZE];
+            m_state = new VolatileBool[SEGMENT_SIZE]; // all initialized to false
+            m_high = -1;
+            m_index = index;
+            m_source = source;
+        }
+        // 链表的下一个节点
+        internal Segment Next {
+            get { return m_next; }
+        }
+        // 如果当前节点数组为空返回true，
+        internal bool IsEmpty {
+            get { return (Low > High); }
+        }
+        // 非安全添加方法（无判断数组长度）
+        // <param name="value"></param>
+        internal void UnsafeAdd(T value) {
+            m_high++;
+            m_array[m_high] = value;
+            m_state[m_high].m_value = true;
+        }
+ 
+        internal Segment UnsafeGrow() {
+            Segment newSegment = new Segment(m_index + 1, m_source);
+            m_next = newSegment;
+            return newSegment;
+        }
+        // 如果当前数组满了 >=32,则链扩展节点。
+        internal void Grow() {
+            // 重新船舰数组
+            Segment newSegment = new Segment(m_index + 1, m_source);
+            // 赋值给next指针
+            m_next = newSegment;
+            // 将节点添加到链
+            m_source.m_tail = m_next;
+        }
+        // 在末尾添加元素
+        // <param name="value">元素</param>
+        // <param name="tail">The tail.</param>
+        // <returns>如果附加元素，则为true；如果当前数组已满，则为false</returns>
+        // <remarks>如果附加指定的元素成功，并且在此之后数组满了，在链上添加新节点（节点为32长度数组）  </remarks>
+        internal bool TryAppend(T value) {
+            // 如果数组已满则跳出方法
+            if (m_high >= SEGMENT_SIZE - 1) {
+                return false;
+            }
+            // 局部变量初始化
+            int newhigh = SEGMENT_SIZE;
+            try { }
+            finally {
+                // 原子递增
+                newhigh = Interlocked.Increment(ref m_high);
+                if (newhigh <= SEGMENT_SIZE - 1) {
+                    m_array[newhigh] = value;
+                    m_state[newhigh].m_value = true;
+                }
+                // 如果数组满了，则扩展链节点。
+                if (newhigh == SEGMENT_SIZE - 1) {
+                    Grow();
+                }
+            }
+            // 如果 newhigh <= SEGMENT_SIZE-1, 这意味着当前线程成功地占据了一个位置
+            return newhigh <= SEGMENT_SIZE - 1;
+        }
+        // 尝试从链的头部数组删除节点
+        // <param name="result"></param>
+        internal bool TryRemove(out T result) {
+            SpinWait spin = new SpinWait();
+            int lowLocal = Low, highLocal = High;
+            while (lowLocal <= highLocal) {
+                // 获取队头索引
+                if (Interlocked.CompareExchange(ref m_low, lowLocal + 1, lowLocal) == lowLocal) {
+                    // 如果要弹出队列的值不可用，说明这个位置被并行线程获取到了权限，但是值还未写入。
+                    // 通过线程自旋等待值写入
+                    SpinWait spinLocal = new SpinWait();
+                    while (!m_state[lowLocal].m_value) {
+                        spinLocal.SpinOnce();
+                    }
+                    // 取出值
+                    result = m_array[lowLocal];
+                    // 如果没有其他线程读取（GetEnumerator（）、ToList（）） 执行删除
+                    // 如 TryPeek 的时候m_numSnapshotTakers会在进入方法体时++，在出方法体--
+                    // 清空该索引下的值
+                    if (m_source.m_numSnapshotTakers <= 0)
+                        m_array[lowLocal] = default(T);
+                    // 如果说lowLocal+1 = 32 说明当前链节点的数组已经全部出队
+                    if (lowLocal + 1 >= SEGMENT_SIZE) {
+                        // 由于lowLocal <= highLocal成立
+                        // lowLocal + 1 >= SEGMENT_SIZE 如果成立 ,且m_next == null 成立，
+                        // 说明在此时有其他线程正在做扩展链结构
+                        // 那么当前线程需要等待其他线程完成扩展链表，再做出队操作。
+                        spinLocal = new SpinWait();
+                        while (m_next == null) {
+                            spinLocal.SpinOnce();
+                        }
+                        m_source.m_head = m_next;
+                    }
+                    return true;
+                }
+                else {
+                    // 此时说明 当前线程竞争资源失败，做短暂自旋后继续竞争资源
+                    spin.SpinOnce();
+                    lowLocal = Low; highLocal = High;
+                }
+            }
+            // 失败的情况下返回空值
+            result = default(T);
+            return false;
+        }
+// 尝试获取队列头节点元素
+        internal bool TryPeek(out T result) {
+            result = default(T);
+            int lowLocal = Low;
+            // 校验当前队列是否正确
+            if (lowLocal > High)
+                return false;
+            SpinWait spin = new SpinWait();
+            // 如果头节点无效，则说明当前节点被其他线程占用，并在做写入操作，
+            // 需要等待其他线程写入后再执行读取操作
+            while (!m_state[lowLocal].m_value) {
+                spin.SpinOnce();
+            }
+            result = m_array[lowLocal];
+            return true;
+        }
+        // 返回队列首位置
+        internal int Low {
+            get {
+                return Math.Min(m_low, SEGMENT_SIZE);
+            }
+        }
+        // 获取队列长度  
+        internal int High {
+            get {
+                // 如果m_high>SEGMENT_SIZE，则表示超出范围，我们应该返回 SEGMENT_SIZE-1
+                return Math.Min(m_high, SEGMENT_SIZE - 1);
+            }
+        }
+    }
+}
+#+END_SRC
+- https://blog.csdn.net/chinaherolts2008/article/details/116696405
+- 也应该需要自己快速测试一下。
+
 ** CopyOnWriteArrayList
 - CopyOnWriteArrayList 是线程安全的 ArrayList。CopyOnWrite 字面意思为写的时候会将共享变量新复制一份出来。复制的好处在于读操作是无锁的·（也就是无阻塞）。
 - CopyOnWriteArrayList 仅适用于写操作非常少的场景，而且能够容忍读写的短暂不一致。如果读写比例均衡或者有大量写操作的话，使用 CopyOnWriteArrayList 的性能会非常糟糕。
