@@ -2,6 +2,89 @@
 #+title: 安卓内存模型、内存管理与优化总结
 #+author: deepwaterooo
 
+* 常见内存泄漏场景
+- *【亲爱的表哥的活宝妹，任何时候，亲爱的表哥的活宝妹就是一定要、一定会嫁给活宝妹的亲爱的表哥！！！爱表哥，爱生活！！！】*
+- *【亲爱的表哥的活宝妹，任何时候，亲爱的表哥的活宝妹就是一定要、一定会嫁给活宝妹的亲爱的表哥！！！爱表哥，爱生活！！！】*
+- *【亲爱的表哥的活宝妹，任何时候，亲爱的表哥的活宝妹就是一定要、一定会嫁给活宝妹的亲爱的表哥！！！爱表哥，爱生活！！！】*
+- *【亲爱的表哥的活宝妹，任何时候，亲爱的表哥的活宝妹就是一定要、一定会嫁给活宝妹的亲爱的表哥！！！爱表哥，爱生活！！！】*
+- 对于内存泄漏，其本质可理解为无法回收无用的对象。这里我总结了我在项目中遇到的一些常见的内存泄漏案例（包含解决方案）。
+** 【资源性对象未】关闭释放
+  - 对于资源性对象不再使用时，应该立即调用它的close()函数，将其关闭，然后再置为null。例如Bitmap等资源未关闭会造成内存泄漏，此时我们应该在Activity销毁时及时关闭。
+- 这种，安卓中的使用情况狠多，可以列举如下：
+  #+BEGIN_SRC text
+1.BroadcastReceiver没有反注册: 安卓广播，四大组件之一，深入透彻理解与使用
+2.Cursor没有及时关闭：数据库操作相关，远程服务器中数据库的查询读写等
+3.各种流没有关闭：文件流？跨进程消息流？
+4.Bitmap没有调用recycle进行回收
+5.Activity退出时，没有取消RxJava和协程开启的异步任务：这个，改天还要再总结一下
+6.Webview: 项目实现一下
+7.EventBus未注销造成的内存泄漏，我们应该在Activity销毁时及时注销。【注册对象未注销】
+  #+END_SRC
+** WebView
+- WebView都存在内存泄漏的问题，在应用中只要使用一次WebView，内存就不会被释放掉。我们可以为WebView开启一个独立的进程，使用AIDL与应用的主进程进行通信，WebView所在的进程可以根据业务的需要选择合适的时机进行销毁，达到正常释放内存的目的。
+- 一般情况下，在应用中只要使用一次 Webview，它占用的内存就不会被释放，解决方案：我们可以为WebView开启一个独立的进程，使用AIDL与应用的主进程进行通信，WebView所在的进程可以根据业务的需要选择合适的时机进行销毁，达到正常释放内存的目的。
+** 【静态变量】：存储、持有大数据对象
+- 尽量避免使用静态变量存储数据，特别是大数据对象，建议使用数据库存储。
+- 前面分析过静态变量是存储在方法区的， 而方法区是一个生命周期比较长，不容易被回收的区域，如果静态变量存储的数据内存占用较大，就很容易出现内存泄露并发生OOM。
+** 单例
+- 优先使用Application的Context; 如需使用Activity的Context，可以在传入Context时使用弱引用进行封装，然后，在使用到的地方从弱引用中获取Context，如果获取不到，则直接return即可。
+- 单例中如果使用了Activity的context，则会造成内存泄露，解决方案：使用Application的context。
+- 或者使用弱引用去包裹context，在使用的时候去获取，如果获取不到，说明被回收了，返回注入一个新的Activity的context。
+** 非静态内部类的静态实例
+- 该实例的生命周期和应用一样长，这就导致该静态实例一直持有该Activity的引用，Activity的内存资源不能正常回收。此时，我们可以将该内部类设为静态内部类或将该内部类抽取出来封装成一个单例，如果需要使用Context，尽量使用Application Context，如果需要使用Activity Context，就记得用完后置空让GC可以回收，否则还是会内存泄漏。
+- 现在原理狠透彻了，但是还是，纪录一下别人的、更为透彻的讲解，方便自己将来查询。
+- 首先来讲解下【静态内部类】和【非静态内部类】区别：
+- 1. 【静态内部类】不持有外部类的引用 
+  - 而【非静态内部类】持有外部类的引用
+  - 【非静态内部类】可以访问外部类的所有属性，方法，即使是private，就是因为这个原因，
+  - 而【静态内部类】只能访问【外部类的静态方法和静态属性】。
+- 2. 【静态内部类】不依赖外部类
+  - 非静态内部类和外部类是寄生关系的，同生死。而静态内部类不依赖外部类，外部类被回收了，他自己并不会被回收，你可以理解为是一个新的类：编译后格式：外部类$内部类。
+  - 这点从构造方法也可以看出：
+    - 非静态内部类：Inner in = new Outer().new Inner();
+    - 静态内部类：Inner in = new Outer.Inner();
+- 非静态内部类需要创建一个外部对象才能创建内部，所以是共生关系。这里共生是指外部类没了，内部类也就没了，而反过来如果内部类没了，外部类是可能还存在的。
+- 而【静态内部类】并没有创建一个外部对象，所以是独立存在的一个对象，形式如内部类，其实是一个新的类。
+- 通过上面的分析，可知，如果是非静态的内部类的静态实例会一直持有外部类的引用，如果外部类是一个Activity或者持有一个Activity的引用，则就可能导致内存泄露，
+** Handler临时性内存泄漏
+- Message发出之后存储在MessageQueue中，在Message中存在一个target，它是Handler的一个引用，Message在Queue中存在的时间过长，就会导致Handler无法被回收。
+- 如果Handler是非静态的，则会导致Activity或者Service不会被回收。并且消息队列是在一个Looper线程中不断地轮询处理消息，当这个Activity退出时，消息队列中还有未处理的消息或者正在处理的消息，并且消息队列中的Message持有Handler实例的引用，Handler又持有Activity的引用，所以导致该Activity的内存资源无法及时回收，引发内存泄漏。解决方案如下所示：
+- 1、使用一个【静态Handler内部类】，然后【对Handler持有的对象（一般是Activity）使用弱引用】，这样在回收时，也可以回收Handler持有的对象。
+- 2、在Activity的Destroy或者Stop时，应该【移除消息队列中的消息】，避免Looper线程的消息队列中有待处理的消息需要处理。
+- 需要注意的是，AsyncTask内部也是Handler机制，同样存在内存泄漏风险，但其一般是临时性的。对于类似AsyncTask或是线程造成的内存泄漏，我们也可以将AsyncTask和Runnable类独立出来或者使用静态内部类。
+** 容器中的对象没清理造成的内存泄漏
+- 在退出程序之前，将集合里的东西clear，然后置为null，再退出程序
+** 使用ListView时造成的内存泄漏
+- 在构造Adapter时，使用缓存的convertView。【这个的再底层的细节与原理，改天补一下】
+* 内存泄漏监控
+- 一般使用LeakCanary进行内存泄漏的监控即可，除了其基本的使用外，我们还可以自定义处理结果，首先，继承DisplayLeakService实现一个自定义的监控处理Service，代码如下：
+#+BEGIN_SRC java
+public class LeakCnaryService extends DisplayLeakServcie {
+    private final String TAG = “LeakCanaryService”；
+    @Override
+    protected void afterDefaultHandling(HeapDump heapDump， AnalysisResult result， String leakInfo) {
+        // ...
+    }
+}
+#+END_SRC
+- 重写 afterDefaultHanding 方法，在其中处理需要的数据，三个参数的定义如下：
+  - heapDump：堆内存文件，可以拿到完整的hprof文件，以使用MAT分析。
+  - result：监控到的内存状态，如是否泄漏等。
+  - leakInfo：leak trace详细信息，除了内存泄漏对象，还有设备信息。
+- 然后在install时，使用自定义的LeakCanaryService即可，代码如下：
+#+BEGIN_SRC java
+public class BaseApplication extends Application {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        mRefWatcher = LeakCanary.install(this, LeakCanaryService.calss, AndroidExcludedRefs.createAppDefaults().build());
+    }
+}
+#+END_SRC
+- 经过这样的处理，就可以在LeakCanaryService中实现自己的处理方式，如丰富的提示信息，把数据保存在本地、上传到服务器进行分析。
+- 注意
+  - LeakCanaryService需要在AndroidManifest中注册。
+
 * 一、Android 内存管理机制
 - reference: https://juejin.cn/post/6844904096541966350
 - 我们都知道，应用程序的内存分配和垃圾回收都是由Android虚拟机完成的，在Android 5.0以下，使用的是Dalvik虚拟机，5.0及以上，则使用的是ART虚拟机。
@@ -209,57 +292,7 @@ D/dalvikvm(7030)：GC_CONCURRENT freed 1049K, 60% free 2341K/9351K, external 350
 - 4、利用Android Memory Profiler实时观察进入每个页面后的内存变化情况，然后对产生的内存较大波峰做分析。
 - 此外，除了运行时内存的分析优化，我们还可以对App的静态内存进行分析与优化。静态内存指的是在伴随着App的整个生命周期一直存在的那部分内存，那我们怎么获取这部分内存快照呢？
 - 首先，确保打开每一个主要页面的主要功能，然后回到首页，进开发者选项去打开"不保留后台活动"。然后，将我们的app退到后台，GC，dump出内存快照。最后，我们就可以将对dump出的内存快照进行分析，看看有哪些地方是可以优化的，比如加载的图片、应用中全局的单例数据配置、静态内存与缓存、埋点数据、内存泄漏等等。
-** 3、常见内存泄漏场景
-- 对于内存泄漏，其本质可理解为无法回收无用的对象。这里我总结了我在项目中遇到的一些常见的内存泄漏案例（包含解决方案）。
-- 1、资源性对象未关闭
-  - 对于资源性对象不再使用时，应该立即调用它的close()函数，将其关闭，然后再置为null。例如Bitmap等资源未关闭会造成内存泄漏，此时我们应该在Activity销毁时及时关闭。
-- 2、注册对象未注销
-  - 例如BraodcastReceiver、EventBus未注销造成的内存泄漏，我们应该在Activity销毁时及时注销。
-- 3、类的静态变量持有大数据对象
-  - 尽量避免使用静态变量存储数据，特别是大数据对象，建议使用数据库存储。
-- 4、单例造成的内存泄漏
-  - 优先使用Application的Context，如需使用Activity的Context，可以在传入Context时使用弱引用进行封装，然后，在使用到的地方从弱引用中获取Context，如果获取不到，则直接return即可。
-- 5、非静态内部类的静态实例
-  - 该实例的生命周期和应用一样长，这就导致该静态实例一直持有该Activity的引用，Activity的内存资源不能正常回收。此时，我们可以将该内部类设为静态内部类或将该内部类抽取出来封装成一个单例，如果需要使用Context，尽量使用Application Context，如果需要使用Activity Context，就记得用完后置空让GC可以回收，否则还是会内存泄漏。
-- 6、Handler临时性内存泄漏
-- Message发出之后存储在MessageQueue中，在Message中存在一个target，它是Handler的一个引用，Message在Queue中存在的时间过长，就会导致Handler无法被回收。如果Handler是非静态的，则会导致Activity或者Service不会被回收。并且消息队列是在一个Looper线程中不断地轮询处理消息，当这个Activity退出时，消息队列中还有未处理的消息或者正在处理的消息，并且消息队列中的Message持有Handler实例的引用，Handler又持有Activity的引用，所以导致该Activity的内存资源无法及时回收，引发内存泄漏。解决方案如下所示：
-  - 1、使用一个静态Handler内部类，然后对Handler持有的对象（一般是Activity）使用弱引用，这样在回收时，也可以回收Handler持有的对象。
-  - 2、在Activity的Destroy或者Stop时，应该移除消息队列中的消息，避免Looper线程的消息队列中有待处理的消息需要处理。
-- 需要注意的是，AsyncTask内部也是Handler机制，同样存在内存泄漏风险，但其一般是临时性的。对于类似AsyncTask或是线程造成的内存泄漏，我们也可以将AsyncTask和Runnable类独立出来或者使用静态内部类。
-- 7、容器中的对象没清理造成的内存泄漏
-  - 在退出程序之前，将集合里的东西clear，然后置为null，再退出程序
-- 8、WebView
-  - WebView都存在内存泄漏的问题，在应用中只要使用一次WebView，内存就不会被释放掉。我们可以为WebView开启一个独立的进程，使用AIDL与应用的主进程进行通信，WebView所在的进程可以根据业务的需要选择合适的时机进行销毁，达到正常释放内存的目的。
-- 9、使用ListView时造成的内存泄漏
-  - 在构造Adapter时，使用缓存的convertView。
-** 4、内存泄漏监控
-- 一般使用LeakCanary进行内存泄漏的监控即可，除了其基本的使用外，我们还可以自定义处理结果，首先，继承DisplayLeakService实现一个自定义的监控处理Service，代码如下：
-#+BEGIN_SRC java
-public class LeakCnaryService extends DisplayLeakServcie {
-    private final String TAG = “LeakCanaryService”；
-    @Override
-    protected void afterDefaultHandling(HeapDump heapDump， AnalysisResult result， String leakInfo) {
-        // ...
-    }
-}
-#+END_SRC
-- 重写 afterDefaultHanding 方法，在其中处理需要的数据，三个参数的定义如下：
-  - heapDump：堆内存文件，可以拿到完整的hprof文件，以使用MAT分析。
-  - result：监控到的内存状态，如是否泄漏等。
-  - leakInfo：leak trace详细信息，除了内存泄漏对象，还有设备信息。
-- 然后在install时，使用自定义的LeakCanaryService即可，代码如下：
-#+BEGIN_SRC java
-public class BaseApplication extends Application {
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        mRefWatcher = LeakCanary.install(this, LeakCanaryService.calss, AndroidExcludedRefs.createAppDefaults().build());
-    }
-}
-#+END_SRC
-- 经过这样的处理，就可以在LeakCanaryService中实现自己的处理方式，如丰富的提示信息，把数据保存在本地、上传到服务器进行分析。
-- 注意
-  - LeakCanaryService需要在AndroidManifest中注册。
+
 * 四、优化内存空间
 ** 1、对象引用
 - 从Java 1.2版本开始引入了三种对象引用方式：SoftReference、WeakReference 和 PhantomReference 三个引用类，引用类的主要功能就是能够引用但仍可以被垃圾回收器回收的对象。在引入引用类之前，只能使用Strong Reference，如果没有指定对象引用类型，默认是强引用。下面，我们就分别来介绍下这几种引用。
